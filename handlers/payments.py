@@ -1,15 +1,14 @@
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 
-from config import (
-    ADMIN_ID,
-    BS_LINK
-)
+from config import ADMIN_ID
 
 from database import (
     add_payment,
     activate_subscription
 )
+
+from github_update import create_subscription
 
 from keyboards import approve_keyboard
 
@@ -73,34 +72,44 @@ async def payment_photo(message: Message):
 
 
 # =====================
-# ОДОБРЕНИЕ
+# ПОДТВЕРЖДЕНИЕ
 # =====================
 
 @router.callback_query(
     F.data.startswith("approve_")
 )
-
 async def approve(
     callback: CallbackQuery
 ):
+
 
     user_id = int(
         callback.data.split("_")[1]
     )
 
 
-    # Пока выдаём 30 дней
-    # потом подключим выбор тарифа
+    # срок пока 30 дней
+    days = 30
+
+
+
+    # создаём персональную ссылку
+    link = create_subscription(
+        user_id
+    )
+
+
 
     activate_subscription(
 
         user_id,
 
-        BS_LINK,
+        link,
 
-        30
+        days
 
     )
+
 
 
     await callback.bot.send_message(
@@ -115,14 +124,15 @@ async def approve(
 
 
 📅 Срок:
-30 дней
+{days} дней
 
 
 🔗 Ваша подписка:
 
-{BS_LINK}
+{link}
 """
     )
+
 
 
     await callback.message.edit_caption(
@@ -130,7 +140,9 @@ async def approve(
     )
 
 
-    await callback.answer("Готово")
+    await callback.answer(
+        "Готово"
+    )
 
 
 
@@ -143,22 +155,27 @@ async def approve(
 @router.callback_query(
     F.data.startswith("reject_")
 )
-
 async def reject(
     callback: CallbackQuery
 ):
+
 
     user_id = int(
         callback.data.split("_")[1]
     )
 
 
+
     await callback.bot.send_message(
 
         user_id,
 
-        "❌ Оплата отклонена.\n\n"
-        "Обратитесь в поддержку."
+        """
+❌ Оплата отклонена.
+
+Если произошла ошибка —
+обратитесь в поддержку.
+"""
 
     )
 
