@@ -704,3 +704,34 @@ def get_stats():
         "active": active
 
     }
+    
+    
+    
+    # =====================
+# ОТКЛЮЧЕНИЕ ПОДПИСКИ
+# =====================
+
+def remove_bs(user_id):
+
+    conn = connect()
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        UPDATE users
+
+        SET
+        tariff='Wi-Fi',
+        link='',
+        bs_active=0,
+        subscription_until=''
+
+        WHERE user_id=?
+        """,
+        (
+            user_id,
+        )
+    )
+
+    conn.commit()
+    conn.close()
