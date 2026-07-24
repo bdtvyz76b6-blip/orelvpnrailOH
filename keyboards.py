@@ -14,19 +14,36 @@ def main_menu():
 
     return ReplyKeyboardMarkup(
         keyboard=[
+
             [
-                KeyboardButton(text="🆓 Wi-Fi"),
-                KeyboardButton(text="👑 Обход Б/С")
+                KeyboardButton(
+                    text="👑 Купить подписку"
+                )
             ],
+
             [
-                KeyboardButton(text="👤 Личный кабинет")
+                KeyboardButton(
+                    text="🎁 Пробный период"
+                )
             ],
+
             [
-                KeyboardButton(text="💬 Поддержка")
+                KeyboardButton(
+                    text="👤 Личный кабинет"
+                )
+            ],
+
+            [
+                KeyboardButton(
+                    text="💬 Поддержка"
+                )
             ]
+
         ],
         resize_keyboard=True
     )
+
+
 
 
 
@@ -38,30 +55,54 @@ def admin_menu():
 
     return ReplyKeyboardMarkup(
         keyboard=[
+
             [
-                KeyboardButton(text="👥 Пользователи")
+                KeyboardButton(
+                    text="👥 Пользователи"
+                )
             ],
+
             [
-                KeyboardButton(text="📊 Статистика")
+                KeyboardButton(
+                    text="📊 Статистика"
+                )
             ],
+
             [
-                KeyboardButton(text="💳 Заявки")
+                KeyboardButton(
+                    text="💳 Заявки"
+                )
             ],
+
             [
-                KeyboardButton(text="📢 Рассылка")
+                KeyboardButton(
+                    text="📢 Рассылка"
+                )
             ],
+
             [
-                KeyboardButton(text="🎁 Промокоды")
+                KeyboardButton(
+                    text="🎁 Промокоды"
+                )
             ],
+
             [
-                KeyboardButton(text="⚙️ Настройки")
+                KeyboardButton(
+                    text="⚙️ Настройки"
+                )
             ],
+
             [
-                KeyboardButton(text="⬅️ Назад")
+                KeyboardButton(
+                    text="⬅️ Назад"
+                )
             ]
+
         ],
         resize_keyboard=True
     )
+
+
 
 
 
@@ -73,21 +114,28 @@ def users_keyboard(users):
 
     buttons = []
 
+
     for user in users:
 
         buttons.append(
+
             [
+
                 InlineKeyboardButton(
                     text=f"👤 {user[1]} | {user[0]}",
                     callback_data=f"user_{user[0]}"
                 )
+
             ]
+
         )
 
 
     return InlineKeyboardMarkup(
         inline_keyboard=buttons
     )
+
+
 
 
 
@@ -98,24 +146,32 @@ def users_keyboard(users):
 def user_card_keyboard(user_id):
 
     return InlineKeyboardMarkup(
+
         inline_keyboard=[
 
             [
+
                 InlineKeyboardButton(
-                    text="👑 Выдать Обход Б/С",
+                    text="👑 Выдать подписку",
                     callback_data=f"give_bs_{user_id}"
                 )
+
             ],
 
             [
+
                 InlineKeyboardButton(
-                    text="❌ Забрать Обход Б/С",
+                    text="❌ Забрать подписку",
                     callback_data=f"remove_bs_{user_id}"
                 )
+
             ]
 
         ]
+
     )
+
+
 
 
 
@@ -126,17 +182,23 @@ def user_card_keyboard(user_id):
 def buy_keyboard():
 
     return InlineKeyboardMarkup(
+
         inline_keyboard=[
 
             [
+
                 InlineKeyboardButton(
-                    text="💳 Купить Обход Б/С",
+                    text="💳 Купить подписку",
                     callback_data="buy_bs"
                 )
+
             ]
 
         ]
+
     )
+
+
 
 
 
@@ -147,38 +209,50 @@ def buy_keyboard():
 def promo_menu():
 
     return InlineKeyboardMarkup(
+
         inline_keyboard=[
 
             [
+
                 InlineKeyboardButton(
                     text="➕ Создать промокод",
                     callback_data="create_promo"
                 )
+
             ],
 
             [
+
                 InlineKeyboardButton(
                     text="📋 Список промокодов",
                     callback_data="list_promo"
                 )
+
             ],
 
             [
+
                 InlineKeyboardButton(
                     text="❌ Удалить промокод",
                     callback_data="delete_promo"
                 )
+
             ],
 
             [
+
                 InlineKeyboardButton(
                     text="⬅️ Назад",
                     callback_data="admin_back"
                 )
+
             ]
 
         ]
+
     )
+
+
 
 
 
@@ -189,85 +263,108 @@ def promo_menu():
 def broadcast_menu():
 
     return InlineKeyboardMarkup(
+
         inline_keyboard=[
 
             [
+
                 InlineKeyboardButton(
                     text="✏️ Создать сообщение",
                     callback_data="create_broadcast"
                 )
+
             ],
 
             [
+
                 InlineKeyboardButton(
                     text="👥 Отправить всем",
                     callback_data="send_broadcast"
                 )
+
             ],
 
             [
+
                 InlineKeyboardButton(
                     text="⬅️ Назад",
                     callback_data="admin_back"
                 )
+
             ]
 
         ]
+
     )
 
 
 
+
+
 # =====================
-# ЗАЯВКА ОПЛАТЫ
+# ОПЛАТА
 # =====================
 
 def payment_menu(user_id):
 
     return InlineKeyboardMarkup(
+
         inline_keyboard=[
 
             [
+
                 InlineKeyboardButton(
                     text="✅ Выдать подписку",
                     callback_data=f"approve_{user_id}"
                 )
+
             ],
 
             [
+
                 InlineKeyboardButton(
                     text="❌ Отклонить",
                     callback_data=f"reject_{user_id}"
                 )
+
             ]
 
         ]
+
     )
+
+
 
 
 
 # =====================
 # СТАРАЯ ФУНКЦИЯ
-# ДЛЯ payments.py
 # =====================
 
 def approve_keyboard(user_id):
 
     return InlineKeyboardMarkup(
+
         inline_keyboard=[
 
             [
+
                 InlineKeyboardButton(
                     text="✅ Одобрить",
                     callback_data=f"approve_{user_id}"
                 )
+
             ],
 
             [
+
                 InlineKeyboardButton(
                     text="❌ Отклонить",
                     callback_data=f"reject_{user_id}"
                 )
+
             ]
 
         ]
+
     )
