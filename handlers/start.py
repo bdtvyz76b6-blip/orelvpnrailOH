@@ -3,7 +3,6 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
 
 from config import (
-    WIFI_LINK,
     BS_LINK,
     SUPPORT,
     CARD_NUMBER,
