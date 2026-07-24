@@ -681,7 +681,7 @@ def delete_promo(code):
 # ОПЛАТЫ
 # =====================
 
-def add_payment(user_id, photo):
+def add_payment(user_id, photo, days):
 
     conn = connect()
 
@@ -694,7 +694,8 @@ def add_payment(user_id, photo):
 
         (
         user_id,
-        photo
+        photo,
+        days
         )
 
         VALUES (?,?)
