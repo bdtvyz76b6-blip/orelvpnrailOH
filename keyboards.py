@@ -284,3 +284,29 @@ def broadcast_menu():
 
         ]
     )
+    
+    # =====================
+# ПОДТВЕРЖДЕНИЕ ОПЛАТЫ
+# =====================
+
+def approve_keyboard(user_id):
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+
+            [
+                InlineKeyboardButton(
+                    text="✅ Выдать подписку",
+                    callback_data=f"approve_{user_id}"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="❌ Отклонить",
+                    callback_data=f"reject_{user_id}"
+                )
+            ]
+
+        ]
+    )
