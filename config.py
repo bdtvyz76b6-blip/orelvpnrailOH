@@ -24,7 +24,7 @@ ADMIN_ID = int(
 # =====================
 
 GITHUB_TOKEN = os.getenv(
-    "токен",
+    "GITHUB_TOKEN",
     ""
 )
 
