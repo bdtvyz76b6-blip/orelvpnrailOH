@@ -3,15 +3,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# =====================
+# BOT
+# =====================
 
-# Токен бота
 BOT_TOKEN = os.getenv(
     "BOT_TOKEN",
-    "8799505763:AAFTrQi-6AxO0wWskm3kUV1Evcnux_rI4y4"
+    "ТВОЙ_ТОКЕН"
 )
 
-
-# Админ Telegram ID
 ADMIN_ID = int(
     os.getenv(
         "ADMIN_ID",
@@ -19,36 +19,44 @@ ADMIN_ID = int(
     )
 )
 
+# =====================
+# GITHUB
+# =====================
 
-# Подписки
-
-WIFI_LINK = (
-    "https://raw.githubusercontent.com/"
-    "bdtvyz76b6-blip/vpn-sub/main/sub.txt"
+GITHUB_TOKEN = os.getenv(
+    "GITHUB_TOKEN",
+    ""
 )
 
+GITHUB_OWNER = "bdtvyz76b6-blip"
+GITHUB_REPO = "vpn-sub"
+GITHUB_BRANCH = "main"
 
-BS_LINK = (
-    "https://raw.githubusercontent.com/"
-    "bdtvyz76b6-blip/vpn-sub/main/LTE.txt"
-)
-
-
-FREE_TARIFF = "🆓 Wi-Fi"
-
-PAID_TARIFF = "👑 Обход Б/С"
-
-
-# Оплата
-
-PRICE_BS = "99₽"
-
-
-CARD_NUMBER = "2200 1513 3958 0875"
-
-CARD_OWNER = "@rusrodyyya"
-
-
-# Поддержка
+# =====================
+# ПОДДЕРЖКА
+# =====================
 
 SUPPORT = "@rusrodyyya"
+
+# =====================
+# ОПЛАТА
+# =====================
+
+CARD_NUMBER = "2200 1513 3958 0875"
+CARD_OWNER = "@rusrodyyya"
+
+# =====================
+# ЦЕНЫ
+# =====================
+
+PRICE_7 = "35₽"
+PRICE_30 = "85₽"
+PRICE_90 = "245₽"
+PRICE_365 = "605₽"
+
+# =====================
+# ТАРИФЫ
+# =====================
+
+FREE_TARIFF = "🎁 Пробный период"
+PAID_TARIFF = "👑 Orel VPN"
