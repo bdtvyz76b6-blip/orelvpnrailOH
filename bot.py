@@ -37,8 +37,11 @@ dp = Dispatcher()
 # =====================
 
 dp.include_router(start_router)
+
 dp.include_router(admin_router)
+
 dp.include_router(payments_router)
+
 dp.include_router(admin_panel_router)
 
 
@@ -52,7 +55,6 @@ async def main():
     create_table()
 
 
-    # Проверка подписок каждый час
     asyncio.create_task(
         check_subscriptions(bot)
     )
@@ -63,9 +65,15 @@ async def main():
     )
 
 
-    await dp.start_polling(
-        bot
-    )
+    try:
+
+        await dp.start_polling(
+            bot
+        )
+
+    finally:
+
+        await bot.session.close()
 
 
 
