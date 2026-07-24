@@ -54,16 +54,18 @@ def create_table():
     cur.execute("""
     CREATE TABLE IF NOT EXISTS payments (
 
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
 
-        user_id INTEGER,
+      user_id INTEGER,
 
-        photo TEXT,
+      photo TEXT,
 
-        status TEXT DEFAULT 'pending'
+      days INTEGER DEFAULT 30,
 
-    )
-    """)
+      status TEXT DEFAULT 'pending'
+
+  )
+  """)
 
     conn.commit()
 
