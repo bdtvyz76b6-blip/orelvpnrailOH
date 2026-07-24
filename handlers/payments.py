@@ -8,7 +8,6 @@ from config import (
 
 from database import (
     add_payment,
-    get_pending_days,
     activate_subscription
 )
 
@@ -26,28 +25,19 @@ router = Router()
 @router.message(F.photo)
 async def payment_photo(message: Message):
 
-
     photo = message.photo[-1].file_id
-
-
-    days = get_pending_days(
-        message.from_user.id
-    )
 
 
     add_payment(
         message.from_user.id,
-        photo,
-        days
+        photo
     )
-
 
 
     await message.answer(
         "✅ Скриншот отправлен администратору.\n\n"
         "Ожидайте проверки."
     )
-
 
 
     await message.bot.send_photo(
@@ -68,8 +58,8 @@ async def payment_photo(message: Message):
 {message.from_user.id}
 
 
-📅 Срок:
-{days} дней
+👤 Username:
+@{message.from_user.username}
 """,
 
         reply_markup=approve_keyboard(
@@ -82,12 +72,9 @@ async def payment_photo(message: Message):
 
 
 
-
-
 # =====================
-# ВЫДАТЬ ПОДПИСКУ
+# ОДОБРЕНИЕ
 # =====================
-
 
 @router.callback_query(
     F.data.startswith("approve_")
@@ -97,19 +84,13 @@ async def approve(
     callback: CallbackQuery
 ):
 
-
     user_id = int(
         callback.data.split("_")[1]
     )
 
 
-    # пока берём срок из базы
-
-    days = get_pending_days(
-        user_id
-    )
-
-
+    # Пока выдаём 30 дней
+    # потом подключим выбор тарифа
 
     activate_subscription(
 
@@ -117,10 +98,9 @@ async def approve(
 
         BS_LINK,
 
-        days
+        30
 
     )
-
 
 
     await callback.bot.send_message(
@@ -135,7 +115,7 @@ async def approve(
 
 
 📅 Срок:
-{days} дней
+30 дней
 
 
 🔗 Ваша подписка:
@@ -145,20 +125,12 @@ async def approve(
     )
 
 
-
     await callback.message.edit_caption(
-
-        caption=
-        "✅ Подписка выдана"
-
+        caption="✅ Подписка выдана"
     )
 
 
-    await callback.answer(
-        "Готово"
-    )
-
-
+    await callback.answer("Готово")
 
 
 
@@ -168,7 +140,6 @@ async def approve(
 # ОТКЛОНЕНИЕ
 # =====================
 
-
 @router.callback_query(
     F.data.startswith("reject_")
 )
@@ -177,29 +148,23 @@ async def reject(
     callback: CallbackQuery
 ):
 
-
     user_id = int(
         callback.data.split("_")[1]
     )
-
 
 
     await callback.bot.send_message(
 
         user_id,
 
-        "❌ Оплата отклонена.\n"
+        "❌ Оплата отклонена.\n\n"
         "Обратитесь в поддержку."
 
     )
 
 
-
     await callback.message.edit_caption(
-
-        caption=
-        "❌ Чек отклонён"
-
+        caption="❌ Чек отклонён"
     )
 
 
