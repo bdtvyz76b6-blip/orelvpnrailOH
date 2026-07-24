@@ -59,7 +59,10 @@ async def main():
         check_subscriptions(bot)
     )
 
+    import os
 
+    print("ALL VARS:", os.environ.keys())
+    print("TOKEN TEST:", os.getenv("GITHUB_TOKEN"))
     print(
         "🦅 Орёл VPN бот запущен"
     )
