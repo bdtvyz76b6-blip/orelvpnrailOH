@@ -9,10 +9,8 @@ from database import (
     get_user,
     remove_bs,
     get_stats,
-    activate_subscription
+    get_subscription_link
 )
-
-from github_update import create_subscription
 
 from keyboards import (
     admin_menu,
@@ -24,8 +22,9 @@ from keyboards import (
 router = Router()
 
 
+
 # =====================
-# АДМИН
+# АДМИН ПАНЕЛЬ
 # =====================
 
 @router.message(Command("admin"))
@@ -57,9 +56,11 @@ async def users(message: Message):
 
 
     if not users:
+
         await message.answer(
             "Пользователей нет."
         )
+
         return
 
 
@@ -72,7 +73,7 @@ async def users(message: Message):
 
 
 # =====================
-# КАРТОЧКА
+# КАРТОЧКА ПОЛЬЗОВАТЕЛЯ
 # =====================
 
 @router.callback_query(F.data.startswith("user_"))
@@ -91,32 +92,48 @@ async def user_card(callback: CallbackQuery):
 
 
     if not user:
+
         await callback.answer(
             "Пользователь не найден"
         )
+
         return
+
 
 
     await callback.message.edit_text(
 
         f"""
-👤 Пользователь
+👤 Карточка пользователя
+
 
 🆔 ID:
 {user[0]}
 
+
 👤 Username:
 @{user[1]}
+
 
 👑 Тариф:
 {user[2]}
 
+
+🔗 Подписка:
+{user[3]}
+
+
 📅 До:
 {user[4]}
+
+
+📆 Создан:
+{user[8]}
 """,
 
-        reply_markup=user_card_keyboard(user_id)
-
+        reply_markup=user_card_keyboard(
+            user_id
+        )
     )
 
 
@@ -125,62 +142,17 @@ async def user_card(callback: CallbackQuery):
 
 
 # =====================
-# ВЫДАТЬ ПОДПИСКУ
-# =====================
-
-@router.callback_query(F.data.startswith("give_sub_"))
-async def give_subscription(callback: CallbackQuery):
-
-    user_id = int(
-        callback.data.split("_")[2]
-    )
-
-
-    link = create_subscription(
-        user_id
-    )
-
-
-    activate_subscription(
-        user_id,
-        link,
-        30
-    )
-
-
-    try:
-
-        await callback.bot.send_message(
-            user_id,
-
-            f"""
-🎉 Вам выдана подписка 🦅 Орёл VPN
-
-📅 Срок:
-30 дней
-
-🔗 Ваша подписка:
-
-{link}
-"""
-        )
-
-    except:
-        pass
-
-
-    await callback.answer(
-        "Подписка выдана ✅"
-    )
-
-
-
-# =====================
-# ЗАБРАТЬ
+# ЗАБРАТЬ ПОДПИСКУ
 # =====================
 
 @router.callback_query(F.data.startswith("remove_sub_"))
-async def remove_subscription(callback: CallbackQuery):
+async def remove_subscription(
+    callback: CallbackQuery
+):
+
+    if callback.from_user.id != ADMIN_ID:
+        return
+
 
     user_id = int(
         callback.data.split("_")[2]
@@ -196,15 +168,16 @@ async def remove_subscription(callback: CallbackQuery):
 
         await callback.bot.send_message(
             user_id,
-            "❌ Подписка отключена."
+            "❌ Ваша подписка отключена."
         )
 
     except:
+
         pass
 
 
     await callback.answer(
-        "Удалено"
+        "Подписка отключена"
     )
 
 
@@ -227,21 +200,24 @@ async def stats(message: Message):
         f"""
 📊 Статистика
 
+
 👥 Пользователей:
-{data["total"]}
+{data['total']}
+
 
 🆓 Wi-Fi:
-{data["wifi"]}
+{data['wifi']}
+
 
 👑 Подписок:
-{data["bs"]}
+{data['bs']}
 """
     )
 
 
 
 # =====================
-# ОСТАЛЬНЫЕ РАЗДЕЛЫ
+# ЗАЯВКИ
 # =====================
 
 @router.message(F.text == "💳 Заявки")
@@ -250,10 +226,17 @@ async def requests(message: Message):
     if message.from_user.id != ADMIN_ID:
         return
 
+
     await message.answer(
-        "💳 Новые заявки приходят автоматически."
+        "💳 Заявки\n\n"
+        "Новые оплаты приходят автоматически."
     )
 
+
+
+# =====================
+# РАССЫЛКА
+# =====================
 
 @router.message(F.text == "📢 Рассылка")
 async def broadcast(message: Message):
@@ -261,10 +244,16 @@ async def broadcast(message: Message):
     if message.from_user.id != ADMIN_ID:
         return
 
+
     await message.answer(
         "📢 Раздел рассылки"
     )
 
+
+
+# =====================
+# ПРОМОКОДЫ
+# =====================
 
 @router.message(F.text == "🎁 Промокоды")
 async def promo(message: Message):
@@ -272,16 +261,23 @@ async def promo(message: Message):
     if message.from_user.id != ADMIN_ID:
         return
 
+
     await message.answer(
         "🎁 Раздел промокодов"
     )
 
+
+
+# =====================
+# НАСТРОЙКИ
+# =====================
 
 @router.message(F.text == "⚙️ Настройки")
 async def settings(message: Message):
 
     if message.from_user.id != ADMIN_ID:
         return
+
 
     await message.answer(
         "⚙️ Настройки"
