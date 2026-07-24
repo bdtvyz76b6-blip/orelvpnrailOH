@@ -60,7 +60,8 @@ async def main():
     )
 
     import os
-
+   
+    print("TEST_VAR =", os.getenv("TEST_VAR"))
     print("ALL VARS:", os.environ.keys())
     print("TOKEN TEST:", os.getenv("GITHUB_TOKEN"))
     print(
