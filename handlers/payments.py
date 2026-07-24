@@ -6,12 +6,13 @@ from config import (
     BS_LINK
 )
 
-from keyboards import approve_keyboard
-
 from database import (
     add_payment,
+    get_pending_days,
     activate_subscription
 )
+
+from keyboards import approve_keyboard
 
 
 router = Router()
@@ -29,13 +30,15 @@ async def payment_photo(message: Message):
     photo = message.photo[-1].file_id
 
 
-    # пока 30 дней
-    # позже подключим выбор тарифа
+    days = get_pending_days(
+        message.from_user.id
+    )
+
 
     add_payment(
         message.from_user.id,
         photo,
-        30
+        days
     )
 
 
@@ -57,16 +60,16 @@ async def payment_photo(message: Message):
 💳 Новый чек
 
 
+👤 Пользователь:
+{message.from_user.full_name}
+
+
 🆔 ID:
 {message.from_user.id}
 
 
-👤 Username:
-@{message.from_user.username}
-
-
 📅 Срок:
-30 дней
+{days} дней
 """,
 
         reply_markup=approve_keyboard(
@@ -79,9 +82,12 @@ async def payment_photo(message: Message):
 
 
 
+
+
 # =====================
-# ВЫДАТЬ
+# ВЫДАТЬ ПОДПИСКУ
 # =====================
+
 
 @router.callback_query(
     F.data.startswith("approve_")
@@ -97,6 +103,13 @@ async def approve(
     )
 
 
+    # пока берём срок из базы
+
+    days = get_pending_days(
+        user_id
+    )
+
+
 
     activate_subscription(
 
@@ -104,7 +117,7 @@ async def approve(
 
         BS_LINK,
 
-        30
+        days
 
     )
 
@@ -118,18 +131,17 @@ async def approve(
 🎉 Оплата подтверждена!
 
 
-👑 Орёл VPN активирован
+🦅 Орёл VPN активирован
 
 
 📅 Срок:
-30 дней
+{days} дней
 
 
-🔗 Подписка:
+🔗 Ваша подписка:
 
 {BS_LINK}
 """
-
     )
 
 
@@ -142,7 +154,6 @@ async def approve(
     )
 
 
-
     await callback.answer(
         "Готово"
     )
@@ -151,8 +162,10 @@ async def approve(
 
 
 
+
+
 # =====================
-# ОТКЛОНИТЬ
+# ОТКЛОНЕНИЕ
 # =====================
 
 
@@ -175,7 +188,8 @@ async def reject(
 
         user_id,
 
-        "❌ Оплата отклонена."
+        "❌ Оплата отклонена.\n"
+        "Обратитесь в поддержку."
 
     )
 
