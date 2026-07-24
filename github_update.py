@@ -10,6 +10,11 @@ GITHUB_TOKEN = os.getenv(
     "GITHUB_TOKEN"
 )
 
+print(
+    "GITHUB_TOKEN:",
+    GITHUB_TOKEN[:10] if GITHUB_TOKEN else "EMPTY"
+)
+
 
 OWNER = "bdtvyz76b6-blip"
 
