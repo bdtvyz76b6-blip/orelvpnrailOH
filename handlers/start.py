@@ -1,12 +1,8 @@
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message
 from aiogram.filters import Command
 
-from config import (
-    SUPPORT,
-    CARD_NUMBER,
-    CARD_OWNER
-)
+from config import SUPPORT
 
 from database import (
     add_user,
@@ -77,6 +73,13 @@ async def buy(message: Message):
 )
 async def trial(message: Message):
 
+    # создаём пользователя, если его нет
+    add_user(
+        message.from_user.id,
+        message.from_user.username
+    )
+
+
     if check_trial(
         message.from_user.id
     ):
@@ -89,11 +92,14 @@ async def trial(message: Message):
 
 
 
+    # создаём подписку на 3 дня
     link = create_subscription(
-        message.from_user.id
+        message.from_user.id,
+        days=3
     )
 
 
+    # сохраняем в базу
     activate_trial(
         message.from_user.id,
         link
