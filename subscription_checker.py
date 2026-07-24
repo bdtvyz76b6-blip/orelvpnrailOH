@@ -18,7 +18,8 @@ async def check_subscriptions(bot=None):
 
                 try:
 
-                    # Меняем GitHub файл на истёкшую подписку
+
+                    # Меняем sub файл на истёкшую подписку
                     expire_subscription(
                         user_id
                     )
@@ -29,42 +30,61 @@ async def check_subscriptions(bot=None):
                     )
 
 
-                    # Сообщение пользователю
+
                     if bot:
 
                         try:
 
                             await bot.send_message(
+
                                 user_id,
 
-                                "⛔ Ваша подписка Orel VPN закончилась.\n\n"
-                                "Для продления обратитесь к:\n"
-                                "@orelvpntopbot"
+                                """
+⛔ Орёл VPN
+
+
+Ваша подписка закончилась.
+
+
+Для продления нажмите:
+👑 Купить подписку
+
+
+Поддержка:
+@orelvpntopbot
+"""
+
                             )
+
 
                         except Exception as e:
 
                             print(
-                                "Ошибка отправки сообщения:",
+                                "Ошибка отправки:",
                                 e
                             )
+
 
 
                 except Exception as e:
 
                     print(
-                        f"Ошибка обработки {user_id}:",
+                        f"Ошибка пользователя {user_id}:",
                         e
                     )
+
 
 
         except Exception as e:
 
             print(
-                "Ошибка проверки подписок:",
+                "Ошибка чекера:",
                 e
             )
 
 
-        # Проверять каждый час
-        await asyncio.sleep(3600)
+
+        # проверка каждый час
+        await asyncio.sleep(
+            3600
+        )
