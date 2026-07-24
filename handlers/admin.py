@@ -2,7 +2,7 @@ from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
 
-from config import ADMIN_ID, BS_LINK
+from config import ADMIN_ID
 
 from database import (
     get_all_users,
