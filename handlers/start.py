@@ -5,10 +5,7 @@ from aiogram.filters import Command
 from config import (
     WIFI_LINK,
     BS_LINK,
-    FREE_TARIFF,
-    PAID_TARIFF,
     SUPPORT,
-    PRICE_BS,
     CARD_NUMBER,
     CARD_OWNER
 )
@@ -16,8 +13,9 @@ from config import (
 from database import (
     add_user,
     get_user,
-    activate_bs,
-    set_tariff
+    set_pending_days,
+    activate_trial,
+    check_trial
 )
 
 from keyboards import (
@@ -51,140 +49,94 @@ async def start(message: Message):
 
 
 
+
+
 # =====================
-# WI-FI
+# КУПИТЬ ПОДПИСКУ
 # =====================
 
-@router.message(F.text == "🆓 Wi-Fi")
-async def wifi(message: Message):
+@router.message(
+    F.text == "👑 Купить подписку"
+)
 
-    set_tariff(
-        message.from_user.id,
-        FREE_TARIFF,
-        WIFI_LINK
-    )
+async def buy(message: Message):
 
 
     await message.answer(
-        "🆓 Wi-Fi активен\n\n"
-        "Ваша подписка:\n"
-        f"{WIFI_LINK}"
+        """
+👑 Орёл VPN
+
+Выберите срок подписки:
+""",
+        reply_markup=buy_keyboard()
     )
 
 
 
+
+
 # =====================
-# ОБХОД Б/С
+# ВЫБОР ТАРИФА
 # =====================
 
-@router.message(F.text == "👑 Обход Б/С")
-async def bs(message: Message):
+@router.callback_query(
+    F.data.startswith("buy_")
+)
 
-    user = get_user(
-        message.from_user.id
+async def choose_tariff(
+    callback: CallbackQuery
+):
+
+
+    days = int(
+        callback.data.split("_")[1]
     )
 
 
-    if user and user[5] == 1:
-
-        await message.answer(
-            "👑 Обход Б/С активен\n\n"
-            f"{BS_LINK}"
-        )
-
-    else:
-
-        await message.answer(
-            "👑 Обход Б/С\n\n"
-            f"Цена: {PRICE_BS}\n\n"
-            "Нажмите кнопку покупки:",
-            reply_markup=buy_keyboard()
-        )
-
-
-
-# =====================
-# ЛИЧНЫЙ КАБИНЕТ
-# =====================
-
-@router.message(F.text == "👤 Личный кабинет")
-async def cabinet(message: Message):
-
-    user = get_user(
-        message.from_user.id
+    set_pending_days(
+        callback.from_user.id,
+        days
     )
 
 
-    if not user:
-        await message.answer(
-            "Профиль не найден."
-        )
-        return
+    prices = {
 
+        7: "35₽",
 
+        30: "85₽",
 
-    wifi = (
-        "✅ Активен"
-        if user[4]
-        else
-        "❌ Нет"
-    )
+        90: "245₽",
 
+        365: "605₽"
 
-    bs = (
-        "✅ Активен"
-        if user[5]
-        else
-        "❌ Нет"
-    )
+    }
 
-
-    await message.answer(
-
-        f"""
-👤 Личный кабинет
-
-🆔 ID:
-{user[0]}
-
-👤 Username:
-@{user[1]}
-
-🆓 Wi-Fi:
-{wifi}
-
-👑 Обход Б/С:
-{bs}
-
-📅 Регистрация:
-{user[6]}
-"""
-    )
-
-
-
-# =====================
-# ПОКУПКА
-# =====================
-
-@router.callback_query(F.data == "buy_bs")
-async def buy_bs(callback: CallbackQuery):
 
     await callback.message.answer(
-
         f"""
-👑 Покупка Обход Б/С
+👑 Орёл VPN
+
+
+📅 Срок:
+{days} дней
+
 
 💰 Цена:
-{PRICE_BS}
+{prices[days]}
 
-💳 Реквизиты:
+
+💳 Оплата переводом:
+
+
+Номер:
 {CARD_NUMBER}
 
-👤 Получатель:
+
+Получатель:
 {CARD_OWNER}
 
-После оплаты отправьте скриншот сюда.
+
+После оплаты отправьте сюда скриншот.
 """
     )
 
@@ -193,28 +145,114 @@ async def buy_bs(callback: CallbackQuery):
 
 
 
+
+
 # =====================
-# ПОДДЕРЖКА
+# ПРОБНЫЙ ПЕРИОД
 # =====================
 
-@router.message(F.text == "💬 Поддержка")
-async def support(message: Message):
+@router.message(
+    F.text == "🎁 Пробный период"
+)
+
+async def trial(message: Message):
+
+
+    if check_trial(
+        message.from_user.id
+    ):
+
+        await message.answer(
+            "❌ Вы уже использовали пробный период."
+        )
+
+        return
+
+
+
+    activate_trial(
+        message.from_user.id,
+        BS_LINK
+    )
+
 
     await message.answer(
-        "💬 Поддержка:\n\n"
-        f"{SUPPORT}"
+        f"""
+🎁 Пробный период активирован!
+
+
+⏳ Срок:
+3 дня
+
+
+🔗 Ваша подписка:
+
+{BS_LINK}
+"""
     )
 
 
 
+
+
 # =====================
-# НАЗАД
+# ЛИЧНЫЙ КАБИНЕТ
 # =====================
 
-@router.message(F.text == "⬅️ Назад")
-async def back(message: Message):
+@router.message(
+    F.text == "👤 Личный кабинет"
+)
+
+async def cabinet(message: Message):
+
+
+    user = get_user(
+        message.from_user.id
+    )
+
+
+    if not user:
+
+        await message.answer(
+            "Профиль не найден."
+        )
+
+        return
+
+
 
     await message.answer(
-        "Главное меню:",
-        reply_markup=main_menu()
+        f"""
+👤 Личный кабинет
+
+
+🆔 ID:
+{user[0]}
+
+
+👑 Тариф:
+{user[2]}
+
+
+📅 Действует до:
+{user[4]}
+"""
+    )
+
+
+
+
+
+# =====================
+# ПОДДЕРЖКА
+# =====================
+
+@router.message(
+    F.text == "💬 Поддержка"
+)
+
+async def support(message: Message):
+
+    await message.answer(
+        f"💬 Поддержка:\n\n{SUPPORT}"
     )
