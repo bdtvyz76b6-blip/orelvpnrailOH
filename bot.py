@@ -5,13 +5,7 @@ from aiogram import Bot, Dispatcher
 from config import BOT_TOKEN
 from database import create_table
 
-
-# =====================
-# ПРОВЕРКА ПОДПИСОК
-# =====================
-
 from subscription_checker import check_subscriptions
-
 
 
 # =====================
@@ -43,11 +37,8 @@ dp = Dispatcher()
 # =====================
 
 dp.include_router(start_router)
-
 dp.include_router(admin_router)
-
 dp.include_router(payments_router)
-
 dp.include_router(admin_panel_router)
 
 
@@ -61,13 +52,15 @@ async def main():
     create_table()
 
 
-    # Запуск проверки подписок
+    # Проверка подписок каждый час
     asyncio.create_task(
-        check_subscriptions()
+        check_subscriptions(bot)
     )
 
 
-    print("🦅 Орёл VPN бот запущен")
+    print(
+        "🦅 Орёл VPN бот запущен"
+    )
 
 
     await dp.start_polling(
