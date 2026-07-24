@@ -9,7 +9,7 @@ load_dotenv()
 
 BOT_TOKEN = os.getenv(
     "BOT_TOKEN",
-    "ТВОЙ_ТОКЕН"
+    "8799505763:AAFTrQi-6AxO0wWskm3kUV1Evcnux_rI4y4"
 )
 
 ADMIN_ID = int(
@@ -24,7 +24,7 @@ ADMIN_ID = int(
 # =====================
 
 GITHUB_TOKEN = os.getenv(
-    "GITHUB_TOKEN",
+    "ghp_dk1Gwd7C7WAIGAap0H6q9Rdd4wcBbz2RXmTK",
     ""
 )
 
