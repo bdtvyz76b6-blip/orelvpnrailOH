@@ -13,6 +13,7 @@ from subscription_checker import check_subscriptions
 # =====================
 
 from handlers.start import router as start_router
+from handlers.cabinet import router as cabinet_router
 from handlers.admin import router as admin_router
 from handlers.payments import router as payments_router
 from handlers.admin_panel import router as admin_panel_router
@@ -38,6 +39,8 @@ dp = Dispatcher()
 
 dp.include_router(start_router)
 
+dp.include_router(cabinet_router)
+
 dp.include_router(admin_router)
 
 dp.include_router(payments_router)
@@ -58,6 +61,7 @@ async def main():
     asyncio.create_task(
         check_subscriptions(bot)
     )
+
 
     import os
    
