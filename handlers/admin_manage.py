@@ -1,5 +1,5 @@
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
@@ -22,45 +22,50 @@ router = Router()
 # СОСТОЯНИЯ
 # =====================
 
-class ManageUser(StatesGroup):
+class Manage(StatesGroup):
 
-    waiting_id = State()
+    user_id = State()
 
-    waiting_days = State()
+    days = State()
 
-    waiting_message = State()
+    message = State()
 
 
 
 # =====================
-# ПРОВЕРКА
+# ПРОВЕРКА АДМИНА
 # =====================
 
-def is_admin(user_id):
+def admin(user_id):
 
     return user_id == ADMIN_ID
 
 
 
 # =====================
-# НАЧАТЬ УПРАВЛЕНИЕ
+# НАЧАЛО
 # =====================
 
 @router.callback_query(
     F.data == "admin_manage"
 )
-async def manage(callback: CallbackQuery):
+async def start_manage(callback: CallbackQuery, state: FSMContext):
 
-    if not is_admin(callback.from_user.id):
+    if not admin(callback.from_user.id):
         return
 
 
+    await state.set_state(
+        Manage.user_id
+    )
+
+
     await callback.message.answer(
-"""
+        """
 ⚙️ Управление пользователем
 
 
-Введите Telegram ID пользователя:
+Введите Telegram ID:
 """
     )
 
@@ -70,16 +75,33 @@ async def manage(callback: CallbackQuery):
 
 
 # =====================
-# ПОЛУЧИТЬ ID
+# ПОИСК
 # =====================
 
-@router.message(ManageUser.waiting_id)
-async def get_id(message: Message, state: FSMContext):
+@router.message(
+    Manage.user_id
+)
+async def find_user(message: Message, state: FSMContext):
 
-    user_id = int(message.text)
+    try:
+
+        user_id = int(
+            message.text
+        )
+
+    except:
+
+        await message.answer(
+            "❌ ID должен быть числом"
+        )
+
+        return
 
 
-    user = get_user(user_id)
+
+    user = get_user(
+        user_id
+    )
 
 
     if not user:
@@ -95,13 +117,13 @@ async def get_id(message: Message, state: FSMContext):
 
 
     await state.update_data(
-        user_id=user_id
+        target=user_id
     )
 
 
     await message.answer(
 f"""
-👤 Пользователь найден
+👤 Пользователь
 
 
 🆔 ID:
@@ -116,12 +138,10 @@ f"""
 {user['subscription_until']}
 
 
-Выберите действие:
-
-➕ Выдать подписку
-⏳ Продлить
-❌ Отключить
-"""
+📡 Статус:
+{user['status']}
+""",
+        reply_markup=user_actions()
     )
 
 
@@ -130,20 +150,126 @@ f"""
 
 
 # =====================
-# ВЫДАТЬ ПОДПИСКУ
+# КНОПКИ
 # =====================
 
-@router.message(
-    F.text == "➕ Выдать подписку"
-)
-async def give_sub(message: Message):
+def user_actions():
 
-    if not is_admin(message.from_user.id):
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+
+            [
+                InlineKeyboardButton(
+                    text="➕ Выдать VIP",
+                    callback_data="give_vip"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="⏳ Продлить",
+                    callback_data="extend_sub"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="❌ Отключить",
+                    callback_data="disable_sub"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="📩 Написать",
+                    callback_data="write_user"
+                )
+            ]
+
+        ]
+    )
+
+
+
+# =====================
+# ВЫДАТЬ VIP
+# =====================
+
+@router.callback_query(
+    F.data == "give_vip"
+)
+async def give_vip(callback: CallbackQuery):
+
+    await callback.message.answer(
+        """
+Введите:
+
+ID пользователя + количество дней
+
+Пример:
+
+6312016802 30
+"""
+    )
+
+
+    await callback.answer()
+
+
+
+@router.message(
+    F.text.regexp(r"^\d+\s\d+$")
+)
+async def give_process(message: Message):
+
+    if not admin(message.from_user.id):
         return
 
 
+    data = message.text.split()
+
+
+    user_id = int(data[0])
+
+    days = int(data[1])
+
+
+
+    link = create_subscription(
+        user_id,
+        days=days
+    )
+
+
+    activate_subscription(
+        user_id,
+        link,
+        days
+    )
+
+
     await message.answer(
-        "Введите количество дней:"
+        "✅ Подписка выдана"
+    )
+
+
+
+    await message.bot.send_message(
+
+        user_id,
+
+        f"""
+🎉 Вам выдана подписка Орёл VPN
+
+
+⏳ Срок:
+{days} дней
+
+
+🔗 Ссылка:
+
+{link}
+"""
     )
 
 
@@ -152,33 +278,64 @@ async def give_sub(message: Message):
 # ОТКЛЮЧИТЬ
 # =====================
 
-@router.message(
-    F.text == "❌ Отключить"
+@router.callback_query(
+    F.data == "disable_sub"
 )
-async def disable(message: Message):
+async def disable_sub(callback: CallbackQuery):
 
-    if not is_admin(message.from_user.id):
-        return
-
-
-    await message.answer(
-        "Введите ID пользователя:"
+    await callback.message.answer(
+        """
+Введите ID пользователя для отключения:
+"""
     )
 
 
-    # дальше подключим обработчик удаления
+    await callback.answer()
 
 
-
-# =====================
-# СООБЩЕНИЕ
-# =====================
 
 @router.message(
-    F.text == "📩 Написать"
+    F.text.regexp(r"^\d+$")
 )
-async def write_user(message: Message):
+async def disable_process(message: Message):
+
+    if not admin(message.from_user.id):
+        return
+
+
+    user_id = int(
+        message.text
+    )
+
+
+    user = get_user(
+        user_id
+    )
+
+
+    if not user:
+
+        await message.answer(
+            "❌ Пользователь не найден"
+        )
+
+        return
+
+
+
+    remove_bs(
+        user_id
+    )
+
 
     await message.answer(
-        "Введите ID пользователя и текст:"
+        "❌ Подписка отключена"
+    )
+
+
+    await message.bot.send_message(
+        user_id,
+        """
+⚠️ Ваша подписка Орёл VPN отключена.
+"""
     )
