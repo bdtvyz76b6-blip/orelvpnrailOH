@@ -8,7 +8,8 @@ from database import (
     add_user,
     get_user,
     activate_trial,
-    check_trial
+    check_trial,
+    get_subscription_link
 )
 
 from keyboards import (
@@ -42,22 +43,21 @@ async def start(message: Message):
     )
 
 
-    user = get_user(user_id)
+    # получаем ссылку из базы
+    link = get_subscription_link(
+        user_id
+    )
 
 
-    if user and user[3]:
-
-        link = user[3]
-
-
-    else:
+    # если ссылки нет — создаём файл GitHub
+    if not link:
 
         link = create_user_subscription(
             user_id
         )
 
 
-        save_subscription_link(
+        activate_trial(
             user_id,
             link
         )
@@ -77,7 +77,7 @@ async def start(message: Message):
 📲 Добавьте её в приложение Happ.
 
 
-⚡ Для активации подписки оформите её в этом боте.
+⚡ Активируйте подписку в этом боте.
 """,
         reply_markup=main_menu()
     )
@@ -126,7 +126,6 @@ async def trial(message: Message):
     )
 
 
-
     if check_trial(user_id):
 
         await message.answer(
@@ -147,7 +146,6 @@ async def trial(message: Message):
         user_id,
         link
     )
-
 
 
     await message.answer(
