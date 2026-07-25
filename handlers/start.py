@@ -2,28 +2,33 @@ from aiogram import Router, F
 from aiogram.types import Message
 from aiogram.filters import Command
 
+
 from config import SUPPORT
+
 
 from database import (
     add_user,
-    get_user,
-    activate_trial,
+    get_subscription_link,
     check_trial,
-    get_subscription_link
+    activate_trial
 )
+
 
 from keyboards import (
     main_menu,
-    buy_keyboard
+    stars_buy_keyboard
 )
 
+
 from github_update import (
-    create_user_subscription,
     create_subscription
 )
 
 
+
 router = Router()
+
+
 
 
 
@@ -39,38 +44,29 @@ async def start(message: Message):
 
     add_user(
         user_id,
-        message.from_user.username
+        message.from_user.username,
+        message.from_user.first_name
     )
 
 
-    # берём ссылку из базы
+
     link = get_subscription_link(
         user_id
     )
 
 
-    # если ссылки нет - создаём файл GitHub
-    if not link:
-
-        link = create_user_subscription(
-            user_id
-        )
-
 
     await message.answer(
-        f"""
+f"""
 🦅 Добро пожаловать в Орёл VPN!
 
 
-🔗 Ваша ссылка на подписку:
+🎫 Ваша подписка:
 
-{link}
-
-
-📲 Добавьте её в приложение Happ.
+{"Активна" if link else "Нет активной подписки"}
 
 
-🎁 Пробный период доступен в меню.
+Выберите действие ниже.
 """,
         reply_markup=main_menu()
     )
@@ -84,17 +80,21 @@ async def start(message: Message):
 # =====================
 
 @router.message(
-    F.text == "👑 Купить подписку"
+    F.text == "🎫 Купить подписку"
 )
-async def buy(message: Message):
+async def buy_subscription(message: Message):
+
 
     await message.answer(
-        """
-🦅 Орёл VPN
+"""
+🦅 Орёл VPN VIP
+
 
 Выберите срок подписки:
+
+⭐ Оплата через Telegram Stars
 """,
-        reply_markup=buy_keyboard()
+        reply_markup=stars_buy_keyboard()
     )
 
 
@@ -113,10 +113,13 @@ async def trial(message: Message):
     user_id = message.from_user.id
 
 
+
     add_user(
         user_id,
-        message.from_user.username
+        message.from_user.username,
+        message.from_user.first_name
     )
+
 
 
     if check_trial(user_id):
@@ -135,14 +138,16 @@ async def trial(message: Message):
     )
 
 
+
     activate_trial(
         user_id,
         link
     )
 
 
+
     await message.answer(
-        f"""
+f"""
 🎁 Пробный период активирован!
 
 
@@ -150,7 +155,7 @@ async def trial(message: Message):
 3 дня
 
 
-🔗 Ваша подписка:
+🔗 Ваша ссылка:
 
 {link}
 """
@@ -170,5 +175,9 @@ async def trial(message: Message):
 async def support(message: Message):
 
     await message.answer(
-        f"💬 Поддержка:\n\n{SUPPORT}"
+f"""
+💬 Поддержка:
+
+{SUPPORT}
+"""
     )
