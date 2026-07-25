@@ -1,7 +1,14 @@
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import (
+    Message,
+    CallbackQuery,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton
+)
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+
+from config import ADMIN_ID
 
 from database import (
     get_user,
@@ -10,8 +17,6 @@ from database import (
 )
 
 from github_update import create_subscription
-
-from config import ADMIN_ID
 
 
 router = Router()
@@ -22,13 +27,15 @@ router = Router()
 # СОСТОЯНИЯ
 # =====================
 
-class Manage(StatesGroup):
+class ManageUser(StatesGroup):
 
-    user_id = State()
+    waiting_id = State()
 
-    days = State()
+    waiting_give = State()
 
-    message = State()
+    waiting_extend = State()
+
+    waiting_message = State()
 
 
 
@@ -36,33 +43,38 @@ class Manage(StatesGroup):
 # ПРОВЕРКА АДМИНА
 # =====================
 
-def admin(user_id):
+def is_admin(user_id):
 
     return user_id == ADMIN_ID
 
 
 
 # =====================
-# НАЧАЛО
+# НАЙТИ ПОЛЬЗОВАТЕЛЯ
 # =====================
 
 @router.callback_query(
-    F.data == "admin_manage"
+    F.data == "find_user"
 )
-async def start_manage(callback: CallbackQuery, state: FSMContext):
+async def find_user(
+    callback: CallbackQuery,
+    state: FSMContext
+):
 
-    if not admin(callback.from_user.id):
+    if not is_admin(
+        callback.from_user.id
+    ):
         return
 
 
     await state.set_state(
-        Manage.user_id
+        ManageUser.waiting_id
     )
 
 
     await callback.message.answer(
-        """
-⚙️ Управление пользователем
+"""
+👤 Поиск пользователя
 
 
 Введите Telegram ID:
@@ -74,14 +86,13 @@ async def start_manage(callback: CallbackQuery, state: FSMContext):
 
 
 
-# =====================
-# ПОИСК
-# =====================
-
 @router.message(
-    Manage.user_id
+    ManageUser.waiting_id
 )
-async def find_user(message: Message, state: FSMContext):
+async def show_user(
+    message: Message,
+    state: FSMContext
+):
 
     try:
 
@@ -117,7 +128,7 @@ async def find_user(message: Message, state: FSMContext):
 
 
     await state.update_data(
-        target=user_id
+        user_id=user_id
     )
 
 
@@ -127,21 +138,25 @@ f"""
 
 
 🆔 ID:
-{user['user_id']}
+{user[0]}
+
+
+👤 Username:
+{user[1]}
 
 
 👑 Тариф:
-{user['tariff']}
+{user[2]}
 
 
 📅 До:
-{user['subscription_until']}
+{user[4]}
 
 
-📡 Статус:
-{user['status']}
+🔗 Ссылка:
+{user[3]}
 """,
-        reply_markup=user_actions()
+        reply_markup=user_menu()
     )
 
 
@@ -150,10 +165,10 @@ f"""
 
 
 # =====================
-# КНОПКИ
+# МЕНЮ ПОЛЬЗОВАТЕЛЯ
 # =====================
 
-def user_actions():
+def user_menu():
 
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -161,28 +176,28 @@ def user_actions():
             [
                 InlineKeyboardButton(
                     text="➕ Выдать VIP",
-                    callback_data="give_vip"
+                    callback_data="give_user"
                 )
             ],
 
             [
                 InlineKeyboardButton(
                     text="⏳ Продлить",
-                    callback_data="extend_sub"
+                    callback_data="extend_user"
                 )
             ],
 
             [
                 InlineKeyboardButton(
                     text="❌ Отключить",
-                    callback_data="disable_sub"
+                    callback_data="disable_user"
                 )
             ],
 
             [
                 InlineKeyboardButton(
                     text="📩 Написать",
-                    callback_data="write_user"
+                    callback_data="message_user"
                 )
             ]
 
@@ -192,19 +207,31 @@ def user_actions():
 
 
 # =====================
-# ВЫДАТЬ VIP
+# ВЫДАТЬ ПОДПИСКУ
 # =====================
 
 @router.callback_query(
-    F.data == "give_vip"
+    F.data == "give_user"
 )
-async def give_vip(callback: CallbackQuery):
+async def give_user(
+    callback: CallbackQuery,
+    state: FSMContext
+):
+
+    await state.set_state(
+        ManageUser.waiting_give
+    )
+
 
     await callback.message.answer(
-        """
+"""
+➕ Выдать подписку
+
+
 Введите:
 
-ID пользователя + количество дней
+ID дни
+
 
 Пример:
 
@@ -218,15 +245,24 @@ ID пользователя + количество дней
 
 
 @router.message(
-    F.text.regexp(r"^\d+\s\d+$")
+    ManageUser.waiting_give
 )
-async def give_process(message: Message):
-
-    if not admin(message.from_user.id):
-        return
-
+async def give_process(
+    message: Message,
+    state: FSMContext
+):
 
     data = message.text.split()
+
+
+    if len(data) != 2:
+
+        await message.answer(
+            "❌ Формат: ID дни"
+        )
+
+        return
+
 
 
     user_id = int(data[0])
@@ -248,6 +284,7 @@ async def give_process(message: Message):
     )
 
 
+
     await message.answer(
         "✅ Подписка выдана"
     )
@@ -255,11 +292,9 @@ async def give_process(message: Message):
 
 
     await message.bot.send_message(
-
         user_id,
-
-        f"""
-🎉 Вам выдана подписка Орёл VPN
+f"""
+🎉 Вам активировали Орёл VPN
 
 
 ⏳ Срок:
@@ -273,19 +308,40 @@ async def give_process(message: Message):
     )
 
 
+    await state.clear()
+
+
 
 # =====================
-# ОТКЛЮЧИТЬ
+# ПРОДЛИТЬ
 # =====================
 
 @router.callback_query(
-    F.data == "disable_sub"
+    F.data == "extend_user"
 )
-async def disable_sub(callback: CallbackQuery):
+async def extend_user(
+    callback: CallbackQuery,
+    state: FSMContext
+):
+
+    await state.set_state(
+        ManageUser.waiting_extend
+    )
+
 
     await callback.message.answer(
-        """
-Введите ID пользователя для отключения:
+"""
+⏳ Продлить подписку
+
+
+Введите:
+
+ID дни
+
+
+Пример:
+
+6312016802 30
 """
     )
 
@@ -295,32 +351,88 @@ async def disable_sub(callback: CallbackQuery):
 
 
 @router.message(
-    F.text.regexp(r"^\d+$")
+    ManageUser.waiting_extend
 )
-async def disable_process(message: Message):
+async def extend_process(
+    message: Message,
+    state: FSMContext
+):
 
-    if not admin(message.from_user.id):
+    data = message.text.split()
+
+
+    user_id = int(
+        data[0]
+    )
+
+    days = int(
+        data[1]
+    )
+
+
+    link = create_subscription(
+        user_id,
+        days=days
+    )
+
+
+    activate_subscription(
+        user_id,
+        link,
+        days
+    )
+
+
+    await message.answer(
+        "⏳ Подписка продлена"
+    )
+
+
+    await state.clear()
+
+
+
+# =====================
+# ОТКЛЮЧИТЬ
+# =====================
+
+@router.callback_query(
+    F.data == "disable_user"
+)
+async def disable_user(
+    callback: CallbackQuery
+):
+
+    await callback.message.answer(
+"""
+❌ Отключение
+
+
+Введите ID пользователя:
+"""
+    )
+
+
+    await callback.answer()
+
+
+
+@router.message(
+F.text.regexp(r"^\d+$")
+)
+async def disable_process(
+    message: Message
+):
+
+    if not is_admin(
+        message.from_user.id
+    ):
         return
 
 
     user_id = int(
         message.text
     )
-
-
-    user = get_user(
-        user_id
-    )
-
-
-    if not user:
-
-        await message.answer(
-            "❌ Пользователь не найден"
-        )
-
-        return
-
 
 
     remove_bs(
@@ -333,9 +445,85 @@ async def disable_process(message: Message):
     )
 
 
+
     await message.bot.send_message(
         user_id,
-        """
+"""
 ⚠️ Ваша подписка Орёл VPN отключена.
 """
     )
+
+
+
+# =====================
+# НАПИСАТЬ
+# =====================
+
+@router.callback_query(
+    F.data == "message_user"
+)
+async def message_user(
+    callback: CallbackQuery,
+    state: FSMContext
+):
+
+    await state.set_state(
+        ManageUser.waiting_message
+    )
+
+
+    await callback.message.answer(
+"""
+📩 Сообщение пользователю
+
+
+Введите:
+
+ID текст
+
+
+Пример:
+
+6312016802 Ваша подписка продлена
+"""
+    )
+
+
+    await callback.answer()
+
+
+
+@router.message(
+ManageUser.waiting_message
+)
+async def send_message_user(
+    message: Message,
+    state: FSMContext
+):
+
+    data = message.text.split(
+        " ",
+        1
+    )
+
+
+    user_id = int(
+        data[0]
+    )
+
+    text = data[1]
+
+
+
+    await message.bot.send_message(
+        user_id,
+        text
+    )
+
+
+    await message.answer(
+        "✅ Сообщение отправлено"
+    )
+
+
+    await state.clear()
