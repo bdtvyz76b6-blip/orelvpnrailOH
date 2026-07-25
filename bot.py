@@ -15,11 +15,18 @@ from subscription_checker import check_subscriptions
 # =====================
 
 from handlers.start import router as start_router
+
 from handlers.cabinet import router as cabinet_router
-from handlers.settings import router as settings_router
-from handlers.admin import router as admin_router
+
+from handlers.admin_panel import router as admin_router
+
+from handlers.admin_manage import router as admin_manage_router
+
+from handlers.admin_broadcast import router as admin_broadcast_router
+
+from handlers.admin_promos import router as admin_promos_router
+
 from handlers.payments import router as payments_router
-from handlers.admin_panel import router as admin_panel_router
 
 
 
@@ -51,11 +58,6 @@ dp.include_router(
 
 
 dp.include_router(
-    settings_router
-)
-
-
-dp.include_router(
     payments_router
 )
 
@@ -66,7 +68,17 @@ dp.include_router(
 
 
 dp.include_router(
-    admin_panel_router
+    admin_manage_router
+)
+
+
+dp.include_router(
+    admin_broadcast_router
+)
+
+
+dp.include_router(
+    admin_promos_router
 )
 
 
@@ -80,19 +92,14 @@ async def main():
     create_table()
 
 
-
     asyncio.create_task(
-        check_subscriptions(
-            bot
-        )
+        check_subscriptions(bot)
     )
-
 
 
     print(
         "🦅 Орёл VPN бот запущен"
     )
-
 
 
     try:
@@ -105,8 +112,6 @@ async def main():
     finally:
 
         await bot.session.close()
-
-
 
 
 
