@@ -5,10 +5,10 @@ import requests
 from datetime import datetime, timedelta
 
 
-
 GITHUB_TOKEN = os.getenv(
     "GITHUB_TOKEN"
 )
+
 
 print(
     "GITHUB_TOKEN:",
@@ -19,6 +19,33 @@ print(
 OWNER = "bdtvyz76b6-blip"
 
 REPO = "vpn-sub"
+
+BRANCH = "main"
+
+
+
+# =====================
+# НОВЫЙ ПОЛЬЗОВАТЕЛЬ
+# =====================
+
+
+NEW_USER_TEMPLATE = """
+#profile-title: 🦅 Orel VPN
+
+#profile-update-interval: 1
+
+#announce: Активируйте подписку через @orelvpntopbot
+
+
+vless://00000000-0000-0000-0000-000000000000@expired.invalid:443?type=tcp&security=reality&sni=expired.invalid&fp=chrome&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&sid=&flow=xtls-rprx-vision#❌ Подписка отсутствует
+
+
+vless://00000000-0000-0000-0000-000000000000@expired.invalid:443?type=tcp&security=reality&sni=expired.invalid&fp=chrome&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&sid=&flow=xtls-rprx-vision#Активировать в @orelvpntopbot
+
+
+vless://c61ec320-29f1-4e00-9272-8b676e6957b4@telegram.looks-free.rutube.info:443?type=tcp&security=reality&sni=tradingview.com&fp=qq&pbk=Lbug_wz0y9xgKeDK44D9kuUap0fXzNKyv_nMJxnZRzU&sid=08&flow=xtls-rprx-vision#Telegram
+
+"""
 
 
 
@@ -64,7 +91,6 @@ vless://1833e2e7-ac13-4be3-b63d-f13b6ed195ad@212.193.153.47:443?type=ws&security
 
 
 EXPIRED_TEMPLATE = """
-
 #profile-title: ⛔ Orel VPN
 
 #profile-update-interval: 1
@@ -72,19 +98,11 @@ EXPIRED_TEMPLATE = """
 #announce: Срок действия подписки закончился. Продлите у @orelvpntopbot
 
 
-
 vless://00000000-0000-0000-0000-000000000000@expired.invalid:443?type=tcp&security=reality&sni=expired.invalid&fp=chrome&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&sid=&flow=xtls-rprx-vision#⛔ Подписка истекла
 
 
-
 vless://00000000-0000-0000-0000-000000000000@expired.invalid:443?type=tcp&security=reality&sni=expired.invalid&fp=chrome&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&sid=&flow=xtls-rprx-vision#Продлите в @orelvpntopbot
-
-
-
-vless://c61ec320-29f1-4e00-9272-8b676e6957b4@telegram.looks-free.rutube.info:443?type=tcp&security=reality&sni=tradingview.com&fp=qq&pbk=Lbug_wz0y9xgKeDK44D9kuUap0fXzNKyv_nMJxnZRzU&sid=08&flow=xtls-rprx-vision#Telegram
-
 """
-
 
 
 
@@ -99,15 +117,9 @@ vless://c61ec320-29f1-4e00-9272-8b676e6957b4@telegram.looks-free.rutube.info:443
 def github_headers():
 
     return {
-
-        "Authorization":
-        f"Bearer {GITHUB_TOKEN}",
-
-        "Accept":
-        "application/vnd.github+json"
-
+        "Authorization": f"Bearer {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github+json"
     }
-
 
 
 
@@ -115,13 +127,9 @@ def github_headers():
 def github_url(path):
 
     return (
-
         f"https://api.github.com/repos/"
-
         f"{OWNER}/{REPO}/contents/{path}"
-
     )
-
 
 
 
@@ -134,55 +142,42 @@ def github_url(path):
 
 def update_file(path, content):
 
-
     url = github_url(path)
 
 
-
     old = requests.get(
-
         url,
-
         headers=github_headers()
-
     )
-
 
 
     data = {
 
-
         "message":
         "Update Orel VPN subscription",
-
 
         "content":
         base64.b64encode(
             content.encode("utf-8")
-        ).decode("utf-8")
+        ).decode("utf-8"),
 
+        "branch":
+        BRANCH
     }
 
 
 
     if old.status_code == 200:
 
-
         data["sha"] = old.json()["sha"]
 
 
 
-
     response = requests.put(
-
         url,
-
         headers=github_headers(),
-
         json=data
-
     )
-
 
 
     response.raise_for_status()
@@ -192,66 +187,66 @@ def update_file(path, content):
 
 
 
+# =====================
+# СОЗДАТЬ ФАЙЛ ПОСЛЕ START
+# =====================
+
+
+def create_user_subscription(user_id):
+
+    path = f"users/{user_id}.txt"
+
+
+    update_file(
+        path,
+        NEW_USER_TEMPLATE
+    )
+
+
+    return (
+        f"https://raw.githubusercontent.com/"
+        f"{OWNER}/{REPO}/{BRANCH}/{path}"
+    )
+
+
+
+
+
 
 # =====================
-# СОЗДАТЬ ПОДПИСКУ
+# АКТИВИРОВАТЬ ПОСЛЕ ОПЛАТЫ
 # =====================
 
 
-def create_subscription(
-        user_id,
-        days=30
-):
-
+def create_subscription(user_id, days=30):
 
     expire_date = (
-
         datetime.now()
-
         +
-
         timedelta(days=days)
-
     ).strftime(
         "%d.%m.%Y"
     )
 
 
-
     content = ACTIVE_TEMPLATE.format(
-
         date=expire_date
-
     )
 
 
-
-    path = (
-
-        f"users/{user_id}.txt"
-
-    )
-
+    path = f"users/{user_id}.txt"
 
 
     update_file(
-
         path,
-
         content
-
     )
-
 
 
     return (
-
-        "https://raw.githubusercontent.com/"
-
-        f"{OWNER}/{REPO}/main/{path}"
-
+        f"https://raw.githubusercontent.com/"
+        f"{OWNER}/{REPO}/{BRANCH}/{path}"
     )
-
 
 
 
@@ -263,22 +258,12 @@ def create_subscription(
 # =====================
 
 
-def expire_subscription(
-        user_id
-):
+def expire_subscription(user_id):
 
-
-    path = (
-
-        f"users/{user_id}.txt"
-
-    )
+    path = f"users/{user_id}.txt"
 
 
     update_file(
-
         path,
-
         EXPIRED_TEMPLATE
-
     )
