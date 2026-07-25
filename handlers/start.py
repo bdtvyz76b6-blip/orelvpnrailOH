@@ -8,8 +8,7 @@ from database import (
     add_user,
     get_user,
     activate_trial,
-    check_trial,
-    save_subscription_link
+    check_trial
 )
 
 from keyboards import (
