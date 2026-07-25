@@ -65,19 +65,19 @@ ACTIVE_TEMPLATE = """
 
 
 
-vless://1833e2e7-ac13-4be3-b63d-f13b6ed195ad@185.81.115.233:8443?type=tcp&security=reality&pbk=AleVV90POpOeIxhTgPNAqVPXENd5u-yrIe_i6R5_NjQ&fp=firefox&sni=prod.cryptoofarm.com&sid=0f990c62cb6f5627&flow=xtls-rprx-vision#🇩🇪 GERMANY 🛜 🦅
+vless://1833e2e7-ac13-4be3-b63d-f13b6ed195ad@185.81.115.233:8443?type=tcp&security=reality&pbk=AleVV90POpOeIxhTgPNAqVPXENd5u-yrIe_i6R5_NjQ&fp=firefox&sni=prod.cryptoofarm.com&sid=0f990c62cb6f5627&flow=xtls-rprx-vision#🇩🇪 Germany
 
 
-vless://6949d13a-6695-4ef6-95a6-59f5a17c0978@189.74.114.135:443?type=tcp&security=reality&pbk=IuvAXlAWBpeXehmEk0P-FIGTctUhny2H3UilbWWfJC0&fp=qq&sni=api.yandex-dev.org&sid=122218f4c1f172e4&flow=xtls-rprx-vision#🇧🇷 BRAZIL 🛜 🦅
+vless://6949d13a-6695-4ef6-95a6-59f5a17c0978@189.74.114.135:443?type=tcp&security=reality&pbk=IuvAXlAWBpeXehmEk0P-FIGTctUhny2H3UilbWWfJC0&fp=qq&sni=api.yandex-dev.org&sid=122218f4c1f172e4&flow=xtls-rprx-vision#🇧🇷 Brazil
 
 
-vless://505386b6-8740-11f1-9ca5-1e6febe3e1df@95.163.183.109:2053?encryption=none&security=reality&type=grpc&serviceName=grpc-direct&mode=gun&pbk=WUY8Lb4LfUUKLzZK3oSlRAdoy-Iu0w3Ait1-jtxbW1M&sni=hh.ru&sid=4b685844d0b4f724&fp=chrome#🇷🇺 LTE | Russia 📶 🦅
+vless://505386b6-8740-11f1-9ca5-1e6febe3e1df@95.163.183.109:2053?encryption=none&security=reality&type=grpc&serviceName=grpc-direct&mode=gun&pbk=WUY8Lb4LfUUKLzZK3oSlRAdoy-Iu0w3Ait1-jtxbW1M&sni=hh.ru&sid=4b685844d0b4f724&fp=chrome#🇷🇺 LTE | Russia
 
 
-vless://505386b6-8740-11f1-9ca5-1e6febe3e1df@95.163.183.109:2053?encryption=none&security=reality&type=grpc&serviceName=grpc-direct&mode=gun&pbk=WUY8Lb4LfUUKLzZK3oSlRAdoy-Iu0w3Ait1-jtxbW1M&sni=hh.ru&sid=4b685844d0b4f724&fp=chrome#🇫🇮 LTE | Finland 📶 🦅
+vless://505386b6-8740-11f1-9ca5-1e6febe3e1df@95.163.183.109:2053?encryption=none&security=reality&type=grpc&serviceName=grpc-direct&mode=gun&pbk=WUY8Lb4LfUUKLzZK3oSlRAdoy-Iu0w3Ait1-jtxbW1M&sni=hh.ru&sid=4b685844d0b4f724&fp=chrome#🇫🇮 LTE | Finland
 
 
-vless://505386b6-8740-11f1-9ca5-1e6febe3e1df@95.163.183.109:2053?encryption=none&security=reality&type=grpc&serviceName=grpc-direct&mode=gun&pbk=WUY8Lb4LfUUKLzZK3oSlRAdoy-Iu0w3Ait1-jtxbW1M&sni=hh.ru&sid=4b685844d0b4f724&fp=chrome#🇸🇪 LTE | Sweden 📶 🦅
+vless://505386b6-8740-11f1-9ca5-1e6febe3e1df@95.163.183.109:2053?encryption=none&security=reality&type=grpc&serviceName=grpc-direct&mode=gun&pbk=WUY8Lb4LfUUKLzZK3oSlRAdoy-Iu0w3Ait1-jtxbW1M&sni=hh.ru&sid=4b685844d0b4f724&fp=chrome#🇸🇪 LTE | Sweden
 
 """
 
