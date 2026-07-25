@@ -1,11 +1,17 @@
 import asyncio
 
-from database import get_expired_users
-from github_update import expire_subscription
+from database import (
+    get_expired_users,
+    remove_bs
+)
 
 
 
-async def check_subscriptions(bot=None):
+# =====================
+# ПРОВЕРКА ПОДПИСОК
+# =====================
+
+async def check_subscriptions(bot):
 
     while True:
 
@@ -16,75 +22,36 @@ async def check_subscriptions(bot=None):
 
             for user_id in users:
 
+                remove_bs(user_id)
+
+
                 try:
 
+                    await bot.send_message(
 
-                    # Меняем sub файл на истёкшую подписку
-                    expire_subscription(
-                        user_id
-                    )
+                        user_id,
 
+                        """
+⌛ Срок действия подписки закончился.
 
-                    print(
-                        f"⛔ Подписка истекла: {user_id}"
-                    )
+🎫 Ваша подписка была отключена.
 
-
-
-                    if bot:
-
-                        try:
-
-                            await bot.send_message(
-
-                                user_id,
-
-                                """
-⛔ Орёл VPN
-
-
-Ваша подписка закончилась.
-
-
-Для продления нажмите:
-👑 Купить подписку
-
-
-Поддержка:
-@orelvpntopbot
+Для продолжения использования оформите новую подписку.
 """
-
-                            )
-
-
-                        except Exception as e:
-
-                            print(
-                                "Ошибка отправки:",
-                                e
-                            )
-
-
-
-                except Exception as e:
-
-                    print(
-                        f"Ошибка пользователя {user_id}:",
-                        e
                     )
 
+                except:
+
+                    pass
 
 
         except Exception as e:
 
             print(
-                "Ошибка чекера:",
-                e
+                f"Subscription checker: {e}"
             )
 
 
-
-        # проверка каждый час
         await asyncio.sleep(
-            3600
+            600
         )
