@@ -6,7 +6,8 @@ from config import ADMIN_ID
 from database import (
     add_payment,
     activate_bs,
-    set_subscription_date
+    set_subscription_date,
+    get_payment_days
 )
 
 from github_update import create_subscription
@@ -30,6 +31,7 @@ async def get_check(message: Message):
     photo = message.photo[-1].file_id
 
 
+    # сохраняем чек
     add_payment(
         message.from_user.id,
         photo
@@ -52,8 +54,10 @@ async def get_check(message: Message):
         f"""
 💳 Новая заявка
 
+
 👤 Пользователь:
 {message.from_user.full_name}
+
 
 🆔 ID:
 {message.from_user.id}
@@ -84,22 +88,36 @@ async def approve(
     )
 
 
-    # Создаём или обновляем файл GitHub
-    link = create_subscription(
+    # берём срок из последнего платежа
+    days = get_payment_days(
         user_id
     )
 
 
-    # Ставим 30 дней
+    print(
+        "PAYMENT APPROVED:",
+        user_id,
+        days
+    )
+
+
+    # создаём подписку с правильным сроком
+    link = create_subscription(
+        user_id,
+        days=days
+    )
+
+
     expire_date = (
         datetime.now()
-        + timedelta(days=30)
+        +
+        timedelta(days=days)
     ).strftime(
         "%Y-%m-%d"
     )
 
 
-    # Сохраняем в БД
+    # сохраняем в базу
     activate_bs(
         user_id,
         link
@@ -112,15 +130,30 @@ async def approve(
     )
 
 
+
     await callback.bot.send_message(
 
         user_id,
 
-        "🎉 Оплата подтверждена!\n\n"
-        "🦅 Orel VPN активирован.\n\n"
-        f"📅 Действует до: {expire_date}\n\n"
-        "🔗 Ваша подписка:\n"
-        f"{link}"
+        f"""
+🎉 Оплата подтверждена!
+
+
+🦅 Orel VPN активирован
+
+
+📅 Срок:
+{days} дней
+
+
+📅 Действует до:
+{expire_date}
+
+
+🔗 Ваша подписка:
+
+{link}
+"""
 
     )
 
@@ -159,8 +192,11 @@ async def reject(
 
         user_id,
 
-        "❌ Оплата отклонена.\n"
-        "Свяжитесь с поддержкой."
+        """
+❌ Оплата отклонена.
+
+Свяжитесь с поддержкой.
+"""
 
     )
 
