@@ -1,10 +1,8 @@
 import sqlite3
-
 from datetime import datetime, timedelta
 
 
 DB = "users.db"
-
 
 
 def connect():
@@ -13,7 +11,7 @@ def connect():
 
 
 # =====================
-# СОЗДАНИЕ ТАБЛИЦ
+# СОЗДАНИЕ БАЗЫ
 # =====================
 
 def create_table():
@@ -29,23 +27,17 @@ def create_table():
 
         username TEXT,
 
-        tariff TEXT DEFAULT 'Wi-Fi',
+        first_name TEXT,
 
-        link TEXT DEFAULT '',
+        subscription TEXT DEFAULT 'none',
 
         subscription_until TEXT DEFAULT '',
 
+        subscription_link TEXT DEFAULT '',
+
         uuid TEXT DEFAULT '',
 
-        devices INTEGER DEFAULT 0,
-
         trial_used INTEGER DEFAULT 0,
-
-        pending_days INTEGER DEFAULT 0,
-
-        wifi_active INTEGER DEFAULT 1,
-
-        vip_active INTEGER DEFAULT 0,
 
         notify INTEGER DEFAULT 1,
 
@@ -55,6 +47,7 @@ def create_table():
     """)
 
 
+
     cur.execute("""
     CREATE TABLE IF NOT EXISTS payments (
 
@@ -62,14 +55,21 @@ def create_table():
 
         user_id INTEGER,
 
-        photo TEXT,
+        amount INTEGER,
+
+        currency TEXT,
 
         days INTEGER,
 
-        status TEXT DEFAULT 'pending'
+        payment_id TEXT,
+
+        status TEXT DEFAULT 'pending',
+
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
 
     )
     """)
+
 
 
     cur.execute("""
@@ -83,6 +83,7 @@ def create_table():
     """)
 
 
+
     conn.commit()
     conn.close()
 
@@ -94,25 +95,27 @@ def create_table():
 # ПОЛЬЗОВАТЕЛИ
 # =====================
 
-def add_user(user_id, username):
+def add_user(user_id, username=None, first_name=None):
 
     conn = connect()
     cur = conn.cursor()
 
 
-    cur.execute(
-    """
+    cur.execute("""
     INSERT OR IGNORE INTO users
     (
         user_id,
-        username
+        username,
+        first_name
     )
 
-    VALUES (?,?)
+    VALUES (?,?,?)
+
     """,
     (
         user_id,
-        username
+        username,
+        first_name
     ))
 
 
@@ -130,20 +133,16 @@ def get_user(user_id):
 
 
     cur.execute(
-    """
-    SELECT *
-
-    FROM users
-
-    WHERE user_id=?
-    """,
-    (
-        user_id,
-    ))
+        """
+        SELECT *
+        FROM users
+        WHERE user_id=?
+        """,
+        (user_id,)
+    )
 
 
     user = cur.fetchone()
-
 
     conn.close()
 
@@ -160,12 +159,11 @@ def get_all_users():
 
 
     cur.execute(
-        "SELECT * FROM users"
+        "SELECT * FROM users ORDER BY created_at DESC"
     )
 
 
     users = cur.fetchall()
-
 
     conn.close()
 
@@ -178,8 +176,8 @@ def get_all_users():
 def get_user_ids():
 
     return [
-        x[0]
-        for x in get_all_users()
+        user[0]
+        for user in get_all_users()
     ]
 
 
@@ -187,7 +185,7 @@ def get_user_ids():
 
 
 # =====================
-# ССЫЛКА
+# ССЫЛКА ПОДПИСКИ
 # =====================
 
 def save_subscription_link(user_id, link):
@@ -196,11 +194,10 @@ def save_subscription_link(user_id, link):
     cur = conn.cursor()
 
 
-    cur.execute(
-    """
+    cur.execute("""
     UPDATE users
 
-    SET link=?
+    SET subscription_link=?
 
     WHERE user_id=?
 
@@ -222,11 +219,8 @@ def get_subscription_link(user_id):
 
     user = get_user(user_id)
 
-
     if user:
-
-        return user[3]
-
+        return user[6]
 
     return ""
 
@@ -235,7 +229,7 @@ def get_subscription_link(user_id):
 
 
 # =====================
-# ПОДПИСКИ
+# АКТИВАЦИЯ VIP
 # =====================
 
 def activate_subscription(
@@ -248,38 +242,52 @@ def activate_subscription(
     cur = conn.cursor()
 
 
-    date = (
-        datetime.now()
-        +
-        timedelta(days=days)
-    ).strftime(
-        "%Y-%m-%d"
-    )
+    user = get_user(user_id)
 
 
-    cur.execute(
-    """
+    start = datetime.now()
+
+
+    if user and user[4]:
+
+        try:
+            old_date = datetime.strptime(
+                user[4],
+                "%Y-%m-%d"
+            )
+
+            if old_date > start:
+                start = old_date
+
+        except:
+            pass
+
+
+
+    new_date = (
+        start + timedelta(days=days)
+    ).strftime("%Y-%m-%d")
+
+
+
+    cur.execute("""
     UPDATE users
 
     SET
 
-    tariff='Орёл VPN VIP',
-
-    link=?,
+    subscription='vip',
 
     subscription_until=?,
 
-    vip_active=1,
-
-    pending_days=0
+    subscription_link=?
 
 
     WHERE user_id=?
 
     """,
     (
+        new_date,
         link,
-        date,
         user_id
     ))
 
@@ -291,47 +299,43 @@ def activate_subscription(
 
 
 
-def activate_trial(
-        user_id,
-        link
-):
+# =====================
+# ПРОБНИК
+# =====================
 
-    conn = connect()
-    cur = conn.cursor()
-
+def activate_trial(user_id, link):
 
     date = (
         datetime.now()
         +
         timedelta(days=3)
-    ).strftime(
-        "%Y-%m-%d"
-    )
+    ).strftime("%Y-%m-%d")
 
 
-    cur.execute(
-    """
+    conn = connect()
+    cur = conn.cursor()
+
+
+    cur.execute("""
     UPDATE users
 
     SET
 
-    tariff='🎁 Пробный период',
-
-    link=?,
+    subscription='trial',
 
     subscription_until=?,
 
-    trial_used=1,
+    subscription_link=?,
 
-    vip_active=1
+    trial_used=1
 
 
     WHERE user_id=?
 
     """,
     (
-        link,
         date,
+        link,
         user_id
     ))
 
@@ -347,9 +351,7 @@ def check_trial(user_id):
 
     user = get_user(user_id)
 
-
     if not user:
-
         return False
 
 
@@ -359,33 +361,32 @@ def check_trial(user_id):
 
 
 
-def remove_bs(user_id):
+# =====================
+# ОТКЛЮЧЕНИЕ
+# =====================
+
+def disable_subscription(user_id):
 
     conn = connect()
     cur = conn.cursor()
 
 
-    cur.execute(
-    """
+    cur.execute("""
     UPDATE users
 
     SET
 
-    tariff='Wi-Fi',
-
-    link='',
+    subscription='none',
 
     subscription_until='',
 
-    vip_active=0
+    subscription_link=''
 
 
     WHERE user_id=?
 
     """,
-    (
-        user_id,
-    ))
+    (user_id,))
 
 
     conn.commit()
@@ -396,7 +397,7 @@ def remove_bs(user_id):
 
 
 # =====================
-# ПРОСРОЧКА
+# ПРОСРОЧКИ
 # =====================
 
 def get_expired_users():
@@ -405,8 +406,7 @@ def get_expired_users():
     cur = conn.cursor()
 
 
-    cur.execute(
-    """
+    cur.execute("""
     SELECT user_id
 
     FROM users
@@ -415,12 +415,10 @@ def get_expired_users():
 
     AND subscription_until <= date('now')
 
-    """
-    )
+    """)
 
 
     users = cur.fetchall()
-
 
     conn.close()
 
@@ -435,117 +433,46 @@ def get_expired_users():
 
 
 # =====================
-# ОПЛАТЫ
+# STARS ПЛАТЕЖИ
 # =====================
 
-def set_pending_days(user_id, days):
-
-    conn = connect()
-    cur = conn.cursor()
-
-
-    cur.execute(
-    """
-    UPDATE users
-
-    SET pending_days=?
-
-    WHERE user_id=?
-
-    """,
-    (
+def add_stars_payment(
+        user_id,
+        amount,
         days,
-        user_id
-    ))
-
-
-    conn.commit()
-    conn.close()
-
-
-
-
-
-def get_pending_days(user_id):
-
-    user = get_user(user_id)
-
-
-    if user:
-
-        return user[8]
-
-
-    return 30
-
-
-
-
-
-def add_payment(user_id, photo, days):
+        payment_id
+):
 
     conn = connect()
     cur = conn.cursor()
 
 
-    cur.execute(
-    """
+    cur.execute("""
     INSERT INTO payments
     (
         user_id,
-        photo,
-        days
+        amount,
+        currency,
+        days,
+        payment_id,
+        status
     )
 
-    VALUES (?,?,?)
+    VALUES (?,?,?,?,?,?)
 
     """,
     (
         user_id,
-        photo,
-        days
+        amount,
+        "XTR",
+        days,
+        payment_id,
+        "paid"
     ))
-
-
-    pid = cur.lastrowid
 
 
     conn.commit()
     conn.close()
-
-
-    return pid
-
-
-
-
-
-def get_payment(payment_id):
-
-    conn = connect()
-    cur = conn.cursor()
-
-
-    cur.execute(
-    """
-    SELECT user_id, days
-
-    FROM payments
-
-    WHERE id=?
-
-    """,
-    (
-        payment_id,
-    ))
-
-
-    result = cur.fetchone()
-
-
-    conn.close()
-
-    return result
 
 
 
@@ -558,18 +485,15 @@ def get_payments():
 
 
     cur.execute(
-    """
-    SELECT *
-
-    FROM payments
-
-    WHERE status='pending'
-    """
+        """
+        SELECT *
+        FROM payments
+        ORDER BY id DESC
+        """
     )
 
 
     result = cur.fetchall()
-
 
     conn.close()
 
@@ -590,16 +514,15 @@ def create_promo(code, days):
 
 
     cur.execute(
-    """
-    INSERT OR REPLACE INTO promocodes
-
-    VALUES (?,?)
-
-    """,
-    (
-        code,
-        days
-    ))
+        """
+        INSERT OR REPLACE INTO promocodes
+        VALUES (?,?)
+        """,
+        (
+            code,
+            days
+        )
+    )
 
 
     conn.commit()
@@ -622,7 +545,6 @@ def get_promos():
 
     result = cur.fetchall()
 
-
     conn.close()
 
     return result
@@ -638,15 +560,12 @@ def delete_promo(code):
 
 
     cur.execute(
-    """
-    DELETE FROM promocodes
-
-    WHERE code=?
-
-    """,
-    (
-        code,
-    ))
+        """
+        DELETE FROM promocodes
+        WHERE code=?
+        """,
+        (code,)
+    )
 
 
     conn.commit()
@@ -670,21 +589,19 @@ def get_stats():
         "SELECT COUNT(*) FROM users"
     )
 
-
     total = cur.fetchone()[0]
 
 
     cur.execute(
-    """
-    SELECT COUNT(*)
+        """
+        SELECT COUNT(*)
 
-    FROM users
+        FROM users
 
-    WHERE vip_active=1
+        WHERE subscription!='none'
 
-    """
+        """
     )
-
 
     active = cur.fetchone()[0]
 
