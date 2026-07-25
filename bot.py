@@ -6,27 +6,19 @@ from config import BOT_TOKEN
 
 from database import create_table
 
-from subscription_checker import check_subscriptions
-
-
 
 # =====================
 # HANDLERS
 # =====================
 
 from handlers.start import router as start_router
-
 from handlers.cabinet import router as cabinet_router
+from handlers.stars_payment import router as stars_router
 
 from handlers.admin_panel import router as admin_router
-
 from handlers.admin_manage import router as admin_manage_router
-
 from handlers.admin_broadcast import router as admin_broadcast_router
-
 from handlers.admin_promos import router as admin_promos_router
-
-from handlers.payments import router as payments_router
 
 
 
@@ -58,7 +50,7 @@ dp.include_router(
 
 
 dp.include_router(
-    payments_router
+    stars_router
 )
 
 
@@ -83,6 +75,8 @@ dp.include_router(
 
 
 
+
+
 # =====================
 # START
 # =====================
@@ -90,11 +84,6 @@ dp.include_router(
 async def main():
 
     create_table()
-
-
-    asyncio.create_task(
-        check_subscriptions(bot)
-    )
 
 
     print(
@@ -112,6 +101,8 @@ async def main():
     finally:
 
         await bot.session.close()
+
+
 
 
 
