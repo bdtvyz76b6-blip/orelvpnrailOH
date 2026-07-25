@@ -39,11 +39,12 @@ dp = Dispatcher()
 
 dp.include_router(start_router)
 
+# Личный кабинет только из cabinet.py
 dp.include_router(cabinet_router)
 
-dp.include_router(admin_router)
-
 dp.include_router(payments_router)
+
+dp.include_router(admin_router)
 
 dp.include_router(admin_panel_router)
 
@@ -58,16 +59,12 @@ async def main():
     create_table()
 
 
+    # Проверка подписок
     asyncio.create_task(
         check_subscriptions(bot)
     )
 
 
-    import os
-   
-    print("TEST_VAR =", os.getenv("TEST_VAR"))
-    print("ALL VARS:", os.environ.keys())
-    print("TOKEN TEST:", os.getenv("GITHUB_TOKEN"))
     print(
         "🦅 Орёл VPN бот запущен"
     )
@@ -78,6 +75,7 @@ async def main():
         await dp.start_polling(
             bot
         )
+
 
     finally:
 
