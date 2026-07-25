@@ -1,44 +1,42 @@
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import (
+    Message,
+    CallbackQuery,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton
+)
 from aiogram.filters import Command
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from config import ADMIN_ID
 
 from database import (
     get_stats,
     get_all_users,
-    get_payments,
-    get_user,
-    remove_bs,
-    activate_subscription
+    get_payments
 )
 
-from github_update import create_subscription
-
-
 router = Router()
-
-
 
 # =====================
 # ПРОВЕРКА АДМИНА
 # =====================
 
-def is_admin(user_id):
+def check_admin(user_id):
 
     return user_id == ADMIN_ID
 
-
-
 # =====================
-# АДМИНКА
+# КОМАНДА /ADMIN
 # =====================
 
-@router.message(Command("admin"))
-async def admin_panel(message: Message):
+@router.message(
+    Command("admin")
+)
+async def admin(message: Message):
 
-    if not is_admin(message.from_user.id):
+    if not check_admin(
+        message.from_user.id
+    ):
 
         await message.answer(
             "❌ Нет доступа"
@@ -46,24 +44,22 @@ async def admin_panel(message: Message):
 
         return
 
-
     await message.answer(
 """
-🛠 Орёл VPN — Админ панель
+🦅 Orel VPN
 
+🛠 Админ-панель
 
 Выберите раздел:
 """,
-        reply_markup=admin_keyboard()
+        reply_markup=admin_menu()
     )
 
-
-
 # =====================
-# КЛАВИАТУРА
+# ГЛАВНОЕ МЕНЮ
 # =====================
 
-def admin_keyboard():
+def admin_menu():
 
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -91,6 +87,13 @@ def admin_keyboard():
 
             [
                 InlineKeyboardButton(
+                    text="⚙️ Управление",
+                    callback_data="admin_manage"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
                     text="📢 Рассылка",
                     callback_data="admin_broadcast"
                 )
@@ -101,19 +104,10 @@ def admin_keyboard():
                     text="🎫 Промокоды",
                     callback_data="admin_promos"
                 )
-            ],
-
-            [
-                InlineKeyboardButton(
-                    text="⚙️ Управление",
-                    callback_data="admin_manage"
-                )
             ]
 
         ]
     )
-
-
 
 # =====================
 # СТАТИСТИКА
@@ -122,36 +116,32 @@ def admin_keyboard():
 @router.callback_query(
     F.data == "admin_stats"
 )
-async def stats(callback: CallbackQuery):
+async def stats(
+    callback: CallbackQuery
+):
 
-    if not is_admin(callback.from_user.id):
+    if not check_admin(
+        callback.from_user.id
+    ):
         return
-
 
     data = get_stats()
 
-
     await callback.message.answer(
 f"""
-📊 Статистика
+📊 Статистика Orel VPN
 
-
-👥 Пользователей:
+👥 Всего пользователей:
 {data['total']}
-
 
 ✅ Активных:
 {data['active']}
 
-
-🦅 Орёл VPN
+🦅 Сервис работает
 """
     )
 
-
     await callback.answer()
-
-
 
 # =====================
 # ПОЛЬЗОВАТЕЛИ
@@ -160,39 +150,53 @@ f"""
 @router.callback_query(
     F.data == "admin_users"
 )
-async def users(callback: CallbackQuery):
+async def users(
+    callback: CallbackQuery
+):
 
-    if not is_admin(callback.from_user.id):
+    if not check_admin(
+        callback.from_user.id
+    ):
         return
-
 
     users = get_all_users()
 
+    if not users:
 
-    text = "👥 Последние пользователи:\n\n"
-
-
-    for user in users[:20]:
-
-        text += (
-f"""
-🆔 {user['user_id']}
-👑 {user['tariff']}
-📅 {user['subscription_until']}
-📡 {user['status']}
-
-"""
+        await callback.message.answer(
+            "👥 Пользователей нет"
         )
 
+        return
+
+    text = """
+👥 Последние пользователи:
+
+"""
+
+    for user in users[:15]:
+
+        text += f"""
+🆔 ID:
+{user[0]}
+
+👤 Username:
+{user[1]}
+
+👑 Тариф:
+{user[2]}
+
+📅 До:
+{user[4]}
+
+----------------
+"""
 
     await callback.message.answer(
         text
     )
 
-
     await callback.answer()
-
-
 
 # =====================
 # ПЛАТЕЖИ
@@ -201,96 +205,283 @@ f"""
 @router.callback_query(
     F.data == "admin_payments"
 )
-async def payments(callback: CallbackQuery):
+async def payments(
+    callback: CallbackQuery
+):
 
-    if not is_admin(callback.from_user.id):
+    if not check_admin(
+        callback.from_user.id
+    ):
         return
 
+    payments = get_payments()
 
-    pays = get_payments()
-
-
-    if not pays:
+    if not payments:
 
         await callback.message.answer(
             "💳 Платежей нет"
         )
 
+        await callback.answer()
+
         return
 
-
-
-    text = "💳 Платежи:\n\n"
-
-
-    for pay in pays:
-
-        text += (
-f"""
-🧾 #{pay['id']}
-👤 {pay['user_id']}
-📅 {pay['days']} дней
+    text = """
+💳 Ожидающие платежи:
 
 """
-        )
 
+    for pay in payments:
+
+        text += f"""
+🧾 Платёж #{pay[0]}
+
+👤 ID:
+{pay[1]}
+
+📅 Дней:
+{pay[3]}
+
+----------------
+"""
 
     await callback.message.answer(
         text
     )
 
+    await callback.answer()
+
+# =====================
+# УПРАВЛЕНИЕ
+# =====================
+
+@router.callback_query(
+    F.data == "admin_manage"
+)
+async def manage(
+    callback: CallbackQuery
+):
+
+    if not check_admin(
+        callback.from_user.id
+    ):
+        return
+
+    await callback.message.answer(
+"""
+⚙️ Управление пользователями
+
+Выберите действие:
+
+👤 Поиск пользователя
+➕ Выдать подписку
+⏳ Продлить подписку
+❌ Отключить подписку
+📩 Написать пользователю
+""",
+        reply_markup=manage_menu()
+    )
 
     await callback.answer()
 
+def manage_menu():
 
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+
+            [
+                InlineKeyboardButton(
+                    text="👤 Найти пользователя",
+                    callback_data="find_user"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="➕ Выдать подписку",
+                    callback_data="give_subscription"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="⏳ Продлить",
+                    callback_data="extend_subscription"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="❌ Отключить",
+                    callback_data="disable_subscription"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="⬅️ Назад",
+                    callback_data="admin_back"
+                )
+            ]
+
+        ]
+    )
 
 # =====================
-# ЗАГОТОВКИ
+# РАССЫЛКА
 # =====================
 
 @router.callback_query(
     F.data == "admin_broadcast"
 )
-async def broadcast(callback: CallbackQuery):
+async def broadcast(
+    callback: CallbackQuery
+):
+
+    if not check_admin(
+        callback.from_user.id
+    ):
+        return
 
     await callback.message.answer(
-        "📢 Рассылка: в разработке"
+"""
+📢 Рассылка
+
+Выберите группу:
+
+👥 Всем пользователям
+👑 Только VIP
+🎁 Только пробники
+⚠️ Скоро закончится
+""",
+        reply_markup=broadcast_menu()
     )
 
     await callback.answer()
 
+def broadcast_menu():
 
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+
+            [
+                InlineKeyboardButton(
+                    text="👥 Всем",
+                    callback_data="broadcast_all"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="👑 VIP",
+                    callback_data="broadcast_vip"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="🎁 Пробники",
+                    callback_data="broadcast_trial"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="⬅️ Назад",
+                    callback_data="admin_back"
+                )
+            ]
+
+        ]
+    )
+
+# =====================
+# ПРОМОКОДЫ
+# =====================
 
 @router.callback_query(
     F.data == "admin_promos"
 )
-async def promos(callback: CallbackQuery):
+async def promos(
+    callback: CallbackQuery
+):
+
+    if not check_admin(
+        callback.from_user.id
+    ):
+        return
 
     await callback.message.answer(
-        "🎫 Промокоды: в разработке"
+"""
+🎫 Промокоды
+
+Действия:
+
+➕ Создать промокод
+📋 Список промокодов
+🗑 Удалить промокод
+""",
+        reply_markup=promo_menu()
     )
 
     await callback.answer()
 
+def promo_menu():
 
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+
+            [
+                InlineKeyboardButton(
+                    text="➕ Создать",
+                    callback_data="create_promo"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="📋 Список",
+                    callback_data="list_promo"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="🗑 Удалить",
+                    callback_data="delete_promo"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="⬅️ Назад",
+                    callback_data="admin_back"
+                )
+            ]
+
+        ]
+    )
+
+# =====================
+# НАЗАД В МЕНЮ
+# =====================
 
 @router.callback_query(
-    F.data == "admin_manage"
+    F.data == "admin_back"
 )
-async def manage(callback: CallbackQuery):
+async def admin_back(
+    callback: CallbackQuery
+):
 
-    await callback.message.answer(
-        """
-⚙️ Управление
-
-
-Скоро:
-
-➕ Выдать подписку
-➖ Отключить
-⏳ Продлить
-🔍 Найти пользователя
+    await callback.message.edit_text(
 """
+🦅 Orel VPN
+
+🛠 Админ-панель
+
+Выберите раздел:
+""",
+        reply_markup=admin_menu()
     )
 
     await callback.answer()
