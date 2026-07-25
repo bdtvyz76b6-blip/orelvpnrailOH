@@ -1,21 +1,20 @@
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
-from aiogram.fsm.context import FSMContext
+from aiogram.filters import Command
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from config import ADMIN_ID
-from states import PromoStates, BroadcastStates
-
-from keyboards import (
-    promo_menu,
-    broadcast_menu,
-    admin_menu
-)
 
 from database import (
-    create_promo,
-    get_promos,
-    get_user_ids
+    get_stats,
+    get_all_users,
+    get_payments,
+    get_user,
+    remove_bs,
+    activate_subscription
 )
+
+from github_update import create_subscription
 
 
 router = Router()
@@ -23,156 +22,171 @@ router = Router()
 
 
 # =====================
-# ПРОМОКОДЫ
+# ПРОВЕРКА АДМИНА
 # =====================
 
-@router.message(F.text == "🎁 Промокоды")
-async def promo_open(message: Message):
+def is_admin(user_id):
 
-    if message.from_user.id != ADMIN_ID:
-        return
-
-    await message.answer(
-        "🎁 Управление промокодами:",
-        reply_markup=promo_menu()
-    )
+    return user_id == ADMIN_ID
 
 
 
-@router.callback_query(F.data == "create_promo")
-async def create_promo_start(
-    callback: CallbackQuery,
-    state: FSMContext
-):
+# =====================
+# АДМИНКА
+# =====================
 
-    if callback.from_user.id != ADMIN_ID:
-        return
+@router.message(Command("admin"))
+async def admin_panel(message: Message):
 
-
-    await callback.message.answer(
-        "Введите промокод и дни:\n\n"
-        "Пример:\n"
-        "OREL30 30"
-    )
-
-
-    await state.set_state(
-        PromoStates.waiting_promo
-    )
-
-
-    await callback.answer()
-
-
-
-@router.message(PromoStates.waiting_promo)
-async def save_promo(
-    message: Message,
-    state: FSMContext
-):
-
-    if message.from_user.id != ADMIN_ID:
-        return
-
-
-    data = message.text.split()
-
-
-    if len(data) != 2:
+    if not is_admin(message.from_user.id):
 
         await message.answer(
-            "Формат:\nКОД ДНИ"
+            "❌ Нет доступа"
         )
+
         return
-
-
-    code = data[0]
-    days = int(data[1])
-
-
-    create_promo(
-        code,
-        days
-    )
 
 
     await message.answer(
-        f"✅ Промокод создан\n\n"
-        f"🔑 {code}\n"
-        f"📅 {days} дней"
+"""
+🛠 Орёл VPN — Админ панель
+
+
+Выберите раздел:
+""",
+        reply_markup=admin_keyboard()
     )
 
 
-    await state.clear()
+
+# =====================
+# КЛАВИАТУРА
+# =====================
+
+def admin_keyboard():
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+
+            [
+                InlineKeyboardButton(
+                    text="📊 Статистика",
+                    callback_data="admin_stats"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="👥 Пользователи",
+                    callback_data="admin_users"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="💳 Платежи",
+                    callback_data="admin_payments"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="📢 Рассылка",
+                    callback_data="admin_broadcast"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="🎫 Промокоды",
+                    callback_data="admin_promos"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="⚙️ Управление",
+                    callback_data="admin_manage"
+                )
+            ]
+
+        ]
+    )
 
 
 
+# =====================
+# СТАТИСТИКА
+# =====================
 
-@router.callback_query(F.data == "list_promo")
-async def list_promo(callback: CallbackQuery):
+@router.callback_query(
+    F.data == "admin_stats"
+)
+async def stats(callback: CallbackQuery):
 
-    promos = get_promos()
-
-
-    if not promos:
-
-        await callback.message.answer(
-            "Промокодов нет"
-        )
-
+    if not is_admin(callback.from_user.id):
         return
 
 
-    text = "🎁 Промокоды:\n\n"
+    data = get_stats()
 
 
-    for p in promos:
+    await callback.message.answer(
+f"""
+📊 Статистика
+
+
+👥 Пользователей:
+{data['total']}
+
+
+✅ Активных:
+{data['active']}
+
+
+🦅 Орёл VPN
+"""
+    )
+
+
+    await callback.answer()
+
+
+
+# =====================
+# ПОЛЬЗОВАТЕЛИ
+# =====================
+
+@router.callback_query(
+    F.data == "admin_users"
+)
+async def users(callback: CallbackQuery):
+
+    if not is_admin(callback.from_user.id):
+        return
+
+
+    users = get_all_users()
+
+
+    text = "👥 Последние пользователи:\n\n"
+
+
+    for user in users[:20]:
 
         text += (
-            f"🔑 {p[0]} — {p[1]} дней\n"
+f"""
+🆔 {user['user_id']}
+👑 {user['tariff']}
+📅 {user['subscription_until']}
+📡 {user['status']}
+
+"""
         )
 
 
-    await callback.message.answer(text)
-
-    await callback.answer()
-
-
-
-
-
-# =====================
-# РАССЫЛКА
-# =====================
-
-
-@router.message(F.text == "📢 Рассылка")
-async def broadcast_open(message: Message):
-
-    if message.from_user.id != ADMIN_ID:
-        return
-
-
-    await message.answer(
-        "📢 Рассылка:",
-        reply_markup=broadcast_menu()
-    )
-
-
-
-@router.callback_query(F.data == "create_broadcast")
-async def broadcast_start(
-    callback: CallbackQuery,
-    state: FSMContext
-):
-
     await callback.message.answer(
-        "Введите сообщение для рассылки:"
-    )
-
-
-    await state.set_state(
-        BroadcastStates.waiting_text
+        text
     )
 
 
@@ -180,61 +194,103 @@ async def broadcast_start(
 
 
 
+# =====================
+# ПЛАТЕЖИ
+# =====================
 
-@router.message(BroadcastStates.waiting_text)
-async def send_broadcast(
-    message: Message,
-    state: FSMContext
-):
+@router.callback_query(
+    F.data == "admin_payments"
+)
+async def payments(callback: CallbackQuery):
 
-    if message.from_user.id != ADMIN_ID:
+    if not is_admin(callback.from_user.id):
         return
 
 
-    users = get_user_ids()
-
-    count = 0
+    pays = get_payments()
 
 
-    for user_id in users:
+    if not pays:
 
-        try:
+        await callback.message.answer(
+            "💳 Платежей нет"
+        )
 
-            await message.bot.send_message(
-                user_id,
-                message.text
-            )
-
-            count += 1
-
-        except:
-
-            pass
+        return
 
 
 
-    await message.answer(
-        f"📢 Рассылка завершена\n\n"
-        f"Отправлено: {count}"
+    text = "💳 Платежи:\n\n"
+
+
+    for pay in pays:
+
+        text += (
+f"""
+🧾 #{pay['id']}
+👤 {pay['user_id']}
+📅 {pay['days']} дней
+
+"""
+        )
+
+
+    await callback.message.answer(
+        text
     )
 
 
-    await state.clear()
-
+    await callback.answer()
 
 
 
 # =====================
-# НАЗАД
+# ЗАГОТОВКИ
 # =====================
 
-
-@router.callback_query(F.data == "admin_back")
-async def back(callback: CallbackQuery):
+@router.callback_query(
+    F.data == "admin_broadcast"
+)
+async def broadcast(callback: CallbackQuery):
 
     await callback.message.answer(
-        "🦅 Админ-панель",
-        reply_markup=admin_menu()
+        "📢 Рассылка: в разработке"
+    )
+
+    await callback.answer()
+
+
+
+@router.callback_query(
+    F.data == "admin_promos"
+)
+async def promos(callback: CallbackQuery):
+
+    await callback.message.answer(
+        "🎫 Промокоды: в разработке"
+    )
+
+    await callback.answer()
+
+
+
+@router.callback_query(
+    F.data == "admin_manage"
+)
+async def manage(callback: CallbackQuery):
+
+    await callback.message.answer(
+        """
+⚙️ Управление
+
+
+Скоро:
+
+➕ Выдать подписку
+➖ Отключить
+⏳ Продлить
+🔍 Найти пользователя
+"""
     )
 
     await callback.answer()
