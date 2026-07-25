@@ -682,3 +682,40 @@ def get_stats():
         "active": active
 
     }
+    
+    
+    
+    # =====================
+# ПРОСРОЧЕННЫЕ ПОДПИСКИ
+# =====================
+
+def get_expired_users():
+
+    conn = connect()
+    cur = conn.cursor()
+
+
+    cur.execute(
+    """
+    SELECT user_id
+
+    FROM users
+
+    WHERE subscription_until != ''
+
+    AND subscription_until <= date('now')
+
+    """
+    )
+
+
+    users = cur.fetchall()
+
+
+    conn.close()
+
+
+    return [
+        user[0]
+        for user in users
+    ]
