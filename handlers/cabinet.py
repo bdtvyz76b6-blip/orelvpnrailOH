@@ -13,18 +13,15 @@ router = Router()
 # ЛИЧНЫЙ КАБИНЕТ
 # =====================
 
-@router.message(Command("cabinet"))
-async def cabinet(message: Message):
+async def show_cabinet(message: Message):
 
     user_id = message.from_user.id
 
     user = get_user(user_id)
 
-
     if not user:
         await message.answer(
-            "❌ Вы не зарегистрированы.\n"
-            "Нажмите /start"
+            "❌ Вы не зарегистрированы.\nНажмите /start"
         )
         return
 
@@ -37,28 +34,24 @@ async def cabinet(message: Message):
         user_name = "Без username"
 
 
-
     tariff = user["tariff"]
     expire = user["subscription_until"]
-    link = user["subscription_link"]
-
+    link = user["link"]
 
 
     if tariff in ["none", "", None]:
-
         tariff_text = "❌ Нет подписки"
         status = "❌ Не активна"
         expire_text = "—"
 
     else:
-
-        tariff_text = f"👑 {tariff}"
+        tariff_text = tariff
         status = "✅ Активна"
-        expire_text = expire
+        expire_text = expire or "—"
 
 
-
-    text = f"""
+    await message.answer(
+        f"""
 🦅 Личный кабинет Orel VPN
 
 
@@ -66,11 +59,15 @@ async def cabinet(message: Message):
 {user_name}
 
 
-📌 Тариф:
+🆔 ID:
+{user_id}
+
+
+👑 Тариф:
 {tariff_text}
 
 
-📅 Дата окончания:
+📅 Действует до:
 {expire_text}
 
 
@@ -78,15 +75,27 @@ async def cabinet(message: Message):
 {status}
 
 
-🔗 Ваша подписка:
-Нажмите кнопку ниже, чтобы получить ссылку 📋
-"""
-
-
-    await message.answer(
-        text,
+🔗 Ссылка:
+{link or "Нет ссылки"}
+""",
         reply_markup=cabinet_keyboard()
     )
+
+
+
+# Команда /cabinet
+
+@router.message(Command("cabinet"))
+async def cabinet(message: Message):
+    await show_cabinet(message)
+
+
+
+# Кнопка 👤 Личный кабинет
+
+@router.message(F.text == "👤 Личный кабинет")
+async def cabinet_button(message: Message):
+    await show_cabinet(message)
 
 
 
@@ -126,52 +135,42 @@ def cabinet_keyboard():
                     url="https://t.me/orelvpntopbot"
                 )
             ]
-
         ]
     )
 
 
 
 # =====================
-# ОТПРАВКА ССЫЛКИ
+# ССЫЛКА
 # =====================
 
 @router.callback_query(F.data == "copy_link")
 async def copy_link(callback: CallbackQuery):
 
-    user_id = callback.from_user.id
-
-    user = get_user(user_id)
-
+    user = get_user(callback.from_user.id)
 
     if not user:
-
         await callback.answer(
             "❌ Пользователь не найден",
             show_alert=True
         )
-
         return
 
 
-
-    link = user["subscription_link"]
-
+    link = user["link"]
 
 
     await callback.message.answer(
-        f"📋 Ваша ссылка для копирования:\n\n{link}"
+        f"📋 Ваша ссылка:\n\n{link}"
     )
 
 
-    await callback.answer(
-        "Ссылка отправлена ✅"
-    )
+    await callback.answer()
 
 
 
 # =====================
-# ОБНОВЛЕНИЕ КАБИНЕТА
+# ОБНОВЛЕНИЕ
 # =====================
 
 @router.callback_query(F.data == "cabinet")
@@ -179,8 +178,6 @@ async def cabinet_refresh(callback: CallbackQuery):
 
     await callback.message.delete()
 
-    await cabinet(callback.message)
+    await show_cabinet(callback.message)
 
-    await callback.answer(
-        "Обновлено ✅"
-    )
+    await callback.answer("Обновлено ✅")
