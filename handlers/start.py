@@ -43,25 +43,18 @@ async def start(message: Message):
     )
 
 
-    # получаем ссылку из базы
+    # берём ссылку из базы
     link = get_subscription_link(
         user_id
     )
 
 
-    # если ссылки нет — создаём файл GitHub
+    # если ссылки нет - создаём файл GitHub
     if not link:
 
         link = create_user_subscription(
             user_id
         )
-
-
-        activate_trial(
-            user_id,
-            link
-        )
-
 
 
     await message.answer(
@@ -77,7 +70,7 @@ async def start(message: Message):
 📲 Добавьте её в приложение Happ.
 
 
-⚡ Активируйте подписку в этом боте.
+🎁 Пробный период доступен в меню.
 """,
         reply_markup=main_menu()
     )
