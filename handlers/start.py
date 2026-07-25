@@ -161,56 +161,6 @@ async def trial(message: Message):
 
 
 # =====================
-# ЛИЧНЫЙ КАБИНЕТ
-# =====================
-
-@router.message(
-    F.text == "👤 Личный кабинет"
-)
-async def cabinet(message: Message):
-
-    user = get_user(
-        message.from_user.id
-    )
-
-
-    if not user:
-
-        await message.answer(
-            "❌ Профиль не найден."
-        )
-
-        return
-
-
-
-    await message.answer(
-        f"""
-👤 Личный кабинет
-
-
-🆔 ID:
-{user[0]}
-
-
-👑 Тариф:
-{user[2]}
-
-
-📅 Действует до:
-{user[4]}
-
-
-🔗 Ссылка:
-{user[3]}
-"""
-    )
-
-
-
-
-
-# =====================
 # ПОДДЕРЖКА
 # =====================
 
