@@ -18,7 +18,7 @@ def main_menu():
 
             [
                 KeyboardButton(
-                    text="👑 Купить подписку"
+                    text="🎫 Купить подписку"
                 )
             ],
 
@@ -49,98 +49,134 @@ def main_menu():
 
 
 # =====================
-# АДМИН МЕНЮ
+# ПОКУПКА STARS
+# =====================
+
+def stars_buy_keyboard():
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+
+            [
+                InlineKeyboardButton(
+                    text="⭐ 1 месяц — 70",
+                    callback_data="stars_30"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="⭐ 3 месяца — 190",
+                    callback_data="stars_90"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="⭐ 6 месяцев — 350",
+                    callback_data="stars_180"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="⭐ 12 месяцев — 700",
+                    callback_data="stars_365"
+                )
+            ]
+
+        ]
+    )
+
+
+
+
+
+# =====================
+# ЛИЧНЫЙ КАБИНЕТ
+# =====================
+
+def cabinet_keyboard():
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+
+            [
+                InlineKeyboardButton(
+                    text="🔄 Обновить",
+                    callback_data="refresh_cabinet"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="🔗 Получить ссылку",
+                    callback_data="get_link"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="🎫 Продлить",
+                    callback_data="renew"
+                )
+            ]
+
+        ]
+    )
+
+
+
+
+
+# =====================
+# АДМИН ПАНЕЛЬ
 # =====================
 
 def admin_menu():
 
-    return ReplyKeyboardMarkup(
-        keyboard=[
-
-            [
-                KeyboardButton(
-                    text="👥 Пользователи"
-                )
-            ],
-
-            [
-                KeyboardButton(
-                    text="📊 Статистика"
-                )
-            ],
-
-            [
-                KeyboardButton(
-                    text="💳 Заявки"
-                )
-            ],
-
-            [
-                KeyboardButton(
-                    text="📢 Рассылка"
-                )
-            ],
-
-            [
-                KeyboardButton(
-                    text="🎁 Промокоды"
-                )
-            ],
-
-            [
-                KeyboardButton(
-                    text="⚙️ Настройки"
-                )
-            ],
-
-            [
-                KeyboardButton(
-                    text="⬅️ Назад"
-                )
-            ]
-
-        ],
-        resize_keyboard=True
-    )
-
-
-
-
-
-# =====================
-# ТАРИФЫ
-# =====================
-
-def buy_keyboard():
-
     return InlineKeyboardMarkup(
         inline_keyboard=[
 
             [
                 InlineKeyboardButton(
-                    text="📅 7 дней — 35₽",
-                    callback_data="buy_7"
+                    text="📊 Статистика",
+                    callback_data="admin_stats"
                 )
             ],
 
             [
                 InlineKeyboardButton(
-                    text="📅 30 дней — 85₽",
-                    callback_data="buy_30"
+                    text="👥 Пользователи",
+                    callback_data="admin_users"
                 )
             ],
 
             [
                 InlineKeyboardButton(
-                    text="📅 90 дней — 245₽",
-                    callback_data="buy_90"
+                    text="💳 Платежи",
+                    callback_data="admin_payments"
                 )
             ],
 
             [
                 InlineKeyboardButton(
-                    text="📅 365 дней — 605₽",
-                    callback_data="buy_365"
+                    text="⚙️ Управление",
+                    callback_data="admin_manage"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="📢 Рассылка",
+                    callback_data="admin_broadcast"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="🎫 Промокоды",
+                    callback_data="admin_promos"
                 )
             ]
 
@@ -152,165 +188,32 @@ def buy_keyboard():
 
 
 # =====================
-# ПОЛЬЗОВАТЕЛИ
+# ДЕЙСТВИЯ С ПОЛЬЗОВАТЕЛЕМ
 # =====================
 
-def users_keyboard(users):
-
-    buttons = []
-
-
-    for user in users:
-
-        buttons.append(
-            [
-                InlineKeyboardButton(
-                    text=f"👤 {user[1]} | {user[0]}",
-                    callback_data=f"user_{user[0]}"
-                )
-            ]
-        )
-
-
-    return InlineKeyboardMarkup(
-        inline_keyboard=buttons
-    )
-
-
-
-
-
-# =====================
-# КАРТОЧКА ПОЛЬЗОВАТЕЛЯ
-# =====================
-
-def user_card_keyboard(user_id):
+def user_actions(user_id):
 
     return InlineKeyboardMarkup(
         inline_keyboard=[
 
             [
                 InlineKeyboardButton(
-                    text="👑 Выдать подписку",
-                    callback_data=f"give_sub_{user_id}"
+                    text="🎫 Выдать подписку",
+                    callback_data=f"give_{user_id}"
                 )
             ],
 
             [
                 InlineKeyboardButton(
-                    text="❌ Забрать подписку",
-                    callback_data=f"remove_sub_{user_id}"
-                )
-            ]
-
-        ]
-    )
-
-
-
-
-
-# =====================
-# ПОДТВЕРЖДЕНИЕ ОПЛАТЫ
-# =====================
-
-def approve_keyboard(user_id, payment_id):
-
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-
-            [
-                InlineKeyboardButton(
-                    text="✅ Выдать подписку",
-                    callback_data=f"approve_{user_id}_{payment_id}"
+                    text="⏳ Продлить",
+                    callback_data=f"extend_{user_id}"
                 )
             ],
 
             [
                 InlineKeyboardButton(
-                    text="❌ Отклонить",
-                    callback_data=f"reject_{user_id}_{payment_id}"
-                )
-            ]
-
-        ]
-    )
-
-
-
-
-
-# =====================
-# ПРОМОКОДЫ
-# =====================
-
-def promo_menu():
-
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-
-            [
-                InlineKeyboardButton(
-                    text="➕ Создать промокод",
-                    callback_data="create_promo"
-                )
-            ],
-
-            [
-                InlineKeyboardButton(
-                    text="📋 Список промокодов",
-                    callback_data="list_promo"
-                )
-            ],
-
-            [
-                InlineKeyboardButton(
-                    text="❌ Удалить промокод",
-                    callback_data="delete_promo"
-                )
-            ],
-
-            [
-                InlineKeyboardButton(
-                    text="⬅️ Назад",
-                    callback_data="admin_back"
-                )
-            ]
-
-        ]
-    )
-
-
-
-
-
-# =====================
-# РАССЫЛКА
-# =====================
-
-def broadcast_menu():
-
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-
-            [
-                InlineKeyboardButton(
-                    text="✏️ Создать сообщение",
-                    callback_data="create_broadcast"
-                )
-            ],
-
-            [
-                InlineKeyboardButton(
-                    text="👥 Отправить всем",
-                    callback_data="send_broadcast"
-                )
-            ],
-
-            [
-                InlineKeyboardButton(
-                    text="⬅️ Назад",
-                    callback_data="admin_back"
+                    text="❌ Отключить",
+                    callback_data=f"disable_{user_id}"
                 )
             ]
 
