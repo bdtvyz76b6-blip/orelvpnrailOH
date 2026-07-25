@@ -16,7 +16,10 @@ from keyboards import (
     buy_keyboard
 )
 
-from github_update import create_subscription
+from github_update import (
+    create_user_subscription,
+    create_subscription
+)
 
 
 router = Router()
@@ -30,17 +33,60 @@ router = Router()
 @router.message(Command("start"))
 async def start(message: Message):
 
+    user_id = message.from_user.id
+
+
     add_user(
-        message.from_user.id,
+        user_id,
         message.from_user.username
     )
 
 
+    user = get_user(
+        user_id
+    )
+
+
+    # создаём ссылку только первый раз
+    if not user[3]:
+
+        link = create_user_subscription(
+            user_id
+        )
+
+
+        # сохраняем ссылку
+        activate_trial(
+            user_id,
+            link
+        )
+
+
+    else:
+
+        link = user[3]
+
+
+
     await message.answer(
-        "🦅 Орёл VPN\n\n"
-        "Выберите раздел:",
+        f"""
+🦅 Добро пожаловать в Орёл VPN!
+
+
+🔗 Ваша ссылка на подписку:
+
+{link}
+
+
+📲 Добавьте её в приложение Happ.
+
+
+⚡ Для активации подписки оформите её в этом боте.
+""",
         reply_markup=main_menu()
     )
+
+
 
 
 
@@ -64,6 +110,8 @@ async def buy(message: Message):
 
 
 
+
+
 # =====================
 # ПРОБНЫЙ ПЕРИОД
 # =====================
@@ -73,7 +121,6 @@ async def buy(message: Message):
 )
 async def trial(message: Message):
 
-    # создаём пользователя, если его нет
     add_user(
         message.from_user.id,
         message.from_user.username
@@ -92,14 +139,12 @@ async def trial(message: Message):
 
 
 
-    # создаём подписку на 3 дня
     link = create_subscription(
         message.from_user.id,
         days=3
     )
 
 
-    # сохраняем в базу
     activate_trial(
         message.from_user.id,
         link
@@ -120,6 +165,8 @@ async def trial(message: Message):
 {link}
 """
     )
+
+
 
 
 
@@ -168,6 +215,8 @@ async def cabinet(message: Message):
 {user[3]}
 """
     )
+
+
 
 
 
