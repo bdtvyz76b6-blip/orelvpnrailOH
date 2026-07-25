@@ -1,19 +1,11 @@
 from aiogram import Router, F
-from aiogram.types import (
-    Message,
-    CallbackQuery,
-    InlineKeyboardMarkup,
-    InlineKeyboardButton
-)
-
-from database import (
-    add_user,
-    get_user
-)
-
-from config import SUPPORT
+from aiogram.types import Message, CallbackQuery
 
 from datetime import datetime
+
+from database import get_user
+
+from keyboards import cabinet_keyboard
 
 
 router = Router()
@@ -21,7 +13,7 @@ router = Router()
 
 
 # =====================
-# КАБИНЕТ
+# ЛИЧНЫЙ КАБИНЕТ
 # =====================
 
 @router.message(
@@ -29,14 +21,17 @@ router = Router()
 )
 async def cabinet(message: Message):
 
-    user_id = message.from_user.id
-
-
-    # создаём пользователя если его нет
-    add_user(
-        user_id,
-        message.from_user.username
+    show_cabinet(
+        message
     )
+
+
+
+
+
+async def show_cabinet(message):
+
+    user_id = message.from_user.id
 
 
     user = get_user(
@@ -47,85 +42,85 @@ async def cabinet(message: Message):
     if not user:
 
         await message.answer(
-            "❌ Ошибка профиля"
+            "❌ Пользователь не найден."
         )
 
         return
 
 
 
-    tariff = user[2]
+    subscription = user[3]
 
-    link = user[3]
+    until = user[4]
 
-    expire = user[4]
-
-
-
-    # статус
-
-    status = "❌ Не активен"
-
-    days_left = "—"
+    link = user[6]
 
 
 
-    if expire:
+    if subscription == "vip":
 
+        tariff = "🦅 Орёл VPN VIP"
+
+    elif subscription == "trial":
+
+        tariff = "🎁 Пробный период"
+
+    else:
+
+        tariff = "Нет подписки"
+
+
+
+    if until:
 
         try:
 
             date = datetime.strptime(
-                expire,
+                until,
                 "%Y-%m-%d"
             )
 
 
-            left = (
-                date.date()
-                -
-                datetime.now().date()
+            until_text = date.strftime(
+                "%d.%m.%Y"
+            )
+
+
+            days = (
+                date - datetime.now()
             ).days
 
 
+            if days < 0:
 
-            if left > 0:
+                status = "❌ Истекла"
 
-                status = "✅ Активен"
-
-                days_left = left
-
-
+                days = 0
 
             else:
 
-                status = "❌ Завершён"
-
-                days_left = 0
-
+                status = "✅ Активна"
 
 
         except:
 
-            pass
-
-
-
-    # тариф
-
-    if tariff == "Wi-Fi":
-
-        tariff_text = "🆓 Wi-Fi"
-
+            until_text = "—"
+            status = "❌ Не активна"
+            days = 0
 
 
     else:
 
-        tariff_text = f"👑 {tariff}"
+        until_text = "—"
+        status = "❌ Не активна"
+        days = 0
 
 
 
-    text = f"""
+
+
+    await message.answer(
+f"""
 👤 Личный кабинет
 
 
@@ -133,12 +128,12 @@ async def cabinet(message: Message):
 {user_id}
 
 
-👑 Тариф:
-{tariff_text}
+🎫 Подписка:
+{tariff}
 
 
 📅 До:
-{expire if expire else "—"}
+{until_text}
 
 
 📡 Статус:
@@ -154,16 +149,12 @@ async def cabinet(message: Message):
 
 
 ⏳ Осталось:
-{days_left} дней
+{days} дней
 
 
 🔗 Подписка:
-Нажмите кнопку ниже
-"""
-
-
-    await message.answer(
-        text,
+{"Нажмите кнопку ниже" if link else "Нет ссылки"}
+""",
         reply_markup=cabinet_keyboard()
     )
 
@@ -172,105 +163,19 @@ async def cabinet(message: Message):
 
 
 # =====================
-# КНОПКИ
-# =====================
-
-def cabinet_keyboard():
-
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-
-            [
-                InlineKeyboardButton(
-                    text="📋 Моя ссылка",
-                    callback_data="my_link"
-                )
-            ],
-
-
-            [
-                InlineKeyboardButton(
-                    text="🔄 Обновить",
-                    callback_data="refresh_cabinet"
-                )
-            ],
-
-
-            [
-                InlineKeyboardButton(
-                    text="💎 Продлить",
-                    callback_data="buy"
-                )
-            ],
-
-
-            [
-                InlineKeyboardButton(
-                    text="⚙️ Настройки",
-                    callback_data="settings"
-                )
-            ],
-
-
-            [
-                InlineKeyboardButton(
-                    text="🆘 Поддержка",
-                    url=f"https://t.me/{SUPPORT.replace('@','')}"
-                )
-            ]
-
-        ]
-    )
-
-
-
-
-
-# =====================
-# ССЫЛКА
+# ОБНОВИТЬ КАБИНЕТ
 # =====================
 
 @router.callback_query(
-    F.data == "my_link"
+    F.data == "refresh_cabinet"
 )
-async def my_link(
-    callback: CallbackQuery
-):
+async def refresh(callback: CallbackQuery):
 
-    user = get_user(
-        callback.from_user.id
+    await callback.message.delete()
+
+    await show_cabinet(
+        callback.message
     )
-
-
-    if not user:
-
-        await callback.answer(
-            "Профиль не найден",
-            show_alert=True
-        )
-
-        return
-
-
-
-    link = user[3]
-
-
-
-    if not link:
-
-        link = "❌ Подписка не активна"
-
-
-
-    await callback.message.answer(
-f"""
-🔗 Ваша ссылка:
-
-{link}
-"""
-    )
-
 
     await callback.answer()
 
@@ -279,24 +184,34 @@ f"""
 
 
 # =====================
-# ОБНОВИТЬ
+# ПОЛУЧИТЬ ССЫЛКУ
 # =====================
 
 @router.callback_query(
-    F.data == "refresh_cabinet"
+    F.data == "get_link"
 )
-async def refresh(
-    callback: CallbackQuery
-):
+async def get_link(callback: CallbackQuery):
 
-    await callback.message.delete()
-
-
-    await cabinet(
-        callback.message
+    user = get_user(
+        callback.from_user.id
     )
 
 
-    await callback.answer(
-        "Обновлено ✅"
-    )
+    if not user or not user[6]:
+
+        await callback.message.answer(
+            "❌ У вас нет активной подписки."
+        )
+
+    else:
+
+        await callback.message.answer(
+f"""
+🔗 Ваша подписка:
+
+{user[6]}
+"""
+        )
+
+
+    await callback.answer()
