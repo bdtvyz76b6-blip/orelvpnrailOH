@@ -8,7 +8,8 @@ from database import (
     add_user,
     get_user,
     activate_trial,
-    check_trial
+    check_trial,
+    save_subscription_link
 )
 
 from keyboards import (
@@ -42,29 +43,25 @@ async def start(message: Message):
     )
 
 
-    user = get_user(
-        user_id
-    )
+    user = get_user(user_id)
 
 
-    # создаём ссылку только первый раз
-    if not user[3]:
+    if user and user[3]:
+
+        link = user[3]
+
+
+    else:
 
         link = create_user_subscription(
             user_id
         )
 
 
-        # сохраняем ссылку
-        activate_trial(
+        save_subscription_link(
             user_id,
             link
         )
-
-
-    else:
-
-        link = user[3]
 
 
 
@@ -121,15 +118,17 @@ async def buy(message: Message):
 )
 async def trial(message: Message):
 
+    user_id = message.from_user.id
+
+
     add_user(
-        message.from_user.id,
+        user_id,
         message.from_user.username
     )
 
 
-    if check_trial(
-        message.from_user.id
-    ):
+
+    if check_trial(user_id):
 
         await message.answer(
             "❌ Вы уже использовали пробный период."
@@ -140,15 +139,16 @@ async def trial(message: Message):
 
 
     link = create_subscription(
-        message.from_user.id,
+        user_id,
         days=3
     )
 
 
     activate_trial(
-        message.from_user.id,
+        user_id,
         link
     )
+
 
 
     await message.answer(
@@ -187,7 +187,7 @@ async def cabinet(message: Message):
     if not user:
 
         await message.answer(
-            "Профиль не найден."
+            "❌ Профиль не найден."
         )
 
         return
