@@ -103,13 +103,6 @@ def cabinet_keyboard():
 
             [
                 InlineKeyboardButton(
-                    text="🔄 Обновить",
-                    callback_data="refresh_cabinet"
-                )
-            ],
-
-            [
-                InlineKeyboardButton(
                     text="🔗 Получить ссылку",
                     callback_data="get_link"
                 )
@@ -117,8 +110,15 @@ def cabinet_keyboard():
 
             [
                 InlineKeyboardButton(
-                    text="🎫 Продлить",
-                    callback_data="renew"
+                    text="🔄 Обновить",
+                    callback_data="refresh_cabinet"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="🎫 Купить подписку",
+                    callback_data="buy_subscription"
                 )
             ]
 
