@@ -21,7 +21,7 @@ router = Router()
 )
 async def cabinet(message: Message):
 
-    show_cabinet(
+    await show_cabinet(
         message
     )
 
@@ -53,7 +53,7 @@ async def show_cabinet(message):
 
     until = user[4]
 
-    link = user[6]
+    link = user[5]
 
 
 
@@ -61,13 +61,17 @@ async def show_cabinet(message):
 
         tariff = "🦅 Орёл VPN VIP"
 
+
     elif subscription == "trial":
 
         tariff = "🎁 Пробный период"
 
+
     else:
 
         tariff = "Нет подписки"
+
+
 
 
 
@@ -91,28 +95,36 @@ async def show_cabinet(message):
             ).days
 
 
+
             if days < 0:
 
                 status = "❌ Истекла"
 
                 days = 0
 
+
             else:
 
                 status = "✅ Активна"
 
 
+
         except:
 
             until_text = "—"
+
             status = "❌ Не активна"
+
             days = 0
+
 
 
     else:
 
         until_text = "—"
+
         status = "❌ Не активна"
+
         days = 0
 
 
@@ -120,6 +132,7 @@ async def show_cabinet(message):
 
 
     await message.answer(
+
 f"""
 👤 Личный кабинет
 
@@ -153,9 +166,11 @@ f"""
 
 
 🔗 Подписка:
-{"Нажмите кнопку ниже" if link else "Нет ссылки"}
+{"Нажмите кнопку ниже" if link else "Нет активной подписки"}
 """,
+
         reply_markup=cabinet_keyboard()
+
     )
 
 
@@ -169,13 +184,17 @@ f"""
 @router.callback_query(
     F.data == "refresh_cabinet"
 )
-async def refresh(callback: CallbackQuery):
+async def refresh(
+    callback: CallbackQuery
+):
 
     await callback.message.delete()
+
 
     await show_cabinet(
         callback.message
     )
+
 
     await callback.answer()
 
@@ -190,27 +209,33 @@ async def refresh(callback: CallbackQuery):
 @router.callback_query(
     F.data == "get_link"
 )
-async def get_link(callback: CallbackQuery):
+async def get_link(
+    callback: CallbackQuery
+):
+
 
     user = get_user(
         callback.from_user.id
     )
 
 
-    if not user or not user[6]:
+    if not user or not user[5]:
 
         await callback.message.answer(
             "❌ У вас нет активной подписки."
         )
 
+
     else:
 
         await callback.message.answer(
+
 f"""
 🔗 Ваша подписка:
 
-{user[6]}
+{user[5]}
 """
+
         )
 
 
