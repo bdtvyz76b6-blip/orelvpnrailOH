@@ -3,9 +3,11 @@ import asyncio
 from aiogram import Bot, Dispatcher
 
 from config import BOT_TOKEN
+
 from database import create_table
 
 from subscription_checker import check_subscriptions
+
 
 
 # =====================
@@ -14,6 +16,7 @@ from subscription_checker import check_subscriptions
 
 from handlers.start import router as start_router
 from handlers.cabinet import router as cabinet_router
+from handlers.settings import router as settings_router
 from handlers.admin import router as admin_router
 from handlers.payments import router as payments_router
 from handlers.admin_panel import router as admin_panel_router
@@ -37,16 +40,34 @@ dp = Dispatcher()
 # ROUTERS
 # =====================
 
-dp.include_router(start_router)
+dp.include_router(
+    start_router
+)
 
-# Личный кабинет только из cabinet.py
-dp.include_router(cabinet_router)
 
-dp.include_router(payments_router)
+dp.include_router(
+    cabinet_router
+)
 
-dp.include_router(admin_router)
 
-dp.include_router(admin_panel_router)
+dp.include_router(
+    settings_router
+)
+
+
+dp.include_router(
+    payments_router
+)
+
+
+dp.include_router(
+    admin_router
+)
+
+
+dp.include_router(
+    admin_panel_router
+)
 
 
 
@@ -59,15 +80,19 @@ async def main():
     create_table()
 
 
-    # Проверка подписок
+
     asyncio.create_task(
-        check_subscriptions(bot)
+        check_subscriptions(
+            bot
+        )
     )
+
 
 
     print(
         "🦅 Орёл VPN бот запущен"
     )
+
 
 
     try:
@@ -80,6 +105,8 @@ async def main():
     finally:
 
         await bot.session.close()
+
+
 
 
 
