@@ -220,7 +220,7 @@ def get_subscription_link(user_id):
     user = get_user(user_id)
 
     if user:
-        return user[6]
+        return user[5]
 
     return ""
 
