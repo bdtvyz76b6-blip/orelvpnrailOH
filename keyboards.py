@@ -226,7 +226,7 @@ def cabinet_keyboard():
     
     
     
-    # =====================
+# =====================
 # ПОДТВЕРЖДЕНИЕ ОПЛАТЫ
 # =====================
 
@@ -252,7 +252,11 @@ def approve_keyboard(user_id, payment_id):
     
     
     
-    def documents_keyboard():
+# =====================
+# ДОКУМЕНТЫ
+# =====================
+
+def documents_keyboard():
 
     return InlineKeyboardMarkup(
         inline_keyboard=[
