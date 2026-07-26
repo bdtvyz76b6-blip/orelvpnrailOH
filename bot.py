@@ -7,6 +7,7 @@ from config import BOT_TOKEN
 from database import create_table
 
 
+
 # =====================
 # HANDLERS
 # =====================
@@ -16,10 +17,12 @@ from handlers.cabinet import router as cabinet_router
 
 from handlers.stars_payment import router as stars_router
 
-from handlers.admin_panel import router as admin_router
-from handlers.admin_payments import router as admin_payments_router
+from handlers.transfer_payment import router as transfer_router
 
 from handlers.payment_check import router as payment_check_router
+
+from handlers.admin_panel import router as admin_router
+from handlers.admin_payments import router as admin_payments_router
 
 
 
@@ -52,6 +55,11 @@ dp.include_router(
 
 dp.include_router(
     stars_router
+)
+
+
+dp.include_router(
+    transfer_router
 )
 
 
