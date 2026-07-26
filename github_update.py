@@ -4,6 +4,13 @@ import requests
 
 from datetime import datetime, timedelta
 
+from database import save_subscription_link
+
+
+
+# =====================
+# GITHUB TOKEN
+# =====================
 
 GITHUB_TOKEN = os.getenv(
     "GITHUB_TOKEN"
@@ -16,6 +23,13 @@ print(
 )
 
 
+if not GITHUB_TOKEN:
+    raise Exception(
+        "❌ GITHUB_TOKEN не найден"
+    )
+
+
+
 OWNER = "bdtvyz76b6-blip"
 
 REPO = "vpn-sub"
@@ -24,26 +38,21 @@ BRANCH = "main"
 
 
 
+
+
 # =====================
 # НОВЫЙ ПОЛЬЗОВАТЕЛЬ
 # =====================
-
 
 NEW_USER_TEMPLATE = """
 #profile-title: 🦅 Orel VPN
 
 #profile-update-interval: 1
 
-#announce: Активируйте подписку через @orelvpntopbot
+#announce: Оформите подписку через @orelvpntopbot
 
 
 vless://00000000-0000-0000-0000-000000000000@expired.invalid:443?type=tcp&security=reality&sni=expired.invalid&fp=chrome&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&sid=&flow=xtls-rprx-vision#❌ Подписка отсутствует
-
-
-vless://00000000-0000-0000-0000-000000000000@expired.invalid:443?type=tcp&security=reality&sni=expired.invalid&fp=chrome&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&sid=&flow=xtls-rprx-vision#Активировать в @orelvpntopbot
-
-
-vless://c61ec320-29f1-4e00-9272-8b676e6957b4@telegram.looks-free.rutube.info:443?type=tcp&security=reality&sni=tradingview.com&fp=qq&pbk=Lbug_wz0y9xgKeDK44D9kuUap0fXzNKyv_nMJxnZRzU&sid=08&flow=xtls-rprx-vision#Telegram
 
 """
 
@@ -55,9 +64,8 @@ vless://c61ec320-29f1-4e00-9272-8b676e6957b4@telegram.looks-free.rutube.info:443
 # АКТИВНАЯ ПОДПИСКА
 # =====================
 
-
 ACTIVE_TEMPLATE = """
-#profile-title: 🦅 Orel VPN
+#profile-title: 🦅 Orel VPN VIP
 
 #profile-update-interval: 1
 
@@ -65,19 +73,16 @@ ACTIVE_TEMPLATE = """
 
 
 
-vless://1833e2e7-ac13-4be3-b63d-f13b6ed195ad@185.81.115.233:8443?type=tcp&security=reality&pbk=AleVV90POpOeIxhTgPNAqVPXENd5u-yrIe_i6R5_NjQ&fp=firefox&sni=prod.cryptoofarm.com&sid=0f990c62cb6f5627&flow=xtls-rprx-vision#🇩🇪 Germany
+vless://8fbd33cf-ff7b-4352-a48d-0cd4f723c7e4@189.74.106.66:443?type=tcp&security=reality&pbk=IuvAXlAWBpeXehmEk0P-FIGTctUhny2H3UilbWWfJC0&fp=safari&sni=api.yandex-cloud.org&sid=122218f4c1f172e4&flow=xtls-rprx-vision&encryption=none#🇧🇷 Brazil
 
 
-vless://6949d13a-6695-4ef6-95a6-59f5a17c0978@189.74.114.135:443?type=tcp&security=reality&pbk=IuvAXlAWBpeXehmEk0P-FIGTctUhny2H3UilbWWfJC0&fp=qq&sni=api.yandex-dev.org&sid=122218f4c1f172e4&flow=xtls-rprx-vision#🇧🇷 Brazil
+vless://8fbd33cf-ff7b-4352-a48d-0cd4f723c7e4@189.74.117.4:443?type=tcp&security=reality&pbk=IuvAXlAWBpeXehmEk0P-FIGTctUhny2H3UilbWWfJC0&fp=edge&sni=api.yandex-api.org&sid=122218f4c1f172e4&flow=xtls-rprx-vision&encryption=none#🇧🇷 Brazil Reserve
 
 
-vless://505386b6-8740-11f1-9ca5-1e6febe3e1df@95.163.183.109:2053?encryption=none&security=reality&type=grpc&serviceName=grpc-direct&mode=gun&pbk=WUY8Lb4LfUUKLzZK3oSlRAdoy-Iu0w3Ait1-jtxbW1M&sni=hh.ru&sid=4b685844d0b4f724&fp=chrome#🇷🇺 LTE | Russia
+vless://52d0b2d5-a003-4509-ab70-d1d720a14cd7@95.85.253.107:443?type=tcp&security=reality&pbk=z-TKWOWgZLfzQ-wNdwXQqVwaUgCmbchM2Xtrk1NGynU&fp=qq&sni=pl20.bearbeer.digital&flow=xtls-rprx-vision&encryption=none&spx=/#🇳🇱 Netherlands
 
 
-vless://505386b6-8740-11f1-9ca5-1e6febe3e1df@95.163.183.109:2053?encryption=none&security=reality&type=grpc&serviceName=grpc-direct&mode=gun&pbk=WUY8Lb4LfUUKLzZK3oSlRAdoy-Iu0w3Ait1-jtxbW1M&sni=hh.ru&sid=4b685844d0b4f724&fp=chrome#🇫🇮 LTE | Finland
-
-
-vless://505386b6-8740-11f1-9ca5-1e6febe3e1df@95.163.183.109:2053?encryption=none&security=reality&type=grpc&serviceName=grpc-direct&mode=gun&pbk=WUY8Lb4LfUUKLzZK3oSlRAdoy-Iu0w3Ait1-jtxbW1M&sni=hh.ru&sid=4b685844d0b4f724&fp=chrome#🇸🇪 LTE | Sweden
+vless://96006428-88d4-11f1-9ca5-1e6febe3e1df@89.208.229.243:2053?type=grpc&serviceName=grpc-direct&security=reality&pbk=WUY8Lb4LfUUKLzZK3oSlRAdoy-Iu0w3Ait1-jtxbW1M&fp=chrome&sni=hh.ru&sid=7824dfd19eab1acc&encryption=none#🇸🇨 LTE | Универсальный
 
 """
 
@@ -89,7 +94,6 @@ vless://505386b6-8740-11f1-9ca5-1e6febe3e1df@95.163.183.109:2053?encryption=none
 # ИСТЕКШАЯ
 # =====================
 
-
 EXPIRED_TEMPLATE = """
 #profile-title: ⛔ Orel VPN
 
@@ -100,10 +104,7 @@ EXPIRED_TEMPLATE = """
 
 vless://00000000-0000-0000-0000-000000000000@expired.invalid:443?type=tcp&security=reality&sni=expired.invalid&fp=chrome&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&sid=&flow=xtls-rprx-vision#⛔ Подписка истекла
 
-
-vless://00000000-0000-0000-0000-000000000000@expired.invalid:443?type=tcp&security=reality&sni=expired.invalid&fp=chrome&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&sid=&flow=xtls-rprx-vision#Продлите в @orelvpntopbot
 """
-
 
 
 
@@ -113,13 +114,13 @@ vless://00000000-0000-0000-0000-000000000000@expired.invalid:443?type=tcp&securi
 # GITHUB
 # =====================
 
-
 def github_headers():
 
     return {
         "Authorization": f"Bearer {GITHUB_TOKEN}",
         "Accept": "application/vnd.github+json"
     }
+
 
 
 
@@ -133,11 +134,6 @@ def github_url(path):
 
 
 
-
-
-# =====================
-# ОБНОВЛЕНИЕ ФАЙЛА
-# =====================
 
 
 def update_file(path, content):
@@ -186,11 +182,9 @@ def update_file(path, content):
 
 
 
-
 # =====================
-# СОЗДАТЬ ФАЙЛ ПОСЛЕ START
+# СОЗДАНИЕ ФАЙЛА
 # =====================
-
 
 def create_user_subscription(user_id):
 
@@ -203,20 +197,27 @@ def create_user_subscription(user_id):
     )
 
 
-    return (
+    link = (
         f"https://raw.githubusercontent.com/"
         f"{OWNER}/{REPO}/{BRANCH}/{path}"
     )
 
 
+    save_subscription_link(
+        user_id,
+        link
+    )
+
+
+    return link
+
 
 
 
 
 # =====================
-# АКТИВИРОВАТЬ ПОСЛЕ ОПЛАТЫ
+# АКТИВАЦИЯ VIP
 # =====================
-
 
 def create_subscription(user_id, days=30):
 
@@ -243,11 +244,19 @@ def create_subscription(user_id, days=30):
     )
 
 
-    return (
+    link = (
         f"https://raw.githubusercontent.com/"
         f"{OWNER}/{REPO}/{BRANCH}/{path}"
     )
 
+
+    save_subscription_link(
+        user_id,
+        link
+    )
+
+
+    return link
 
 
 
@@ -256,7 +265,6 @@ def create_subscription(user_id, days=30):
 # =====================
 # ИСТЕЧЕНИЕ
 # =====================
-
 
 def expire_subscription(user_id):
 
