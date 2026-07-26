@@ -262,3 +262,46 @@ https://raw.githubusercontent.com/{OWNER}/{REPO}/{BRANCH}/users/{user_id}.txt
         f"https://raw.githubusercontent.com/"
         f"{OWNER}/{REPO}/{BRANCH}/{path}"
     )
+    
+    
+    
+    # =====================
+# АКТИВАЦИЯ ПОДПИСКИ
+# =====================
+
+def create_subscription(user_id, days=30):
+
+    expire_date = (
+        datetime.now()
+        +
+        timedelta(days=days)
+    ).strftime("%d.%m.%Y")
+
+
+    path = f"users/{user_id}.txt"
+
+
+    content = ACTIVE_TEMPLATE.format(
+        date=expire_date
+    )
+
+
+    update_file(
+        path,
+        content
+    )
+
+
+    link = (
+        f"https://raw.githubusercontent.com/"
+        f"{OWNER}/{REPO}/{BRANCH}/{path}"
+    )
+
+
+    save_subscription_link(
+        user_id,
+        link
+    )
+
+
+    return link
