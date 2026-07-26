@@ -13,12 +13,21 @@ from database import create_table
 
 from handlers.start import router as start_router
 from handlers.cabinet import router as cabinet_router
-from handlers.stars_payment import router as stars_router
+
+from handlers.payments import router as payments_router
 
 from handlers.admin_panel import router as admin_router
 from handlers.admin_manage import router as admin_manage_router
 from handlers.admin_broadcast import router as admin_broadcast_router
 from handlers.admin_promos import router as admin_promos_router
+
+
+
+from subscription_checker import (
+    check_subscriptions
+)
+
+
 
 
 
@@ -32,6 +41,8 @@ bot = Bot(
 
 
 dp = Dispatcher()
+
+
 
 
 
@@ -50,7 +61,7 @@ dp.include_router(
 
 
 dp.include_router(
-    stars_router
+    payments_router
 )
 
 
@@ -86,9 +97,17 @@ async def main():
     create_table()
 
 
+
+    asyncio.create_task(
+        check_subscriptions(bot)
+    )
+
+
+
     print(
         "🦅 Орёл VPN бот запущен"
     )
+
 
 
     try:
