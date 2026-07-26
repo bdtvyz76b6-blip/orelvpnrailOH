@@ -49,7 +49,37 @@ def main_menu():
 
 
 # =====================
-# ПОКУПКА STARS
+# ВЫБОР ОПЛАТЫ
+# =====================
+
+def payment_method_keyboard():
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+
+            [
+                InlineKeyboardButton(
+                    text="⭐ Telegram Stars",
+                    callback_data="pay_stars"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="💳 Перевод",
+                    callback_data="pay_transfer"
+                )
+            ]
+
+        ]
+    )
+
+
+
+
+
+# =====================
+# STARS ТАРИФЫ
 # =====================
 
 def stars_buy_keyboard():
@@ -93,32 +123,39 @@ def stars_buy_keyboard():
 
 
 # =====================
-# ЛИЧНЫЙ КАБИНЕТ
+# ПЕРЕВОД ТАРИФЫ
 # =====================
 
-def cabinet_keyboard():
+def transfer_buy_keyboard():
 
     return InlineKeyboardMarkup(
         inline_keyboard=[
 
             [
                 InlineKeyboardButton(
-                    text="🔗 Получить ссылку",
-                    callback_data="get_link"
+                    text="💳 1 месяц — 70₽",
+                    callback_data="transfer_30"
                 )
             ],
 
             [
                 InlineKeyboardButton(
-                    text="🔄 Обновить",
-                    callback_data="refresh_cabinet"
+                    text="💳 3 месяца — 190₽",
+                    callback_data="transfer_90"
                 )
             ],
 
             [
                 InlineKeyboardButton(
-                    text="🎫 Купить подписку",
-                    callback_data="buy_subscription"
+                    text="💳 6 месяцев — 350₽",
+                    callback_data="transfer_180"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="💳 12 месяцев — 700₽",
+                    callback_data="transfer_365"
                 )
             ]
 
@@ -130,7 +167,44 @@ def cabinet_keyboard():
 
 
 # =====================
-# АДМИН ПАНЕЛЬ
+# ЛИЧНЫЙ КАБИНЕТ
+# =====================
+
+def cabinet_keyboard():
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+
+            [
+                InlineKeyboardButton(
+                    text="🔄 Обновить",
+                    callback_data="refresh_cabinet"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="🔗 Получить ссылку",
+                    callback_data="get_link"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="🎫 Продлить",
+                    callback_data="renew"
+                )
+            ]
+
+        ]
+    )
+
+
+
+
+
+# =====================
+# АДМИНКА
 # =====================
 
 def admin_menu():
