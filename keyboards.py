@@ -249,3 +249,27 @@ def approve_keyboard(user_id, payment_id):
 
         ]
     )
+    
+    
+    
+    def documents_keyboard():
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+
+            [
+                InlineKeyboardButton(
+                    text="📄 Пользовательское соглашение",
+                    url="ТВОЯ_ССЫЛКА_TERMS"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="🔒 Политика конфиденциальности",
+                    url="ТВОЯ_ССЫЛКА_PRIVACY"
+                )
+            ]
+
+        ]
+    )
