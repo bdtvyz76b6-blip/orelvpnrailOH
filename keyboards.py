@@ -293,3 +293,33 @@ def user_actions(user_id):
 
         ]
     )
+    
+    
+    
+    
+    
+    # =====================
+# ПОДТВЕРЖДЕНИЕ ПЛАТЕЖА
+# =====================
+
+def approve_keyboard(user_id, days):
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+
+            [
+                InlineKeyboardButton(
+                    text="✅ Выдать подписку",
+                    callback_data=f"approve_{user_id}_{days}"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="❌ Отклонить",
+                    callback_data=f"reject_{user_id}"
+                )
+            ]
+
+        ]
+    )
