@@ -52,35 +52,7 @@ def main_menu():
 
 
 # =====================
-# ДОКУМЕНТЫ
-# =====================
-
-def documents_keyboard():
-
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-
-            [
-                InlineKeyboardButton(
-                    text="📄 Пользовательское соглашение",
-                    url="https://ТВОЙ_САЙТ.github.io/terms.html"
-                )
-            ],
-
-            [
-                InlineKeyboardButton(
-                    text="🔒 Политика конфиденциальности",
-                    url="https://ТВОЙ_САЙТ.github.io/privacy.html"
-                )
-            ]
-
-        ]
-    )
-
-
-
-# =====================
-# ВЫБОР ОПЛАТЫ
+# СПОСОБ ОПЛАТЫ
 # =====================
 
 def payment_method_keyboard():
@@ -118,28 +90,28 @@ def stars_buy_keyboard():
 
             [
                 InlineKeyboardButton(
-                    text="⭐ 1 месяц — 70",
+                    text="⭐ 1 месяц — 70 Stars",
                     callback_data="stars_30"
                 )
             ],
 
             [
                 InlineKeyboardButton(
-                    text="⭐ 3 месяца — 190",
+                    text="⭐ 3 месяца — 190 Stars",
                     callback_data="stars_90"
                 )
             ],
 
             [
                 InlineKeyboardButton(
-                    text="⭐ 6 месяцев — 350",
+                    text="⭐ 6 месяцев — 350 Stars",
                     callback_data="stars_180"
                 )
             ],
 
             [
                 InlineKeyboardButton(
-                    text="⭐ 12 месяцев — 700",
+                    text="⭐ 12 месяцев — 700 Stars",
                     callback_data="stars_365"
                 )
             ]
@@ -150,7 +122,7 @@ def stars_buy_keyboard():
 
 
 # =====================
-# ПЕРЕВОД
+# ОПЛАТА ПЕРЕВОДОМ
 # =====================
 
 def transfer_buy_keyboard():
@@ -223,14 +195,17 @@ def cabinet_keyboard():
 
         ]
     )
-    
-    
-    
+
+
+
 # =====================
-# ПОДТВЕРЖДЕНИЕ ОПЛАТЫ
+# ПОДТВЕРЖДЕНИЕ ПЛАТЕЖА
 # =====================
 
-def approve_keyboard(user_id, payment_id):
+def approve_keyboard(
+        user_id,
+        payment_id
+):
 
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -249,38 +224,10 @@ def approve_keyboard(user_id, payment_id):
 
         ]
     )
-    
-    
-    
+
+
+
 # =====================
-# ДОКУМЕНТЫ
-# =====================
-
-def documents_keyboard():
-
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-
-            [
-                InlineKeyboardButton(
-                    text="📄 Пользовательское соглашение",
-                    url="ТВОЯ_ССЫЛКА_TERMS"
-                )
-            ],
-
-            [
-                InlineKeyboardButton(
-                    text="🔒 Политика конфиденциальности",
-                    url="ТВОЯ_ССЫЛКА_PRIVACY"
-                )
-            ]
-
-        ]
-    )
-    
-    
-    
-    # =====================
 # АДМИН ПАНЕЛЬ
 # =====================
 
