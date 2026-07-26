@@ -223,3 +223,29 @@ def cabinet_keyboard():
 
         ]
     )
+    
+    
+    
+    # =====================
+# ПОДТВЕРЖДЕНИЕ ОПЛАТЫ
+# =====================
+
+def approve_keyboard(user_id, payment_id):
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+
+            [
+                InlineKeyboardButton(
+                    text="✅ Подтвердить",
+                    callback_data=f"approve_{user_id}_{payment_id}"
+                ),
+
+                InlineKeyboardButton(
+                    text="❌ Отклонить",
+                    callback_data=f"reject_{user_id}_{payment_id}"
+                )
+            ]
+
+        ]
+    )
