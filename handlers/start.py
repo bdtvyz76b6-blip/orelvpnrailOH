@@ -1,6 +1,8 @@
 from aiogram import Router, F
-from aiogram.types import Message
+from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
+
+from datetime import datetime
 
 
 from config import SUPPORT
@@ -8,7 +10,9 @@ from config import SUPPORT
 
 from database import (
     add_user,
+    get_user,
     get_subscription_link,
+    save_subscription_link,
     check_trial,
     activate_trial
 )
@@ -16,12 +20,15 @@ from database import (
 
 from keyboards import (
     main_menu,
-    stars_buy_keyboard
+    payment_method_keyboard,
+    stars_buy_keyboard,
+    transfer_buy_keyboard
 )
 
 
 from github_update import (
-    create_subscription
+    create_subscription,
+    create_user_subscription
 )
 
 
@@ -42,6 +49,7 @@ async def start(message: Message):
     user_id = message.from_user.id
 
 
+
     add_user(
         user_id,
         message.from_user.username,
@@ -56,6 +64,72 @@ async def start(message: Message):
 
 
 
+    if not link:
+
+        link = create_user_subscription(
+            user_id
+        )
+
+
+        save_subscription_link(
+            user_id,
+            link
+        )
+
+
+
+    user = get_user(
+        user_id
+    )
+
+
+
+    status = "❌ Не активна"
+
+
+
+    if user:
+
+        subscription = user[3]
+
+        until = user[4]
+
+
+
+        if subscription in (
+            "vip",
+            "trial"
+        ) and until:
+
+
+
+            try:
+
+                date = datetime.strptime(
+                    until,
+                    "%Y-%m-%d"
+                )
+
+
+                if date >= datetime.now():
+
+                    status = "✅ Активна"
+
+
+                else:
+
+                    status = "⛔ Истекла"
+
+
+
+            except:
+
+                status = "❌ Не активна"
+
+
+
+
+
     await message.answer(
 f"""
 🦅 Добро пожаловать в Орёл VPN!
@@ -63,7 +137,15 @@ f"""
 
 🎫 Ваша подписка:
 
-{"Активна" if link else "Нет активной подписки"}
+{status}
+
+
+🔗 Ваша ссылка:
+
+{link}
+
+
+📲 Добавьте её в Happ.
 
 
 Выберите действие ниже.
@@ -84,18 +166,67 @@ f"""
 )
 async def buy_subscription(message: Message):
 
-
     await message.answer(
 """
-🦅 Орёл VPN VIP
+🦅 Орёл VPN
 
 
-Выберите срок подписки:
+Выберите способ оплаты:
+""",
+        reply_markup=payment_method_keyboard()
+    )
 
-⭐ Оплата через Telegram Stars
+
+
+
+
+# =====================
+# STARS
+# =====================
+
+@router.callback_query(
+    F.data == "pay_stars"
+)
+async def pay_stars(callback: CallbackQuery):
+
+    await callback.message.answer(
+"""
+⭐ Telegram Stars
+
+
+Выберите срок:
 """,
         reply_markup=stars_buy_keyboard()
     )
+
+
+    await callback.answer()
+
+
+
+
+
+# =====================
+# ПЕРЕВОД
+# =====================
+
+@router.callback_query(
+    F.data == "pay_transfer"
+)
+async def pay_transfer(callback: CallbackQuery):
+
+    await callback.message.answer(
+"""
+💳 Оплата переводом
+
+
+Выберите срок:
+""",
+        reply_markup=transfer_buy_keyboard()
+    )
+
+
+    await callback.answer()
 
 
 
@@ -146,6 +277,13 @@ async def trial(message: Message):
 
 
 
+    save_subscription_link(
+        user_id,
+        link
+    )
+
+
+
     await message.answer(
 f"""
 🎁 Пробный период активирован!
@@ -155,7 +293,7 @@ f"""
 3 дня
 
 
-🔗 Ваша ссылка:
+🔗 Ваша подписка:
 
 {link}
 """
