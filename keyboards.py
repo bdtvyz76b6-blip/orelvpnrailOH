@@ -277,3 +277,59 @@ def documents_keyboard():
 
         ]
     )
+    
+    
+    
+    # =====================
+# АДМИН ПАНЕЛЬ
+# =====================
+
+def admin_menu():
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+
+            [
+                InlineKeyboardButton(
+                    text="📊 Статистика",
+                    callback_data="admin_stats"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="👥 Пользователи",
+                    callback_data="admin_users"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="💳 Платежи",
+                    callback_data="admin_payments"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="⚙️ Управление",
+                    callback_data="admin_manage"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="📢 Рассылка",
+                    callback_data="admin_broadcast"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="🎫 Промокоды",
+                    callback_data="admin_promos"
+                )
+            ]
+
+        ]
+    )
