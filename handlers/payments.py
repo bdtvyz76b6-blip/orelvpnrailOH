@@ -1,5 +1,10 @@
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import (
+    Message,
+    CallbackQuery,
+    LabeledPrice,
+    PreCheckoutQuery
+)
 
 from config import (
     ADMIN_ID,
@@ -12,11 +17,14 @@ from database import (
     get_payment,
     activate_subscription,
     set_pending_days,
+    get_pending_days
 )
 
 from github_update import create_subscription
 
-from keyboards import approve_keyboard
+from keyboards import (
+    approve_keyboard
+)
 
 
 router = Router()
@@ -24,38 +32,54 @@ router = Router()
 
 
 # =====================
-# ВЫБОР ТАРИФА
+# STARS ТАРИФЫ
 # =====================
 
-@router.callback_query(F.data.startswith("buy_"))
-async def buy(callback: CallbackQuery):
+STARS_PRICES = {
 
-    days_map = {
+    "stars_30": {
+        "days": 30,
+        "stars": 70
+    },
 
-        "buy_7": 7,
-        "buy_30": 30,
-        "buy_90": 90,
-        "buy_365": 365
+    "stars_90": {
+        "days": 90,
+        "stars": 190
+    },
 
+    "stars_180": {
+        "days": 180,
+        "stars": 350
+    },
+
+    "stars_365": {
+        "days": 365,
+        "stars": 700
     }
 
-
-    prices = {
-
-        7: "35₽",
-        30: "85₽",
-        90: "245₽",
-        365: "605₽"
-
-    }
+}
 
 
-    days = days_map.get(
+
+
+
+# =====================
+# СОЗДАНИЕ STARS СЧЁТА
+# =====================
+
+@router.callback_query(
+    F.data.startswith("stars_")
+)
+async def stars_buy(
+    callback: CallbackQuery
+):
+
+    tariff = STARS_PRICES.get(
         callback.data
     )
 
 
-    if not days:
+    if not tariff:
 
         await callback.answer(
             "Ошибка тарифа"
@@ -65,27 +89,132 @@ async def buy(callback: CallbackQuery):
 
 
 
-    set_pending_days(
-        callback.from_user.id,
+    await callback.bot.send_invoice(
+
+        chat_id=callback.from_user.id,
+
+        title="🦅 Орёл VPN VIP",
+
+        description=f"Подписка на {tariff['days']} дней",
+
+        payload=f"vpn_{tariff['days']}",
+
+        currency="XTR",
+
+        prices=[
+
+            LabeledPrice(
+
+                label="Telegram Stars",
+
+                amount=tariff["stars"]
+
+            )
+
+        ]
+
+    )
+
+
+    await callback.answer()
+
+
+
+
+
+# =====================
+# ПРОВЕРКА ОПЛАТЫ
+# =====================
+
+@router.pre_checkout_query()
+async def pre_checkout(
+    query: PreCheckoutQuery
+):
+
+    await query.answer(
+        ok=True
+    )
+
+
+
+
+
+# =====================
+# УСПЕШНАЯ ОПЛАТА STARS
+# =====================
+
+@router.message(
+    F.successful_payment
+)
+async def successful_payment(
+    message: Message
+):
+
+    payment = message.successful_payment
+
+
+    days = int(
+        payment.invoice_payload.split("_")[1]
+    )
+
+
+    user_id = message.from_user.id
+
+
+
+    link = create_subscription(
+        user_id,
+        days
+    )
+
+
+    activate_subscription(
+        user_id,
+        link,
         days
     )
 
 
 
-    await callback.message.answer(
-        f"""
-💳 Оплата Орёл VPN
+    await message.answer(
+f"""
+🎉 Оплата получена!
+
+
+🦅 Орёл VPN VIP активирован
 
 
 📅 Срок:
 {days} дней
 
 
-💰 Стоимость:
-{prices[days]}
+🔗 Ваша подписка:
+
+{link}
+"""
+    )
 
 
-💳 Карта:
+
+
+
+# =====================
+# ПЕРЕВОД
+# =====================
+
+@router.callback_query(
+    F.data == "pay_transfer"
+)
+async def transfer(
+    callback: CallbackQuery
+):
+
+    await callback.message.answer(
+f"""
+💳 Оплата переводом
+
+
+💰 Карта:
 {CARD_NUMBER}
 
 
@@ -105,17 +234,59 @@ async def buy(callback: CallbackQuery):
 
 
 # =====================
+# ВЫБОР ПЕРЕВОДА
+# =====================
+
+@router.callback_query(
+    F.data.startswith("transfer_")
+)
+async def transfer_tariff(
+    callback: CallbackQuery
+):
+
+    days = int(
+        callback.data.split("_")[1]
+    )
+
+
+    set_pending_days(
+        callback.from_user.id,
+        days
+    )
+
+
+    await callback.message.answer(
+f"""
+💳 Перевод
+
+
+📅 Срок:
+{days} дней
+
+
+Отправьте чек после оплаты.
+"""
+    )
+
+
+    await callback.answer()
+
+
+
+
+
+# =====================
 # ПОЛУЧЕНИЕ ЧЕКА
 # =====================
 
-@router.message(F.photo)
-async def payment_photo(message: Message):
-
+@router.message(
+    F.photo
+)
+async def get_check(
+    message: Message
+):
 
     photo = message.photo[-1].file_id
-
-
-    from database import get_pending_days
 
 
     days = get_pending_days(
@@ -130,11 +301,12 @@ async def payment_photo(message: Message):
     )
 
 
+
     await message.answer(
-        """
+"""
 ✅ Чек отправлен.
 
-Ожидайте проверки администратора.
+Ожидайте проверки.
 """
     )
 
@@ -147,7 +319,7 @@ async def payment_photo(message: Message):
         photo,
 
         caption=f"""
-💳 Новый чек
+💳 Новый платёж
 
 
 👤 Пользователь:
@@ -158,15 +330,11 @@ async def payment_photo(message: Message):
 {message.from_user.id}
 
 
-👤 Username:
-@{message.from_user.username}
-
-
 📅 Срок:
 {days} дней
 
 
-🧾 Платёж:
+🧾 Заявка:
 #{payment_id}
 """,
 
@@ -182,14 +350,15 @@ async def payment_photo(message: Message):
 
 
 # =====================
-# ПОДТВЕРЖДЕНИЕ
+# ВЫДАТЬ ПОДПИСКУ
 # =====================
 
 @router.callback_query(
     F.data.startswith("approve_")
 )
-async def approve(callback: CallbackQuery):
-
+async def approve(
+    callback: CallbackQuery
+):
 
     data = callback.data.split("_")
 
@@ -203,7 +372,6 @@ async def approve(callback: CallbackQuery):
     payment = get_payment(
         payment_id
     )
-
 
 
     if not payment:
@@ -220,19 +388,10 @@ async def approve(callback: CallbackQuery):
 
 
 
-    print(
-        "PAYMENT APPROVED:",
+    link = create_subscription(
         user_id,
         days
     )
-
-
-
-    link = create_subscription(
-        user_id,
-        days=days
-    )
-
 
 
     activate_subscription(
@@ -247,39 +406,27 @@ async def approve(callback: CallbackQuery):
 
         user_id,
 
-        f"""
+f"""
 🎉 Оплата подтверждена!
 
 
-🦅 Орёл VPN активирован
+🦅 Орёл VPN VIP
 
 
 📅 Срок:
 {days} дней
 
 
-🔗 Ваша подписка:
+🔗 Ссылка:
 
 {link}
 """
+
     )
 
 
-
-    try:
-
-        await callback.message.edit_caption(
-            caption=f"✅ Подписка выдана\n\nСрок: {days} дней"
-        )
-
-    except:
-
-        pass
-
-
-
     await callback.answer(
-        "Готово"
+        "Выдано"
     )
 
 
@@ -287,45 +434,34 @@ async def approve(callback: CallbackQuery):
 
 
 # =====================
-# ОТКЛОНЕНИЕ
+# ОТКЛОНИТЬ
 # =====================
 
 @router.callback_query(
     F.data.startswith("reject_")
 )
-async def reject(callback: CallbackQuery):
+async def reject(
+    callback: CallbackQuery
+):
 
-
-    data = callback.data.split("_")
-
-
-    user_id = int(data[1])
+    user_id = int(
+        callback.data.split("_")[1]
+    )
 
 
     await callback.bot.send_message(
 
         user_id,
 
-        """
+"""
 ❌ Оплата отклонена.
 
-Если произошла ошибка —
-обратитесь в поддержку.
+Обратитесь в поддержку.
 """
+
     )
 
 
-
-    try:
-
-        await callback.message.edit_caption(
-            caption="❌ Чек отклонён"
-        )
-
-    except:
-
-        pass
-
-
-
-    await callback.answer()
+    await callback.answer(
+        "Отклонено"
+    )
