@@ -6,7 +6,6 @@ from aiogram.types import (
 )
 
 
-
 # =====================
 # ГЛАВНОЕ МЕНЮ
 # =====================
@@ -36,6 +35,12 @@ def main_menu():
 
             [
                 KeyboardButton(
+                    text="📄 Документы"
+                )
+            ],
+
+            [
+                KeyboardButton(
                     text="💬 Поддержка"
                 )
             ]
@@ -45,6 +50,32 @@ def main_menu():
     )
 
 
+
+# =====================
+# ДОКУМЕНТЫ
+# =====================
+
+def documents_keyboard():
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+
+            [
+                InlineKeyboardButton(
+                    text="📄 Пользовательское соглашение",
+                    url="https://ТВОЙ_САЙТ.github.io/terms.html"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="🔒 Политика конфиденциальности",
+                    url="https://ТВОЙ_САЙТ.github.io/privacy.html"
+                )
+            ]
+
+        ]
+    )
 
 
 
@@ -73,8 +104,6 @@ def payment_method_keyboard():
 
         ]
     )
-
-
 
 
 
@@ -120,10 +149,8 @@ def stars_buy_keyboard():
 
 
 
-
-
 # =====================
-# ПЕРЕВОД ТАРИФЫ
+# ПЕРЕВОД
 # =====================
 
 def transfer_buy_keyboard():
@@ -164,8 +191,6 @@ def transfer_buy_keyboard():
 
 
 
-
-
 # =====================
 # ЛИЧНЫЙ КАБИНЕТ
 # =====================
@@ -193,131 +218,6 @@ def cabinet_keyboard():
                 InlineKeyboardButton(
                     text="🎫 Продлить",
                     callback_data="renew"
-                )
-            ]
-
-        ]
-    )
-
-
-
-
-
-# =====================
-# АДМИНКА
-# =====================
-
-def admin_menu():
-
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-
-            [
-                InlineKeyboardButton(
-                    text="📊 Статистика",
-                    callback_data="admin_stats"
-                )
-            ],
-
-            [
-                InlineKeyboardButton(
-                    text="👥 Пользователи",
-                    callback_data="admin_users"
-                )
-            ],
-
-            [
-                InlineKeyboardButton(
-                    text="💳 Платежи",
-                    callback_data="admin_payments"
-                )
-            ],
-
-            [
-                InlineKeyboardButton(
-                    text="⚙️ Управление",
-                    callback_data="admin_manage"
-                )
-            ],
-
-            [
-                InlineKeyboardButton(
-                    text="📢 Рассылка",
-                    callback_data="admin_broadcast"
-                )
-            ],
-
-            [
-                InlineKeyboardButton(
-                    text="🎫 Промокоды",
-                    callback_data="admin_promos"
-                )
-            ]
-
-        ]
-    )
-
-
-
-
-
-# =====================
-# ДЕЙСТВИЯ С ПОЛЬЗОВАТЕЛЕМ
-# =====================
-
-def user_actions(user_id):
-
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-
-            [
-                InlineKeyboardButton(
-                    text="🎫 Выдать подписку",
-                    callback_data=f"give_{user_id}"
-                )
-            ],
-
-            [
-                InlineKeyboardButton(
-                    text="⏳ Продлить",
-                    callback_data=f"extend_{user_id}"
-                )
-            ],
-
-            [
-                InlineKeyboardButton(
-                    text="❌ Отключить",
-                    callback_data=f"disable_{user_id}"
-                )
-            ]
-
-        ]
-    )
-    
-    
-    
-    
-    
-    # =====================
-# ПОДТВЕРЖДЕНИЕ ПЛАТЕЖА
-# =====================
-
-def approve_keyboard(user_id, days):
-
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-
-            [
-                InlineKeyboardButton(
-                    text="✅ Выдать подписку",
-                    callback_data=f"approve_{user_id}_{days}"
-                )
-            ],
-
-            [
-                InlineKeyboardButton(
-                    text="❌ Отклонить",
-                    callback_data=f"reject_{user_id}"
                 )
             ]
 
