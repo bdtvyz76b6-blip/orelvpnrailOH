@@ -4,6 +4,8 @@ from aiogram.filters import Command
 
 from datetime import datetime
 
+from config import SUPPORT
+
 from database import (
     add_user,
     get_user,
@@ -21,13 +23,12 @@ from keyboards import (
 )
 
 from github_update import (
-    create_user_subscription,
-    activate_user_subscription
+    create_subscription,
+    create_user_subscription
 )
 
 
 router = Router()
-
 
 
 # =====================
@@ -40,8 +41,6 @@ async def start(message: Message):
     user_id = message.from_user.id
 
 
-    # создаём пользователя
-
     add_user(
         user_id,
         message.from_user.username,
@@ -49,22 +48,15 @@ async def start(message: Message):
     )
 
 
-
-    # получаем ссылку
-
-    link = get_subscription_link(
-        user_id
-    )
+    link = get_subscription_link(user_id)
 
 
-    # если ссылки нет — создаём GitHub файл
-
+    # если файла ещё нет — создаём
     if not link:
 
         link = create_user_subscription(
             user_id
         )
-
 
         save_subscription_link(
             user_id,
@@ -72,21 +64,15 @@ async def start(message: Message):
         )
 
 
-
-    user = get_user(
-        user_id
-    )
-
+    user = get_user(user_id)
 
 
     status = "❌ Не активна"
 
 
-
     if user:
 
         subscription = user[3]
-
         until = user[4]
 
 
@@ -94,7 +80,6 @@ async def start(message: Message):
             "vip",
             "trial"
         ) and until:
-
 
             try:
 
@@ -108,11 +93,9 @@ async def start(message: Message):
 
                     status = "✅ Активна"
 
-
                 else:
 
                     status = "⛔ Истекла"
-
 
 
             except:
@@ -122,7 +105,6 @@ async def start(message: Message):
 
 
     await message.answer(
-
 f"""
 🦅 Добро пожаловать в Орёл VPN!
 
@@ -137,17 +119,13 @@ f"""
 {link}
 
 
-📲 Добавьте её в Happ.
+📲 Добавьте ссылку в приложение Happ.
 
 
-Выберите действие ниже.
+Для активации подписки используйте кнопку ниже.
 """,
-
         reply_markup=main_menu()
-
     )
-
-
 
 
 
@@ -155,28 +133,19 @@ f"""
 # КУПИТЬ
 # =====================
 
-
 @router.message(
     F.text == "🎫 Купить подписку"
 )
-async def buy_subscription(
-        message: Message
-):
+async def buy(message: Message):
 
     await message.answer(
-
 """
-🦅 Орёл VPN VIP
-
+🦅 Орёл VPN
 
 Выберите способ оплаты:
 """,
-
         reply_markup=payment_method_keyboard()
-
     )
-
-
 
 
 
@@ -184,31 +153,22 @@ async def buy_subscription(
 # STARS
 # =====================
 
-
 @router.callback_query(
     F.data == "pay_stars"
 )
-async def pay_stars(
-        callback: CallbackQuery
-):
+async def stars(callback: CallbackQuery):
 
     await callback.message.answer(
-
 """
-⭐ Telegram Stars
-
+⭐ Оплата Telegram Stars
 
 Выберите срок:
 """,
-
         reply_markup=stars_buy_keyboard()
-
     )
 
 
     await callback.answer()
-
-
 
 
 
@@ -216,25 +176,18 @@ async def pay_stars(
 # ПЕРЕВОД
 # =====================
 
-
 @router.callback_query(
     F.data == "pay_transfer"
 )
-async def pay_transfer(
-        callback: CallbackQuery
-):
+async def transfer(callback: CallbackQuery):
 
     await callback.message.answer(
-
 """
 💳 Оплата переводом
 
-
 Выберите срок:
 """,
-
         reply_markup=transfer_buy_keyboard()
-
     )
 
 
@@ -242,38 +195,39 @@ async def pay_transfer(
 
 
 
-
-
 # =====================
 # ПРОБНЫЙ ПЕРИОД
 # =====================
 
-
 @router.message(
     F.text == "🎁 Пробный период"
 )
-async def trial(
-        message: Message
-):
+async def trial(message: Message):
 
     user_id = message.from_user.id
+
+
+    add_user(
+        user_id,
+        message.from_user.username,
+        message.from_user.first_name
+    )
 
 
     if check_trial(user_id):
 
         await message.answer(
-            "❌ Пробный период уже использован."
+            "❌ Вы уже использовали пробный период."
         )
 
         return
 
 
 
-    link = activate_user_subscription(
+    link = create_subscription(
         user_id,
         days=3
     )
-
 
 
     activate_trial(
@@ -282,16 +236,13 @@ async def trial(
     )
 
 
-
     save_subscription_link(
         user_id,
         link
     )
 
 
-
     await message.answer(
-
 f"""
 🎁 Пробный период активирован!
 
@@ -303,11 +254,11 @@ f"""
 🔗 Ваша подписка:
 
 {link}
+
+
+📲 Добавьте её в Happ.
 """
-
     )
-
-
 
 
 
@@ -315,17 +266,16 @@ f"""
 # ДОКУМЕНТЫ
 # =====================
 
-
 @router.message(
     F.text == "📄 Документы"
 )
-async def documents(
-        message: Message
-):
+async def documents(message: Message):
 
     await message.answer(
 """
-📄 Документы:
+📄 Документы Орёл VPN:
+
+Все документы находятся на сайте:
 
 https://bdtvyz76b6-blip.github.io/managerorlvpnsite/
 """
@@ -333,29 +283,19 @@ https://bdtvyz76b6-blip.github.io/managerorlvpnsite/
 
 
 
-
-
 # =====================
 # ПОДДЕРЖКА
 # =====================
 
-
 @router.message(
     F.text == "💬 Поддержка"
 )
-async def support(
-        message: Message
-):
-
-    from config import SUPPORT
-
+async def support(message: Message):
 
     await message.answer(
-
 f"""
 💬 Поддержка:
 
 {SUPPORT}
 """
-
     )
