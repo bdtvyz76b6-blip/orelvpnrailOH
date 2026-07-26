@@ -224,3 +224,41 @@ def expire_subscription(user_id):
         path,
         EXPIRED_TEMPLATE
     )
+    
+    
+    
+    # =====================
+# СОЗДАНИЕ СООБЩЕНИЯ АКТИВАЦИИ
+# =====================
+
+def create_activate_message(user_id):
+
+    path = f"users/{user_id}_activate.txt"
+
+
+    content = f"""
+🦅 Орёл VPN
+
+
+✅ Активируйте подписку
+
+
+Для активации откройте ссылку:
+
+https://raw.githubusercontent.com/{OWNER}/{REPO}/{BRANCH}/users/{user_id}.txt
+
+
+После добавления ссылки в Happ подписка будет активирована.
+"""
+
+
+    update_file(
+        path,
+        content
+    )
+
+
+    return (
+        f"https://raw.githubusercontent.com/"
+        f"{OWNER}/{REPO}/{BRANCH}/{path}"
+    )
