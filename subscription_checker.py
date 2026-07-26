@@ -1,9 +1,18 @@
 import asyncio
 
+from datetime import datetime
+
 from database import (
     get_expired_users,
-    remove_bs
+    disable_subscription,
+    get_user
 )
+
+from github_update import (
+    expire_subscription
+)
+
+
 
 
 
@@ -17,12 +26,38 @@ async def check_subscriptions(bot):
 
         try:
 
-            users = get_expired_users()
+            expired = get_expired_users()
 
 
-            for user_id in users:
 
-                remove_bs(user_id)
+            for user_id in expired:
+
+
+                user = get_user(
+                    user_id
+                )
+
+
+                if not user:
+
+                    continue
+
+
+
+                # меняем GitHub файл
+
+                expire_subscription(
+                    user_id
+                )
+
+
+
+                # отключаем в базе
+
+                disable_subscription(
+                    user_id
+                )
+
 
 
                 try:
@@ -31,27 +66,39 @@ async def check_subscriptions(bot):
 
                         user_id,
 
-                        """
-⌛ Срок действия подписки закончился.
+f"""
+⛔ Срок действия подписки закончился.
 
-🎫 Ваша подписка была отключена.
 
-Для продолжения использования оформите новую подписку.
+🦅 Орёл VPN
+
+
+🎫 Продлите подписку,
+чтобы снова получить доступ.
 """
+
                     )
+
 
                 except:
 
                     pass
 
 
+
+
+
         except Exception as e:
 
             print(
-                f"Subscription checker: {e}"
+                "Subscription checker error:",
+                e
             )
 
 
+
+        # проверка раз в час
+
         await asyncio.sleep(
-            600
+            3600
         )
