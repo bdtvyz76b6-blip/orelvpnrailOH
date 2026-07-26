@@ -5,7 +5,10 @@ from datetime import datetime
 
 from database import get_user
 
-from keyboards import cabinet_keyboard
+from keyboards import (
+    cabinet_keyboard,
+    payment_method_keyboard
+)
 
 
 router = Router()
@@ -178,7 +181,7 @@ f"""
 
 
 # =====================
-# ОБНОВИТЬ КАБИНЕТ
+# ОБНОВИТЬ
 # =====================
 
 @router.callback_query(
@@ -240,3 +243,31 @@ f"""
 
 
     await callback.answer()
+
+
+
+
+
+# =====================
+# ПРОДЛИТЬ
+# =====================
+
+@router.callback_query(
+    F.data == "renew"
+)
+async def renew(
+    callback: CallbackQuery
+):
+
+    await callback.message.answer(
+"""
+🎫 Продление подписки
+
+Выберите способ оплаты:
+""",
+        reply_markup=payment_method_keyboard()
+    )
+
+
+    await callback.answer()
+``
