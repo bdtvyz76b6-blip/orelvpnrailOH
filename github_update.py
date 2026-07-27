@@ -4,27 +4,18 @@ import requests
 
 from datetime import datetime, timedelta
 
+from database import save_subscription_link
 
-# =====================
-# GITHUB
-# =====================
 
-GITHUB_TOKEN = os.getenv(
-    "GITHUB_TOKEN"
-)
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 
 if not GITHUB_TOKEN:
-    raise Exception(
-        "❌ GITHUB_TOKEN не найден"
-    )
+    raise Exception("❌ GITHUB_TOKEN не найден")
 
 
 OWNER = "bdtvyz76b6-blip"
-
 REPO = "vpn-sub"
-
 BRANCH = "main"
-
 
 
 def github_headers():
@@ -35,7 +26,6 @@ def github_headers():
     }
 
 
-
 def github_url(path):
 
     return (
@@ -43,11 +33,6 @@ def github_url(path):
         f"{OWNER}/{REPO}/contents/{path}"
     )
 
-
-
-# =====================
-# ШАБЛОНЫ
-# =====================
 
 
 NEW_USER_TEMPLATE = """
@@ -63,14 +48,12 @@ vless://00000000-0000-0000-0000-000000000000@expired.invalid:443?type=tcp&securi
 """
 
 
-
 ACTIVE_TEMPLATE = """
 #profile-title: 🦅 Orel VPN VIP
 
 #profile-update-interval: 1
 
 #announce: Подписка активна до {date}
-
 
 
 vless://8fbd33cf-ff7b-4352-a48d-0cd4f723c7e4@189.74.106.66:443?type=tcp&security=reality&pbk=IuvAXlAWBpeXehmEk0P-FIGTctUhny2H3UilbWWfJC0&fp=safari&sni=api.yandex-cloud.org&sid=122218f4c1f172e4&flow=xtls-rprx-vision&encryption=none#🇧🇷 Brazil
@@ -87,7 +70,6 @@ vless://96006428-88d4-11f1-9ca5-1e6febe3e1df@89.208.229.243:2053?type=grpc&servi
 """
 
 
-
 EXPIRED_TEMPLATE = """
 #profile-title: ⛔ Orel VPN
 
@@ -102,11 +84,6 @@ vless://00000000-0000-0000-0000-000000000000@expired.invalid:443?type=tcp&securi
 
 
 
-# =====================
-# ОБНОВЛЕНИЕ ФАЙЛА
-# =====================
-
-
 def update_file(path, content):
 
     url = github_url(path)
@@ -119,17 +96,13 @@ def update_file(path, content):
 
 
     data = {
+        "message": "Update Orel VPN subscription",
 
-        "message":
-        "Update Orel VPN subscription",
+        "content": base64.b64encode(
+            content.encode("utf-8")
+        ).decode("utf-8"),
 
-        "content":
-        base64.b64encode(
-            content.encode()
-        ).decode(),
-
-        "branch":
-        BRANCH
+        "branch": BRANCH
     }
 
 
@@ -138,21 +111,14 @@ def update_file(path, content):
         data["sha"] = old.json()["sha"]
 
 
-
     r = requests.put(
         url,
         headers=github_headers(),
         json=data
     )
 
-
     r.raise_for_status()
 
-
-
-# =====================
-# СОЗДАТЬ ПУСТОЙ ФАЙЛ
-# =====================
 
 
 def create_user_subscription(user_id):
@@ -163,132 +129,6 @@ def create_user_subscription(user_id):
     update_file(
         path,
         NEW_USER_TEMPLATE
-    )
-
-
-    return (
-        f"https://raw.githubusercontent.com/"
-        f"{OWNER}/{REPO}/{BRANCH}/{path}"
-    )
-
-
-
-# =====================
-# АКТИВАЦИЯ
-# =====================
-
-
-def activate_user_subscription(
-        user_id,
-        days
-):
-
-    date = (
-        datetime.now()
-        +
-        timedelta(days=days)
-    ).strftime(
-        "%d.%m.%Y"
-    )
-
-
-    path = f"users/{user_id}.txt"
-
-
-    update_file(
-        path,
-        ACTIVE_TEMPLATE.format(
-            date=date
-        )
-    )
-
-
-    return (
-        f"https://raw.githubusercontent.com/"
-        f"{OWNER}/{REPO}/{BRANCH}/{path}"
-    )
-
-
-
-# =====================
-# ИСТЕКЛА
-# =====================
-
-
-def expire_subscription(user_id):
-
-    path = f"users/{user_id}.txt"
-
-
-    update_file(
-        path,
-        EXPIRED_TEMPLATE
-    )
-    
-    
-    
-    # =====================
-# СОЗДАНИЕ СООБЩЕНИЯ АКТИВАЦИИ
-# =====================
-
-def create_activate_message(user_id):
-
-    path = f"users/{user_id}_activate.txt"
-
-
-    content = f"""
-🦅 Орёл VPN
-
-
-✅ Активируйте подписку
-
-
-Для активации откройте ссылку:
-
-https://raw.githubusercontent.com/{OWNER}/{REPO}/{BRANCH}/users/{user_id}.txt
-
-
-После добавления ссылки в Happ подписка будет активирована.
-"""
-
-
-    update_file(
-        path,
-        content
-    )
-
-
-    return (
-        f"https://raw.githubusercontent.com/"
-        f"{OWNER}/{REPO}/{BRANCH}/{path}"
-    )
-    
-    
-    
-    # =====================
-# АКТИВАЦИЯ ПОДПИСКИ
-# =====================
-
-def create_subscription(user_id, days=30):
-
-    expire_date = (
-        datetime.now()
-        +
-        timedelta(days=days)
-    ).strftime("%d.%m.%Y")
-
-
-    path = f"users/{user_id}.txt"
-
-
-    content = ACTIVE_TEMPLATE.format(
-        date=expire_date
-    )
-
-
-    update_file(
-        path,
-        content
     )
 
 
@@ -305,3 +145,60 @@ def create_subscription(user_id, days=30):
 
 
     return link
+
+
+
+def create_subscription(user_id, days=30):
+
+    expire_date = (
+        datetime.now()
+        +
+        timedelta(days=days)
+    ).strftime("%d.%m.%Y")
+
+
+    path = f"users/{user_id}.txt"
+
+
+    update_file(
+        path,
+        ACTIVE_TEMPLATE.format(
+            date=expire_date
+        )
+    )
+
+
+    link = (
+        f"https://raw.githubusercontent.com/"
+        f"{OWNER}/{REPO}/{BRANCH}/{path}"
+    )
+
+
+    save_subscription_link(
+        user_id,
+        link
+    )
+
+
+    return link
+
+
+
+def activate_user_subscription(user_id, days):
+
+    return create_subscription(
+        user_id,
+        days
+    )
+
+
+
+def expire_subscription(user_id):
+
+    path = f"users/{user_id}.txt"
+
+
+    update_file(
+        path,
+        EXPIRED_TEMPLATE
+    )
