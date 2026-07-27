@@ -36,6 +36,7 @@ def main_menu():
             [
                 KeyboardButton(
                     text="📄 Документы"
+                    url="https://bdtvyz76b6-blip.github.io/managerorlvpnsite/"
                 )
             ],
 
@@ -275,6 +276,34 @@ def admin_menu():
                 InlineKeyboardButton(
                     text="🎫 Промокоды",
                     callback_data="admin_promos"
+                )
+            ]
+
+        ]
+    )
+    
+    
+    
+    # =====================
+# ПРИНЯТИЕ УСЛОВИЙ
+# =====================
+
+def accept_terms_keyboard():
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+
+            [
+                InlineKeyboardButton(
+                    text="📄 Документы",
+                    url="https://bdtvyz76b6-blip.github.io/managerorlvpnsite/"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="✅ Принимаю",
+                    callback_data="accept_terms"
                 )
             ]
 
