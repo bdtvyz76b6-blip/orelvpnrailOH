@@ -36,7 +36,6 @@ def main_menu():
             [
                 KeyboardButton(
                     text="📄 Документы"
-                    url="https://bdtvyz76b6-blip.github.io/managerorlvpnsite/"
                 )
             ],
 
