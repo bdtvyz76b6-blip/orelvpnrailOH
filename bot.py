@@ -1,4 +1,7 @@
 import asyncio
+import threading
+
+from flask import Flask, request
 
 from aiogram import Bot, Dispatcher
 
@@ -8,6 +11,46 @@ from database import (
     create_table,
     check_expired_subscriptions
 )
+
+
+
+# =====================
+# CASHeRA WEBHOOK
+# =====================
+
+app = Flask(__name__)
+
+
+@app.route(
+    "/webhook/cashera",
+    methods=["POST"]
+)
+def cashera():
+
+    data = request.json
+
+
+    print(
+        "💳 CASHeRA PAYMENT:"
+    )
+
+    print(
+        data
+    )
+
+
+    return "OK", 200
+
+
+
+def run_webhook():
+
+    app.run(
+        host="0.0.0.0",
+        port=8080
+    )
+
+
 
 
 
@@ -31,9 +74,12 @@ from handlers.admin_payments import router as admin_payments_router
 
 
 
+
+
 # =====================
 # BOT
 # =====================
+
 
 bot = Bot(
     token=BOT_TOKEN
@@ -44,9 +90,12 @@ dp = Dispatcher()
 
 
 
+
+
 # =====================
 # ROUTERS
 # =====================
+
 
 dp.include_router(
     start_router
@@ -78,18 +127,20 @@ dp.include_router(
 
 
 
+
+
 # =====================
 # START
 # =====================
 
 async def main():
 
-    # создаём БД
+
     create_table()
 
 
-    # отключаем просроченные подписки
     check_expired_subscriptions()
+
 
 
     print(
@@ -110,6 +161,18 @@ async def main():
 
 
 
+
+
 if __name__ == "__main__":
 
-    asyncio.run(main())
+
+    threading.Thread(
+        target=run_webhook,
+        daemon=True
+    ).start()
+
+
+
+    asyncio.run(
+        main()
+    )
