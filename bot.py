@@ -12,6 +12,10 @@ from database import (
     check_expired_subscriptions
 )
 
+from github_update import create_subscription
+
+from database import save_subscription_link
+
 
 
 # =====================
