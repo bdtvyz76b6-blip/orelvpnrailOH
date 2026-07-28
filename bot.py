@@ -142,7 +142,7 @@ async def main():
 
 
     print(
-        "🦅 Орёл VPN бот запущен"
+        "☂️ ixxy vpn бот запущен"
     )
 
 
