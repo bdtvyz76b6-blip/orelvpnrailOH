@@ -7,172 +7,149 @@ from cashera_api import create_cashera_payment
 router = Router()
 
 
+
 # =====================
-# СБП 1 МЕСЯЦ
+# СБП ПЛАТЕЖИ
 # =====================
+
+payments = {
+
+    "sbp_30": {
+        "amount": 99,
+        "days": 30
+    },
+
+    "sbp_90": {
+        "amount": 249,
+        "days": 90
+    },
+
+    "sbp_180": {
+        "amount": 599,
+        "days": 180
+    },
+
+    "sbp_365": {
+        "amount": 999,
+        "days": 365
+    }
+
+}
+
+
 
 @router.callback_query(
-    F.data == "sbp_30"
+    F.data.startswith("sbp_")
 )
-async def sbp_30(callback: CallbackQuery):
+async def sbp_payment(
+    callback: CallbackQuery
+):
 
-    payment = create_cashera_payment(
-        user_id=callback.from_user.id,
-        amount=99,
-        days=30
-    )
-
-    link = payment.get(
-        "payment_url"
-    )
+    code = callback.data
 
 
-    await callback.message.answer(
+    if code not in payments:
+
+        await callback.answer(
+            "Ошибка тарифа"
+        )
+
+        return
+
+
+
+    amount = payments[code]["amount"]
+
+    days = payments[code]["days"]
+
+
+
+    try:
+
+        result = create_cashera_payment(
+
+            user_id=callback.from_user.id,
+
+            amount=amount,
+
+            days=days
+
+        )
+
+
+
+        print(
+            "💳 PAYMENT RESULT:",
+            result
+        )
+
+
+
+        link = (
+
+            result.get("payment_url")
+
+            or
+
+            result.get("url")
+
+        )
+
+
+
+        if not link:
+
+            await callback.message.answer(
+f"""
+❌ Не удалось создать платёж.
+
+Ответ Cashera:
+
+{result}
+"""
+            )
+
+            return
+
+
+
+        await callback.message.answer(
 f"""
 🦅 Орёл VPN
 
 💳 Оплата СБП
 
+
 📅 Срок:
-30 дней
+{days} дней
+
 
 💰 Цена:
-99₽
+{amount}₽
 
 
-🔗 Ссылка на оплату:
+🔗 Оплатить:
 
 {link}
+
+
+После успешной оплаты подписка будет выдана автоматически.
 """
-    )
-
-    await callback.answer()
+        )
 
 
 
-# =====================
-# СБП 3 МЕСЯЦА
-# =====================
-
-@router.callback_query(
-    F.data == "sbp_90"
-)
-async def sbp_90(callback: CallbackQuery):
-
-    payment = create_cashera_payment(
-        user_id=callback.from_user.id,
-        amount=249,
-        days=90
-    )
-
-    link = payment.get(
-        "payment_url"
-    )
+    except Exception as e:
 
 
-    await callback.message.answer(
+        await callback.message.answer(
 f"""
-🦅 Орёл VPN
+❌ Ошибка создания платежа:
 
-💳 Оплата СБП
-
-📅 Срок:
-90 дней
-
-💰 Цена:
-249₽
-
-
-🔗 Ссылка:
-
-{link}
+{e}
 """
-    )
-
-    await callback.answer()
+        )
 
 
-
-# =====================
-# СБП 6 МЕСЯЦЕВ
-# =====================
-
-@router.callback_query(
-    F.data == "sbp_180"
-)
-async def sbp_180(callback: CallbackQuery):
-
-    payment = create_cashera_payment(
-        user_id=callback.from_user.id,
-        amount=599,
-        days=180
-    )
-
-    link = payment.get(
-        "payment_url"
-    )
-
-
-    await callback.message.answer(
-f"""
-🦅 Орёл VPN
-
-💳 Оплата СБП
-
-📅 Срок:
-180 дней
-
-💰 Цена:
-599₽
-
-
-🔗 Ссылка:
-
-{link}
-"""
-    )
-
-    await callback.answer()
-
-
-
-# =====================
-# СБП 12 МЕСЯЦЕВ
-# =====================
-
-@router.callback_query(
-    F.data == "sbp_365"
-)
-async def sbp_365(callback: CallbackQuery):
-
-    payment = create_cashera_payment(
-        user_id=callback.from_user.id,
-        amount=999,
-        days=365
-    )
-
-    link = payment.get(
-        "payment_url"
-    )
-
-
-    await callback.message.answer(
-f"""
-🦅 Орёл VPN
-
-💳 Оплата СБП
-
-📅 Срок:
-365 дней
-
-💰 Цена:
-999₽
-
-
-🔗 Ссылка:
-
-{link}
-"""
-    )
 
     await callback.answer()
