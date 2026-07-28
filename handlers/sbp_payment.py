@@ -115,7 +115,7 @@ f"""
 
         await callback.message.answer(
 f"""
-🦅 Орёл VPN
+☂️ ixxy vpn
 
 💳 Оплата СБП
 
