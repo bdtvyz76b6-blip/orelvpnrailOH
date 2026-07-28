@@ -167,7 +167,7 @@ def cashera():
                 user_id,
 
                 f"""
-🦅 Орёл VPN
+☂️ ixxy vpn
 
 ✅ Оплата получена!
 
