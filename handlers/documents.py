@@ -14,7 +14,7 @@ async def documents(message: Message):
 
     await message.answer(
         """
-📄 Документы сервиса «Орёл VPN»
+📄 Документы сервиса «ixxy vpn»
 
 Перед использованием сервиса ознакомьтесь:
 
