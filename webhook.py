@@ -6,67 +6,135 @@ def cashera():
     print("💳 CASHeRA:")
     print(data)
 
+
     try:
 
-        # Пример — потом поменяем под настоящий JSON
-        status = data.get("status", "")
+        # тестовое событие
+        if data.get("event") == "webhook.test":
+            return "OK", 200
 
-        if status == "paid":
 
-            user_id = int(
-                data.get("user_id", 0)
+        if data.get("event") != "transaction.status_updated":
+            return "OK", 200
+
+
+        transaction = data.get(
+            "transaction",
+            {}
+        )
+
+
+        status = transaction.get(
+            "status"
+        )
+
+
+        if status != "paid":
+
+            print(
+                "Оплата не успешна:",
+                status
             )
 
-            amount = int(
-                data.get("amount", 0)
+            return "OK", 200
+
+
+
+        # Telegram ID должен быть в external_id
+        user_id = transaction.get(
+            "external_id"
+        )
+
+
+        amount = int(
+            transaction.get(
+                "amount",
+                0
+            )
+        )
+
+
+
+        days = 0
+
+
+        if amount == 99:
+            days = 30
+
+        elif amount == 249:
+            days = 90
+
+        elif amount == 599:
+            days = 180
+
+        elif amount == 999:
+            days = 365
+
+
+
+        if not user_id or not days:
+
+            print(
+                "Нет user_id или срок не найден"
             )
 
-            days = 0
-
-            if amount == 70:
-                days = 30
-
-            elif amount == 190:
-                days = 90
-
-            elif amount == 350:
-                days = 180
-
-            elif amount == 700:
-                days = 365
+            return "OK", 200
 
 
-            if user_id and days:
 
-                link = create_subscription(
-                    user_id,
-                    days=days
-                )
+        user_id = int(
+            user_id
+        )
 
-                save_subscription_link(
-                    user_id,
-                    link
-                )
 
-                asyncio.run(
-                    bot.send_message(
-                        user_id,
-f"""
+
+        link = create_subscription(
+            user_id,
+            days=days
+        )
+
+
+        save_subscription_link(
+            user_id,
+            link
+        )
+
+
+
+        asyncio.run(
+
+            bot.send_message(
+
+                user_id,
+
+                f"""
 🦅 Орёл VPN
 
 ✅ Оплата получена!
 
-⏳ Срок:
+📅 Срок:
 {days} дней
+
 
 🔗 Ваша подписка:
 
 {link}
 
+
 📲 Добавьте её в Happ.
 """
-                    )
-                )
+
+            )
+
+        )
+
+
+        print(
+            "✅ Выдано:",
+            user_id
+        )
+
+
 
     except Exception as e:
 
@@ -74,5 +142,6 @@ f"""
             "ERROR:",
             e
         )
+
 
     return "OK", 200
