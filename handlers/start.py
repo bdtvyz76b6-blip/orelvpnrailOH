@@ -21,7 +21,7 @@ from keyboards import (
     main_menu,
     payment_method_keyboard,
     stars_buy_keyboard,
-    transfer_buy_keyboard,
+    sbp_buy_keyboard,
     accept_terms_keyboard
 )
 
@@ -238,18 +238,18 @@ async def stars(callback: CallbackQuery):
 # =====================
 
 @router.callback_query(
-    F.data == "pay_transfer"
+    F.data == "pay_sbp"
 )
-async def transfer(callback: CallbackQuery):
+async def sbp(callback: CallbackQuery):
 
     await callback.message.answer(
 """
-💳 Оплата переводом
+💳 Оплата по СБП
 
 
 Выберите срок:
 """,
-        reply_markup=transfer_buy_keyboard()
+        reply_markup=sbp_buy_keyboard()
     )
 
 
