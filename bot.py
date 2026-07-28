@@ -68,7 +68,7 @@ from handlers.cabinet import router as cabinet_router
 
 from handlers.stars_payment import router as stars_router
 
-from handlers.transfer_payment import router as transfer_router
+from handlers.sbp_payment import router as transfer_router
 
 from handlers.admin_panel import router as admin_router
 
@@ -112,7 +112,7 @@ dp.include_router(
 )
 
 dp.include_router(
-    transfer_router
+    sbp_router
 )
 
 dp.include_router(
