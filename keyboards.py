@@ -122,7 +122,7 @@ def stars_buy_keyboard():
 
 
 # =====================
-# ОПЛАТА ПЕРЕВОДОМ
+# СБП ТАРИФЫ
 # =====================
 
 def sbp_buy_keyboard():
@@ -132,28 +132,28 @@ def sbp_buy_keyboard():
 
             [
                 InlineKeyboardButton(
-                    text="💳 1 месяц — 70₽",
+                    text="💳 1 месяц — 99₽",
                     callback_data="sbp_30"
                 )
             ],
 
             [
                 InlineKeyboardButton(
-                    text="💳 3 месяца — 190₽",
+                    text="💳 3 месяца — 249₽",
                     callback_data="sbp_90"
                 )
             ],
 
             [
                 InlineKeyboardButton(
-                    text="💳 6 месяцев — 350₽",
+                    text="💳 6 месяцев — 599₽",
                     callback_data="sbp_180"
                 )
             ],
 
             [
                 InlineKeyboardButton(
-                    text="💳 12 месяцев — 700₽",
+                    text="💳 12 месяцев — 999₽",
                     callback_data="sbp_365"
                 )
             ]
@@ -190,35 +190,6 @@ def cabinet_keyboard():
                 InlineKeyboardButton(
                     text="🎫 Продлить",
                     callback_data="renew"
-                )
-            ]
-
-        ]
-    )
-
-
-
-# =====================
-# ПОДТВЕРЖДЕНИЕ ПЛАТЕЖА
-# =====================
-
-def approve_keyboard(
-        user_id,
-        payment_id
-):
-
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-
-            [
-                InlineKeyboardButton(
-                    text="✅ Подтвердить",
-                    callback_data=f"approve_{user_id}_{payment_id}"
-                ),
-
-                InlineKeyboardButton(
-                    text="❌ Отклонить",
-                    callback_data=f"reject_{user_id}_{payment_id}"
                 )
             ]
 
@@ -280,10 +251,10 @@ def admin_menu():
 
         ]
     )
-    
-    
-    
-    # =====================
+
+
+
+# =====================
 # ПРИНЯТИЕ УСЛОВИЙ
 # =====================
 
