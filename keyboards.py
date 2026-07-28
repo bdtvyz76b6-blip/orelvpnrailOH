@@ -69,8 +69,8 @@ def payment_method_keyboard():
 
             [
                 InlineKeyboardButton(
-                    text="💳 Перевод",
-                    callback_data="pay_transfer"
+                    text="💳 СБП",
+                    callback_data="pay_sbp"
                 )
             ]
 
@@ -125,7 +125,7 @@ def stars_buy_keyboard():
 # ОПЛАТА ПЕРЕВОДОМ
 # =====================
 
-def transfer_buy_keyboard():
+def sbp_buy_keyboard():
 
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -133,28 +133,28 @@ def transfer_buy_keyboard():
             [
                 InlineKeyboardButton(
                     text="💳 1 месяц — 70₽",
-                    callback_data="transfer_30"
+                    callback_data="sbp_30"
                 )
             ],
 
             [
                 InlineKeyboardButton(
                     text="💳 3 месяца — 190₽",
-                    callback_data="transfer_90"
+                    callback_data="sbp_90"
                 )
             ],
 
             [
                 InlineKeyboardButton(
                     text="💳 6 месяцев — 350₽",
-                    callback_data="transfer_180"
+                    callback_data="sbp_180"
                 )
             ],
 
             [
                 InlineKeyboardButton(
                     text="💳 12 месяцев — 700₽",
-                    callback_data="transfer_365"
+                    callback_data="sbp_365"
                 )
             ]
 
