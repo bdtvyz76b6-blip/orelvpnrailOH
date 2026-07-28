@@ -36,7 +36,7 @@ async def sbp_30(callback: CallbackQuery):
 
     await callback.message.answer(
 f"""
-🦅 Орёл VPN
+☂️ ixxy vip
 
 📅 1 месяц
 
@@ -56,7 +56,7 @@ async def sbp_90(callback: CallbackQuery):
 
     await callback.message.answer(
 f"""
-🦅 Орёл VPN
+☂️ ixxy vip
 
 📅 3 месяца
 
@@ -76,7 +76,7 @@ async def sbp_180(callback: CallbackQuery):
 
     await callback.message.answer(
 f"""
-🦅 Орёл VPN
+☂️ ixxy vip
 
 📅 6 месяцев
 
@@ -96,7 +96,7 @@ async def sbp_365(callback: CallbackQuery):
 
     await callback.message.answer(
 f"""
-🦅 Орёл VPN
+☂️ ixxy vip
 
 📅 12 месяцев
 
