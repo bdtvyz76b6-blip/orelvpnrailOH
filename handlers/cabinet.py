@@ -69,7 +69,7 @@ async def show_cabinet(message: Message):
 
     if subscription == "vip":
 
-        tariff = "🦅 Орёл VPN VIP"
+        tariff = "☂️ ixxy vip"
 
 
     elif subscription == "trial":
