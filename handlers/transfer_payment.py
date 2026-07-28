@@ -1,91 +1,111 @@
 from aiogram import Router, F
 from aiogram.types import CallbackQuery
 
-from config import (
-    CARD_NUMBER,
-    CARD_OWNER,
-    PRICE_30,
-    PRICE_90,
-    PRICE_180,
-    PRICE_365
-)
-
-from database import set_pending_days
-
-
 router = Router()
 
+SBP_30 = "https://payform.cashera.cash/019fa3f1-5d16-7213-ae29-edac85c38315"
+SBP_90 = "https://payform.cashera.cash/019fa3f2-eb0e-72a3-8eda-8a7d7904a901"
+SBP_180 = "https://payform.cashera.cash/019fa3f4-1873-73e0-8316-d2adc7c4a4b9"
+SBP_365 = "https://payform.cashera.cash/019fa3f5-0ea3-7147-9ac6-74ada9e53c2a"
 
 
-@router.callback_query(
-    F.data.startswith("transfer_")
-)
-async def transfer_buy(
-    callback: CallbackQuery
-):
+@router.callback_query(F.data == "pay_sbp")
+async def pay_sbp(callback: CallbackQuery):
 
-    data = callback.data
+    await callback.message.answer(
+"""
+💳 Оплата через СБП
 
-
-    prices = {
-
-        "transfer_30": (30, PRICE_30),
-
-        "transfer_90": (90, PRICE_90),
-
-        "transfer_180": (180, PRICE_180),
-
-        "transfer_365": (365, PRICE_365)
-
-    }
-
-
-
-    if data not in prices:
-
-        await callback.answer(
-            "Ошибка"
-        )
-
-        return
-
-
-
-    days, price = prices[data]
-
-
-
-    set_pending_days(
-        callback.from_user.id,
-        days
+Выберите тариф:
+""",
+        reply_markup=None
     )
 
+    await callback.message.answer(
+        "1 месяц — нажмите кнопку 99 ₽\n"
+        "3 месяца — нажмите кнопку 249 ₽\n"
+        "6 месяцев — нажмите кнопку 599 ₽\n"
+        "12 месяцев — нажмите кнопку 999 ₽"
+    )
 
+    await callback.answer()
+
+
+@router.callback_query(F.data == "sbp_30")
+async def sbp_30(callback: CallbackQuery):
 
     await callback.message.answer(
 f"""
-💳 Оплата Орёл VPN
+🦅 Орёл VPN
 
+📅 1 месяц
 
-📅 Срок:
-{days} дней
+💰 Стоимость: 99 ₽
 
+💳 Оплатить:
 
-💰 Цена:
-{price}
-
-
-💳 Карта:
-{CARD_NUMBER}
-
-
-👤 Получатель:
-{CARD_OWNER}
-
-
-После оплаты отправьте скриншот сюда.
+{SBP_30}
 """
     )
 
+    await callback.answer()
+
+
+@router.callback_query(F.data == "sbp_90")
+async def sbp_90(callback: CallbackQuery):
+
+    await callback.message.answer(
+f"""
+🦅 Орёл VPN
+
+📅 3 месяца
+
+💰 Стоимость: 249 ₽
+
+💳 Оплатить:
+
+{SBP_90}
+"""
+    )
+
+    await callback.answer()
+
+
+@router.callback_query(F.data == "sbp_180")
+async def sbp_180(callback: CallbackQuery):
+
+    await callback.message.answer(
+f"""
+🦅 Орёл VPN
+
+📅 6 месяцев
+
+💰 Стоимость: 599 ₽
+
+💳 Оплатить:
+
+{SBP_180}
+"""
+    )
+
+    await callback.answer()
+
+
+@router.callback_query(F.data == "sbp_365")
+async def sbp_365(callback: CallbackQuery):
+
+    await callback.message.answer(
+f"""
+🦅 Орёл VPN
+
+📅 12 месяцев
+
+💰 Стоимость: 999 ₽
+
+💳 Оплатить:
+
+{SBP_365}
+"""
+    )
 
     await callback.answer()
