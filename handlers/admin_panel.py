@@ -27,7 +27,7 @@ async def admin_start(message: Message):
 
     await message.answer(
         """
-🦅 Админ панель
+☂️ Админ панель
 
 Выберите действие:
 """,
