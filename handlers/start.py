@@ -59,7 +59,7 @@ async def start(message: Message):
 
         await message.answer(
 """
-🦅 Орёл VPN
+☂️ ixxy vpn
 
 
 Перед использованием сервиса необходимо ознакомиться с документами.
@@ -137,7 +137,7 @@ async def start(message: Message):
 
     await message.answer(
 f"""
-🦅 Добро пожаловать в Орёл VPN!
+☂️ Добро пожаловать в ixxy!
 
 
 🎫 Ваша подписка:
@@ -179,7 +179,7 @@ async def accept(callback: CallbackQuery):
 ✅ Условия приняты!
 
 
-Добро пожаловать в Орёл VPN 🦅
+Добро пожаловать в ixxy ☂️
 """,
         reply_markup=main_menu()
     )
@@ -200,7 +200,7 @@ async def buy(message: Message):
 
     await message.answer(
 """
-🦅 Орёл VPN
+☂️ ixxy vpn
 
 Выберите способ оплаты:
 """,
@@ -339,7 +339,7 @@ async def documents(message: Message):
 
     await message.answer(
 """
-📄 Документы Орёл VPN:
+📄 Документы ☂️ ixxy:
 
 
 Все документы находятся на сайте:
