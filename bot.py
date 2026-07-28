@@ -116,10 +116,6 @@ dp.include_router(
 )
 
 dp.include_router(
-    payment_check_router
-)
-
-dp.include_router(
     admin_router
 )
 
