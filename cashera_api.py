@@ -2,34 +2,45 @@ import os
 import requests
 
 
-API_KEY = os.getenv("CASHERA_API_KEY")
+# =====================
+# CASHeRA SETTINGS
+# =====================
 
-MERCHANT_ID = os.getenv(
+CASHERA_API_KEY = os.getenv(
+    "CASHERA_API_KEY"
+)
+
+CASHERA_MERCHANT_ID = os.getenv(
     "CASHERA_MERCHANT_ID"
 )
 
 
+
+# =====================
+# СОЗДАНИЕ ПЛАТЕЖА
+# =====================
+
 def create_cashera_payment(
-    user_id,
-    amount,
-    days
+        user_id,
+        amount,
+        days
 ):
 
-    url = "https://api.cashera.cash/v1/payments"
+    url = "ВСТАВИМ_СЮДА_API_URL_CASHERA"
 
 
     headers = {
 
-        "Authorization": f"Bearer {API_KEY}",
+        "Authorization": f"Bearer {CASHERA_API_KEY}",
 
         "Content-Type": "application/json"
 
     }
 
 
-    data = {
+    payload = {
 
-        "merchant_id": MERCHANT_ID,
+        "merchant_id": CASHERA_MERCHANT_ID,
 
         "amount": amount,
 
@@ -48,21 +59,20 @@ def create_cashera_payment(
     }
 
 
+
     response = requests.post(
-
         url,
-
-        json=data,
-
+        json=payload,
         headers=headers
-
     )
+
 
 
     print(
-        "CASHeRA RESPONSE:",
+        "💳 CASHeRA CREATE:",
         response.text
     )
+
 
 
     return response.json()
