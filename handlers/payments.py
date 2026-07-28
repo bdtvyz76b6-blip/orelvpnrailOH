@@ -106,7 +106,7 @@ async def stars_buy(
 
     await callback.message.answer_invoice(
 
-        title="🦅 Орёл VPN",
+        title="☂️ ixxy vpn",
 
         description=f"🎫 Подписка {plan['days']} дней",
 
@@ -230,7 +230,7 @@ f"""
 🎉 Оплата получена!
 
 
-🦅 Орёл VPN активирован
+☂️ ixxy vip активирован
 
 
 🎫 Срок:
