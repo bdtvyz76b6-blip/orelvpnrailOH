@@ -2,77 +2,57 @@ import os
 import requests
 
 
-# =====================
-# CASHeRA SETTINGS
-# =====================
-
 CASHERA_API_KEY = os.getenv(
     "CASHERA_API_KEY"
 )
 
-CASHERA_MERCHANT_ID = os.getenv(
-    "CASHERA_MERCHANT_ID"
-)
-
-
-
-# =====================
-# СОЗДАНИЕ ПЛАТЕЖА
-# =====================
 
 def create_cashera_payment(
-        user_id,
-        amount,
-        days
+    user_id,
+    amount,
+    days
 ):
 
-    url = "ВСТАВИМ_СЮДА_API_URL_CASHERA"
+    url = "https://api.cashera.cash/api/v1/integration/transactions"
 
 
     headers = {
-
-        "Authorization": f"Bearer {CASHERA_API_KEY}",
-
+        "X-Api-Key": CASHERA_API_KEY,
         "Content-Type": "application/json"
-
     }
 
 
-    payload = {
+    data = {
 
-        "merchant_id": CASHERA_MERCHANT_ID,
-
-        "amount": amount,
+        # сумма в копейках
+        "amount": amount * 100,
 
         "currency": "RUB",
 
         "payment_method": "sbp",
 
+        # сюда кладём Telegram ID
         "external_id": str(user_id),
 
-        "metadata": {
+        "description": f"Орёл VPN — {days} дней",
 
-            "days": days
-
-        }
+        "callback_url":
+        "https://orelvpnrailoh-production.up.railway.app/webhook/cashera"
 
     }
 
 
-
     response = requests.post(
         url,
-        json=payload,
-        headers=headers
+        headers=headers,
+        json=data
     )
-
 
 
     print(
-        "💳 CASHeRA CREATE:",
+        "CASHeRA CREATE:",
         response.text
     )
-
 
 
     return response.json()
