@@ -298,8 +298,7 @@ def get_subscription_link(user_id):
 
 def activate_subscription(
         user_id,
-        link,
-        days
+        link
 ):
 
     conn = connect()
