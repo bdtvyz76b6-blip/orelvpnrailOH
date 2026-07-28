@@ -36,7 +36,7 @@ def github_url(path):
 
 
 NEW_USER_TEMPLATE = """
-#profile-title: 🦅 Orel VPN
+#profile-title: ☂️ ixxy vpn
 
 #profile-update-interval: 1
 
@@ -49,18 +49,18 @@ vless://00000000-0000-0000-0000-000000000000@expired.invalid:443?type=tcp&securi
 
 
 ACTIVE_TEMPLATE = """
-#profile-title: 🦅 Orel VPN VIP
+#profile-title: ☂️ ixxy vip
 
 #profile-update-interval: 1
 
 #announce: Подписка активна до {date}
 
 
-vless://8def1e12-9c10-48a4-b9eb-a5cfdd552e18@189.74.115.2:443?type=tcp&security=reality&pbk=IuvAXlAWBpeXehmEk0P-FIGTctUhny2H3UilbWWfJC0&fp=qq&sni=api.yandex-dev.online&sid=122218f4c1f172e4&flow=xtls-rprx-vision#🇧🇷 Brazil
+vless://8def1e12-9c10-48a4-b9eb-a5cfdd552e18@189.74.115.2:443?type=tcp&security=reality&pbk=IuvAXlAWBpeXehmEk0P-FIGTctUhny2H3UilbWWfJC0&fp=qq&sni=api.yandex-dev.online&sid=122218f4c1f172e4&flow=xtls-rprx-vision#🇧🇷 brazil
 
-vless://8def1e12-9c10-48a4-b9eb-a5cfdd552e18@159.195.47.170:443?type=tcp&security=reality&pbk=IuvAXlAWBpeXehmEk0P-FIGTctUhny2H3UilbWWfJC0&fp=qq&sni=at.c2horizon.app&sid=122218f4c1f172e4&flow=xtls-rprx-vision#🇳🇱 Netherlands
+vless://8def1e12-9c10-48a4-b9eb-a5cfdd552e18@159.195.47.170:443?type=tcp&security=reality&pbk=IuvAXlAWBpeXehmEk0P-FIGTctUhny2H3UilbWWfJC0&fp=qq&sni=at.c2horizon.app&sid=122218f4c1f172e4&flow=xtls-rprx-vision#🇳🇱 netherlands
 
-vless://8def1e12-9c10-48a4-b9eb-a5cfdd552e18@77.91.68.206:443?type=tcp&security=reality&pbk=IuvAXlAWBpeXehmEk0P-FIGTctUhny2H3UilbWWfJC0&fp=qq&sni=am.c2horizon.app&sid=122218f4c1f172e4&flow=xtls-rprx-vision#🇳🇱 Netherlands 2
+vless://8def1e12-9c10-48a4-b9eb-a5cfdd552e18@77.91.68.206:443?type=tcp&security=reality&pbk=IuvAXlAWBpeXehmEk0P-FIGTctUhny2H3UilbWWfJC0&fp=qq&sni=am.c2horizon.app&sid=122218f4c1f172e4&flow=xtls-rprx-vision#🇳🇱 netherlands 2
 
 vless://8def1e12-9c10-48a4-b9eb-a5cfdd552e18@192.241.126.174:443?type=tcp&security=reality&pbk=IuvAXlAWBpeXehmEk0P-FIGTctUhny2H3UilbWWfJC0&fp=qq&sni=ads.yandex-dev.online&sid=122218f4c1f172e4&flow=xtls-rprx-vision#🇺🇸 USA
 
@@ -69,7 +69,7 @@ vless://4fcd5a7f-0cd8-4259-a8cc-65c23ab81a13@212.193.153.47:443?type=ws&security
 
 
 EXPIRED_TEMPLATE = """
-#profile-title: ⛔ Orel VPN
+#profile-title: ⛔ ixxy vpn
 
 #profile-update-interval: 1
 
