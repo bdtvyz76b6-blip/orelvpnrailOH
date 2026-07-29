@@ -74,6 +74,19 @@ from handlers.admin_panel import router as admin_router
 
 from handlers.admin_payments import router as admin_payments_router
 
+# Новые обработчики админки
+from handlers.admin_users import router as admin_users_router
+
+from handlers.admin_search import router as admin_search_router
+
+from handlers.admin_promos import router as admin_promos_router
+
+from handlers.admin_stats import router as admin_stats_router
+
+from handlers.admin_broadcast import router as admin_broadcast_router
+
+from handlers.admin_settings import router as admin_settings_router
+
 
 
 
@@ -121,6 +134,30 @@ dp.include_router(
 
 dp.include_router(
     admin_payments_router
+)
+
+dp.include_router(
+    admin_users_router
+)
+
+dp.include_router(
+    admin_search_router
+)
+
+dp.include_router(
+    admin_promos_router
+)
+
+dp.include_router(
+    admin_stats_router
+)
+
+dp.include_router(
+    admin_broadcast_router
+)
+
+dp.include_router(
+    admin_settings_router
 )
 
 
