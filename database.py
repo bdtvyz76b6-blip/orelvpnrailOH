@@ -36,6 +36,8 @@ def create_table():
         trial_used INTEGER DEFAULT 0,
 
         pending_days INTEGER DEFAULT 0,
+        
+        balance INTEGER DEFAULT 0,
 
         notify INTEGER DEFAULT 1,
 
@@ -298,7 +300,8 @@ def get_subscription_link(user_id):
 
 def activate_subscription(
         user_id,
-        link
+        link,
+        days
 ):
 
     conn = connect()
