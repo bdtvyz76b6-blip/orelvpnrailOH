@@ -819,3 +819,76 @@ def check_user_subscription(user_id):
     except:
 
         return False
+        
+        # =====================
+# БАЛАНС
+# =====================
+
+def get_balance(user_id):
+
+    conn = connect()
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        SELECT balance
+        FROM users
+        WHERE user_id=?
+        """,
+        (user_id,)
+    )
+
+    result = cur.fetchone()
+
+    conn.close()
+
+    if result:
+        return result[0]
+
+    return 0
+
+
+def add_balance(user_id, amount):
+
+    conn = connect()
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        UPDATE users
+
+        SET balance = balance + ?
+
+        WHERE user_id=?
+        """,
+        (
+            amount,
+            user_id
+        )
+    )
+
+    conn.commit()
+    conn.close()
+
+
+def remove_balance(user_id, amount):
+
+    conn = connect()
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        UPDATE users
+
+        SET balance = balance - ?
+
+        WHERE user_id=?
+        """,
+        (
+            amount,
+            user_id
+        )
+    )
+
+    conn.commit()
+    conn.close()
