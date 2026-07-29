@@ -298,7 +298,8 @@ def get_subscription_link(user_id):
 
 def activate_subscription(
         user_id,
-        link
+        link,
+        days
 ):
 
     conn = connect()
@@ -819,3 +820,88 @@ def check_user_subscription(user_id):
     except:
 
         return False
+        
+        # =====================
+# ВСЕ ПРОМОКОДЫ
+# =====================
+
+def get_promocodes():
+
+    conn = connect()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT code, days
+        FROM promocodes
+        ORDER BY code
+    """)
+
+    result = cur.fetchall()
+
+    conn.close()
+
+    return result
+
+
+# =====================
+# УДАЛИТЬ ПРОМОКОД
+# =====================
+
+def delete_promocode(code):
+
+    conn = connect()
+    cur = conn.cursor()
+
+    cur.execute("""
+        DELETE FROM promocodes
+        WHERE code=?
+    """, (code,))
+
+    conn.commit()
+    conn.close()
+
+
+# =====================
+# ID ВСЕХ ПОЛЬЗОВАТЕЛЕЙ
+# =====================
+
+def get_user_ids():
+
+    conn = connect()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT user_id
+        FROM users
+    """)
+
+    result = [row[0] for row in cur.fetchall()]
+
+    conn.close()
+
+    return result
+
+
+# =====================
+# ПРОСРОЧЕННЫЕ
+# =====================
+
+def get_expired_users():
+
+    conn = connect()
+    cur = conn.cursor()
+
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    cur.execute("""
+        SELECT *
+        FROM users
+        WHERE subscription_until != ''
+        AND subscription_until < ?
+    """, (today,))
+
+    result = cur.fetchall()
+
+    conn.close()
+
+    return result
