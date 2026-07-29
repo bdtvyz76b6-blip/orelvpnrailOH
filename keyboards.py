@@ -35,6 +35,12 @@ def main_menu():
 
             [
                 KeyboardButton(
+                    text="💰 Баланс"
+                )
+            ],
+
+            [
+                KeyboardButton(
                     text="📄 Документы"
                 )
             ],
