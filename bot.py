@@ -66,8 +66,6 @@ from handlers.start import router as start_router
 
 from handlers.cabinet import router as cabinet_router
 
-from handlers.balance import router as balance_router
-
 from handlers.stars_payment import router as stars_router
 
 from handlers.sbp_payment import router as sbp_router
@@ -107,10 +105,6 @@ dp.include_router(
 
 dp.include_router(
     cabinet_router
-)
-
-dp.include_router(
-    balance_router
 )
 
 dp.include_router(
