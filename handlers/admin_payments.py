@@ -7,71 +7,64 @@ router = Router()
 
 
 @router.callback_query(F.data == "admin_payments")
-async def payments(call: CallbackQuery):
+async def admin_payments(call: CallbackQuery):
 
     payments = get_payments()
 
     if not payments:
         await call.message.edit_text(
-            "💳 Платежей нет"
+            "💳 Платежей пока нет"
         )
         return
 
 
     buttons = []
 
-    for pay in payments[:20]:
+    for payment in payments[:20]:
 
-        payment_id = pay[0]
-        user_id = pay[1]
-        days = pay[3]
+        payment_id = payment[0]
+        user_id = payment[1]
+        days = payment[2]
 
         buttons.append(
             [
                 InlineKeyboardButton(
-                    text=f"💳 {user_id} | {days} дней",
-                    callback_data=f"payment_{payment_id}"
+                    text=f"💳 #{payment_id} | {user_id} | {days} дней",
+                    callback_data=f"payment_info_{payment_id}"
                 )
             ]
         )
 
 
+    buttons.append(
+        [
+            InlineKeyboardButton(
+                text="⬅️ Назад",
+                callback_data="admin_back"
+            )
+        ]
+    )
+
+
     await call.message.edit_text(
-        "💳 Ожидают проверки:",
+        "💳 История платежей СБП:",
         reply_markup=InlineKeyboardMarkup(
             inline_keyboard=buttons
         )
     )
 
 
-@router.callback_query(F.data.startswith("payment_"))
-async def payment_card(call: CallbackQuery):
+@router.callback_query(F.data.startswith("payment_info_"))
+async def payment_info(call: CallbackQuery):
 
     payment_id = int(
-        call.data.replace("payment_", "")
-    )
-
-
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="✅ Одобрить",
-                    callback_data=f"approve_{payment_id}"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="❌ Отклонить",
-                    callback_data=f"reject_{payment_id}"
-                )
-            ]
-        ]
+        call.data.replace("payment_info_", "")
     )
 
 
     await call.message.edit_text(
         f"💳 Платёж #{payment_id}\n\n"
-        "Проверь оплату:",
-        reply_markup=keyboard
+        "✅ Оплата через СБП\n"
+        "🤖 Статус: Автоматически подтверждён\n\n"
+        "Подписка выдана автоматически."
     )
