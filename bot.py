@@ -1,3 +1,4 @@
+
 import asyncio
 import threading
 
@@ -32,7 +33,6 @@ app = Flask(__name__)
 def cashera():
 
     data = request.json
-
 
     print(
         "💳 CASHeRA PAYMENT:"
@@ -70,11 +70,15 @@ from handlers.stars_payment import router as stars_router
 
 from handlers.sbp_payment import router as sbp_router
 
+
+# =====================
+# ADMIN HANDLERS
+# =====================
+
 from handlers.admin_panel import router as admin_router
 
 from handlers.admin_payments import router as admin_payments_router
 
-# Новые обработчики админки
 from handlers.admin_users import router as admin_users_router
 
 from handlers.admin_search import router as admin_search_router
@@ -87,6 +91,9 @@ from handlers.admin_broadcast import router as admin_broadcast_router
 
 from handlers.admin_settings import router as admin_settings_router
 
+# ПРОДЛЕНИЕ ПОДПИСКИ
+from handlers.admin_extend import router as admin_extend_router
+
 
 
 
@@ -94,7 +101,6 @@ from handlers.admin_settings import router as admin_settings_router
 # =====================
 # BOT
 # =====================
-
 
 bot = Bot(
     token=BOT_TOKEN
@@ -111,7 +117,6 @@ dp = Dispatcher()
 # ROUTERS
 # =====================
 
-
 dp.include_router(
     start_router
 )
@@ -127,6 +132,10 @@ dp.include_router(
 dp.include_router(
     sbp_router
 )
+
+
+
+# ADMIN
 
 dp.include_router(
     admin_router
@@ -161,6 +170,13 @@ dp.include_router(
 )
 
 
+# ПРОДЛЕНИЕ
+
+dp.include_router(
+    admin_extend_router
+)
+
+
 
 
 
@@ -170,12 +186,10 @@ dp.include_router(
 
 async def main():
 
-
     create_table()
 
 
     check_expired_subscriptions()
-
 
 
     print(
