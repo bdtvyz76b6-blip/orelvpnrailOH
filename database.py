@@ -895,3 +895,68 @@ def get_expired_users():
     conn.close()
 
     return result
+    
+    
+    # =====================
+# ПРОДЛЕНИЕ ПОДПИСКИ АДМИНОМ
+# =====================
+
+def extend_subscription(user_id, days):
+
+    conn = connect()
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        SELECT subscription_until
+        FROM users
+        WHERE user_id=?
+        """,
+        (user_id,)
+    )
+
+    result = cur.fetchone()
+
+
+    if result and result[0]:
+
+        old_date = datetime.strptime(
+            result[0],
+            "%Y-%m-%d"
+        )
+
+        # если подписка уже закончилась
+        if old_date < datetime.now():
+            old_date = datetime.now()
+
+    else:
+        old_date = datetime.now()
+
+
+    new_date = (
+        old_date +
+        timedelta(days=days)
+    ).strftime(
+        "%Y-%m-%d"
+    )
+
+
+    cur.execute(
+        """
+        UPDATE users
+
+        SET
+        subscription_until=?
+
+        WHERE user_id=?
+
+        """,
+        (
+            new_date,
+            user_id
+        )
+    )
+
+
+    conn.commit()
+    conn.close()
