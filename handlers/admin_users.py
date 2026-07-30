@@ -90,16 +90,18 @@ async def user_profile(call: CallbackQuery):
 
 
 
+    link = get_subscription_link(user_id)
+
     text = (
         f"👤 Пользователь\n\n"
         f"🆔 ID: {user[0]}\n"
         f"👤 Username: @{user[1] or 'нет'}\n\n"
         f"📌 Тариф: {user[2]}\n"
-        f"📅 До: {user[3] or 'нет'}\n\n"
+        f"📅 До: {user[4] or 'нет'}\n\n"
         f"🔗 Подписка:\n"
-        f"{user[4] or 'нет'}\n\n"
+        f"{link or 'нет'}\n\n"
         f"📊 Статус: 🟢 Активен"
-    )
+   )
 
 
     keyboard = InlineKeyboardMarkup(
