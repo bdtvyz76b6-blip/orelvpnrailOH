@@ -1,18 +1,31 @@
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.exceptions import TelegramBadRequest
 
 from database import extend_subscription, get_user
+
 
 router = Router()
 
 
-# выбор срока
-@router.callback_query(F.data.startswith("extend_"))
+
+# =====================
+# ВЫБОР СРОКА ПРОДЛЕНИЯ
+# =====================
+
+@router.callback_query(
+    F.data.startswith("extend_")
+    & ~F.data.startswith("extend_days_")
+)
 async def choose_extend(call: CallbackQuery):
 
     user_id = int(
-        call.data.replace("extend_", "")
+        call.data.replace(
+            "extend_",
+            ""
+        )
     )
+
 
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -56,23 +69,46 @@ async def choose_extend(call: CallbackQuery):
     )
 
 
-    await call.message.edit_text(
-        "⏳ Выберите срок продления:",
-        reply_markup=keyboard
-    )
+    try:
+
+        await call.message.edit_text(
+            "⏳ Выберите срок продления:",
+            reply_markup=keyboard
+        )
+
+    except TelegramBadRequest as e:
+
+        if "message is not modified" not in str(e):
+            raise
+
 
     await call.answer()
 
 
 
-# само продление
-@router.callback_query(F.data.startswith("extend_days_"))
+
+
+# =====================
+# ПРОДЛЕНИЕ
+# =====================
+
+@router.callback_query(
+    F.data.startswith("extend_days_")
+)
 async def extend_days(call: CallbackQuery):
+
 
     parts = call.data.split("_")
 
-    user_id = int(parts[2])
-    days = int(parts[3])
+
+    user_id = int(
+        parts[2]
+    )
+
+
+    days = int(
+        parts[3]
+    )
 
 
     extend_subscription(
@@ -81,7 +117,9 @@ async def extend_days(call: CallbackQuery):
     )
 
 
-    user = get_user(user_id)
+    user = get_user(
+        user_id
+    )
 
 
     await call.message.edit_text(
@@ -90,5 +128,6 @@ async def extend_days(call: CallbackQuery):
         f"⏳ Добавлено: {days} дней\n"
         f"📅 Новый срок: {user[4]}"
     )
+
 
     await call.answer()
