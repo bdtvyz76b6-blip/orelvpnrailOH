@@ -264,8 +264,11 @@ def save_subscription_link(user_id, link):
     cur.execute(
         """
         UPDATE users
-        SET link=?
+
+        SET subscription_link=?
+
         WHERE user_id=?
+
         """,
         (
             link,
@@ -384,19 +387,18 @@ def activate_trial(user_id, link):
         UPDATE users
 
         SET
-        tariff=?,
-        link=?,
+        subscription=?,
         subscription_until=?,
-        trial_used=1,
-        wifi_active=1
+        subscription_link=?,
+        trial_used=1
 
         WHERE user_id=?
 
         """,
         (
             "🎁 Пробный период",
-            link,
             date,
+            link,
             user_id
         )
     )
