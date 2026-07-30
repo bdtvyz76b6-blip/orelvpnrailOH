@@ -256,10 +256,7 @@ def get_pending_days(user_id):
 # SUBSCRIPTION LINK
 # =====================
 
-def save_subscription_link(
-        user_id,
-        link
-):
+def save_subscription_link(user_id, link):
 
     conn = connect()
     cur = conn.cursor()
@@ -267,11 +264,8 @@ def save_subscription_link(
     cur.execute(
         """
         UPDATE users
-
-        SET subscription_link=?
-
+        SET link=?
         WHERE user_id=?
-
         """,
         (
             link,
@@ -373,18 +367,14 @@ def check_trial(user_id):
 
     return user[7] == 1
 
-def activate_trial(
-        user_id,
-        link
-):
+def activate_trial(user_id, link):
 
     date = (
         datetime.now()
         +
         timedelta(days=3)
-    ).strftime(
-        "%Y-%m-%d"
-    )
+    ).strftime("%Y-%m-%d")
+
 
     conn = connect()
     cur = conn.cursor()
@@ -394,21 +384,19 @@ def activate_trial(
         UPDATE users
 
         SET
-
-        subscription='trial',
-
+        tariff=?,
+        link=?,
         subscription_until=?,
-
-        subscription_link=?,
-
-        trial_used=1
+        trial_used=1,
+        wifi_active=1
 
         WHERE user_id=?
 
         """,
         (
-            date,
+            "🎁 Пробный период",
             link,
+            date,
             user_id
         )
     )
