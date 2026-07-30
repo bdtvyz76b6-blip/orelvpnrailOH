@@ -1,5 +1,6 @@
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.exceptions import TelegramBadRequest
 
 from database import get_all_users, get_user
 
@@ -12,10 +13,16 @@ async def show_users(call: CallbackQuery):
     users = get_all_users()
 
     if not users:
-        await call.message.edit_text(
-            "👥 Пользователей пока нет"
-        )
+        try:
+            await call.message.edit_text(
+                "👥 Пользователей пока нет"
+            )
+        except TelegramBadRequest:
+            pass
+
+        await call.answer()
         return
+
 
     buttons = []
 
@@ -33,6 +40,7 @@ async def show_users(call: CallbackQuery):
             ]
         )
 
+
     buttons.append(
         [
             InlineKeyboardButton(
@@ -42,12 +50,24 @@ async def show_users(call: CallbackQuery):
         ]
     )
 
-    await call.message.edit_text(
-        "👥 Пользователи:",
-        reply_markup=InlineKeyboardMarkup(
-            inline_keyboard=buttons
-        )
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=buttons
     )
+
+
+    try:
+        await call.message.edit_text(
+            "👥 Пользователи:",
+            reply_markup=keyboard
+        )
+    except TelegramBadRequest as e:
+        if "message is not modified" not in str(e):
+            raise
+
+
+    await call.answer()
+
 
 
 @router.callback_query(F.data.startswith("admin_user_"))
@@ -57,7 +77,9 @@ async def user_profile(call: CallbackQuery):
         call.data.replace("admin_user_", "")
     )
 
+
     user = get_user(user_id)
+
 
     if not user:
         await call.answer(
@@ -65,6 +87,7 @@ async def user_profile(call: CallbackQuery):
             show_alert=True
         )
         return
+
 
 
     text = (
@@ -103,7 +126,14 @@ async def user_profile(call: CallbackQuery):
     )
 
 
-    await call.message.edit_text(
-        text,
-        reply_markup=keyboard
-    )
+    try:
+        await call.message.edit_text(
+            text,
+            reply_markup=keyboard
+        )
+    except TelegramBadRequest as e:
+        if "message is not modified" not in str(e):
+            raise
+
+
+    await call.answer()
