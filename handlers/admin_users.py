@@ -2,10 +2,19 @@ from aiogram import Router, F
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.exceptions import TelegramBadRequest
 
-from database import get_all_users, get_user
+from database import (
+    get_all_users,
+    get_user,
+    get_subscription_link
+)
+
 
 router = Router()
 
+
+# =====================
+# СПИСОК ПОЛЬЗОВАТЕЛЕЙ
+# =====================
 
 @router.callback_query(F.data == "admin_users")
 async def show_users(call: CallbackQuery):
@@ -70,6 +79,10 @@ async def show_users(call: CallbackQuery):
 
 
 
+# =====================
+# ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ
+# =====================
+
 @router.callback_query(F.data.startswith("admin_user_"))
 async def user_profile(call: CallbackQuery):
 
@@ -89,8 +102,9 @@ async def user_profile(call: CallbackQuery):
         return
 
 
-
+    # берём настоящую ссылку из базы
     link = get_subscription_link(user_id)
+
 
     text = (
         f"👤 Пользователь\n\n"
@@ -101,7 +115,7 @@ async def user_profile(call: CallbackQuery):
         f"🔗 Подписка:\n"
         f"{link or 'нет'}\n\n"
         f"📊 Статус: 🟢 Активен"
-   )
+    )
 
 
     keyboard = InlineKeyboardMarkup(
@@ -133,6 +147,7 @@ async def user_profile(call: CallbackQuery):
             text,
             reply_markup=keyboard
         )
+
     except TelegramBadRequest as e:
         if "message is not modified" not in str(e):
             raise
