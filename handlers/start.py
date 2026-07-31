@@ -34,6 +34,7 @@ from github_update import (
 router = Router()
 
 
+
 # =====================
 # START
 # =====================
@@ -52,20 +53,20 @@ async def start(message: Message):
 
 
     # =====================
-    # ПРОВЕРКА УСЛОВИЙ
+    # ДОКУМЕНТЫ
     # =====================
 
     if not has_accepted_terms(user_id):
 
         await message.answer(
 """
-☂️ ixxy vpn
+☂️ ixxy VPN
 
 
-Перед использованием сервиса необходимо ознакомиться с документами.
+Перед использованием сервиса необходимо принять условия.
 
 
-После ознакомления нажмите кнопку:
+После ознакомления нажмите:
 ✅ Принимаю
 """,
             reply_markup=accept_terms_keyboard()
@@ -75,10 +76,15 @@ async def start(message: Message):
 
 
 
-    link = get_subscription_link(user_id)
+    # =====================
+    # ССЫЛКА
+    # =====================
+
+    link = get_subscription_link(
+        user_id
+    )
 
 
-    # если файла ещё нет
     if not link:
 
         link = create_user_subscription(
@@ -103,14 +109,10 @@ async def start(message: Message):
 
     if user:
 
-        subscription = user[3]
         until = user[4]
 
 
-        if subscription in (
-            "vip",
-            "trial"
-        ) and until:
+        if until:
 
             try:
 
@@ -122,11 +124,11 @@ async def start(message: Message):
 
                 if date >= datetime.now():
 
-                    status = "✅ Активна"
+                    status = "🟢 Активна"
 
                 else:
 
-                    status = "⛔ Истекла"
+                    status = "🔴 Истекла"
 
 
             except:
@@ -157,6 +159,8 @@ f"""
 
 
 
+
+
 # =====================
 # ПРИНЯТИЕ УСЛОВИЙ
 # =====================
@@ -164,28 +168,51 @@ f"""
 @router.callback_query(
     F.data == "accept_terms"
 )
-async def accept(callback: CallbackQuery):
+async def accept(
+    callback: CallbackQuery
+):
+
+    user_id = callback.from_user.id
+
 
     accept_terms(
-        callback.from_user.id
+        user_id
     )
 
 
     await callback.message.delete()
 
 
+    link = create_user_subscription(
+        user_id
+    )
+
+
+    save_subscription_link(
+        user_id,
+        link
+    )
+
+
     await callback.message.answer(
-"""
+f"""
 ✅ Условия приняты!
 
 
-Добро пожаловать в ixxy ☂️
+☂️ Добро пожаловать в ixxy.
+
+
+🔗 Ваша ссылка:
+
+{link}
 """,
         reply_markup=main_menu()
     )
 
 
     await callback.answer()
+
+
 
 
 
@@ -200,12 +227,14 @@ async def buy(message: Message):
 
     await message.answer(
 """
-☂️ ixxy vpn
+☂️ ixxy VPN
 
 Выберите способ оплаты:
 """,
         reply_markup=payment_method_keyboard()
     )
+
+
 
 
 
@@ -216,11 +245,13 @@ async def buy(message: Message):
 @router.callback_query(
     F.data == "pay_stars"
 )
-async def stars(callback: CallbackQuery):
+async def stars(
+    callback: CallbackQuery
+):
 
     await callback.message.answer(
 """
-⭐ Оплата Telegram Stars
+⭐ Telegram Stars
 
 
 Выберите срок:
@@ -228,23 +259,26 @@ async def stars(callback: CallbackQuery):
         reply_markup=stars_buy_keyboard()
     )
 
-
     await callback.answer()
 
 
 
+
+
 # =====================
-# ПЕРЕВОД
+# СБП
 # =====================
 
 @router.callback_query(
     F.data == "pay_sbp"
 )
-async def sbp(callback: CallbackQuery):
+async def sbp(
+    callback: CallbackQuery
+):
 
     await callback.message.answer(
 """
-💳 Оплата по СБП
+💳 Оплата СБП
 
 
 Выберите срок:
@@ -252,8 +286,9 @@ async def sbp(callback: CallbackQuery):
         reply_markup=sbp_buy_keyboard()
     )
 
-
     await callback.answer()
+
+
 
 
 
@@ -264,7 +299,9 @@ async def sbp(callback: CallbackQuery):
 @router.message(
     F.text == "🎁 Пробный период"
 )
-async def trial(message: Message):
+async def trial(
+    message: Message
+):
 
     user_id = message.from_user.id
 
@@ -274,7 +311,6 @@ async def trial(message: Message):
         message.from_user.username,
         message.from_user.first_name
     )
-
 
 
     if check_trial(user_id):
@@ -293,19 +329,16 @@ async def trial(message: Message):
     )
 
 
-
     activate_trial(
         user_id,
         link
     )
 
 
-
     save_subscription_link(
         user_id,
         link
     )
-
 
 
     await message.answer(
@@ -317,14 +350,21 @@ f"""
 3 дня
 
 
+📅 До:
+3 дня с момента активации
+
+
 🔗 Ваша подписка:
 
 {link}
 
 
 📲 Добавьте её в Happ.
-"""
+""",
+        reply_markup=main_menu()
     )
+
+
 
 
 
@@ -335,18 +375,20 @@ f"""
 @router.message(
     F.text == "📄 Документы"
 )
-async def documents(message: Message):
+async def documents(
+    message: Message
+):
 
     await message.answer(
 """
 📄 Документы ☂️ ixxy:
 
 
-Все документы находятся на сайте:
-
 https://bdtvyz76b6-blip.github.io/managerorlvpnsite/
 """
     )
+
+
 
 
 
@@ -357,7 +399,9 @@ https://bdtvyz76b6-blip.github.io/managerorlvpnsite/
 @router.message(
     F.text == "💬 Поддержка"
 )
-async def support(message: Message):
+async def support(
+    message: Message
+):
 
     await message.answer(
 f"""
