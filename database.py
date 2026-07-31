@@ -960,3 +960,5 @@ def extend_subscription(user_id, days):
 
     conn.commit()
     conn.close()
+
+    return new_date
