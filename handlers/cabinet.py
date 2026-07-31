@@ -17,7 +17,6 @@ from keyboards import (
 router = Router()
 
 
-
 # =====================
 # ЛИЧНЫЙ КАБИНЕТ
 # =====================
@@ -27,9 +26,7 @@ router = Router()
 )
 async def cabinet(message: Message):
 
-    await show_cabinet(
-        message
-    )
+    await show_cabinet(message)
 
 
 
@@ -38,7 +35,7 @@ async def show_cabinet(message: Message):
     user_id = message.from_user.id
 
 
-    # проверяем срок подписки
+    # проверяем срок
     check_user_subscription(
         user_id
     )
@@ -60,16 +57,18 @@ async def show_cabinet(message: Message):
 
 
     subscription = user[3]
-
     until = user[4]
-
     link = user[5]
 
 
 
+    # =====================
+    # ТАРИФ
+    # =====================
+
     if subscription == "vip":
 
-        tariff = "☂️ ixxy vip"
+        tariff = "👑 ixxy VIP"
 
 
     elif subscription == "trial":
@@ -79,11 +78,18 @@ async def show_cabinet(message: Message):
 
     else:
 
-        tariff = "Нет подписки"
+        tariff = "❌ Нет подписки"
 
 
 
-    # дата окончания
+    # =====================
+    # ДАТА И СТАТУС
+    # =====================
+
+    status = "❌ Не активна"
+    until_text = "—"
+    days = 0
+
 
     if until:
 
@@ -106,88 +112,70 @@ async def show_cabinet(message: Message):
 
 
 
-            if days < 0:
+            if days >= 0:
 
-                status = "❌ Истекла"
-
-                days = 0
+                status = "🟢 Активна"
 
 
             else:
 
-                status = "✅ Активна"
+                status = "🔴 Истекла"
+                days = 0
 
 
 
         except:
 
-            until_text = "—"
-
-            status = "❌ Не активна"
-
-            days = 0
+            pass
 
 
 
-    else:
+    # =====================
+    # ТЕКСТ
+    # =====================
 
-        until_text = "—"
+    text = f"""
+☂️ ixxy VPN
 
-        status = "❌ Не активна"
-
-        days = 0
-
-
-
-
-
-    await message.answer(
-
-f"""
 👤 Личный кабинет
 
+━━━━━━━━━━━━━━
 
 🆔 ID:
-{user_id}
+<code>{user_id}</code>
 
-
-🎫 Подписка:
+🎫 Тариф:
 {tariff}
 
+📊 Статус:
+{status}
 
 📅 Действует до:
 {until_text}
 
-
-📡 Статус:
-{status}
-
-
-🌍 Серверы:
-Все доступные серверы тарифа
-
-
-📱 Устройства:
-Без ограничений
-
-
 ⏳ Осталось:
 {days} дней
 
+━━━━━━━━━━━━━━
+
+🌍 Серверы:
+Все серверы ixxy
+
+📱 Устройства:
+∞ Без ограничений
 
 🔗 Подписка:
-{"Доступна кнопка ниже" if link else "Нет активной подписки"}
+{"✅ Доступна" if link else "❌ Нет ссылки"}
+
+━━━━━━━━━━━━━━
+"""
 
 
-📄 Документы:
-Пользовательское соглашение и политика конфиденциальности доступны на сайте.
-""",
-
-        reply_markup=cabinet_keyboard()
-
+    await message.answer(
+        text,
+        reply_markup=cabinet_keyboard(),
+        parse_mode="HTML"
     )
-
-
 
 
 
@@ -204,15 +192,11 @@ async def refresh(
 
     await callback.message.delete()
 
-
     await show_cabinet(
         callback.message
     )
 
-
     await callback.answer()
-
-
 
 
 
@@ -235,20 +219,19 @@ async def get_link(
     if not user or not user[5]:
 
         await callback.message.answer(
-            "❌ У вас нет активной подписки."
+            "❌ Ссылка отсутствует."
         )
-
 
     else:
 
         await callback.message.answer(
-
 f"""
-🔗 Ваша подписка:
+🔗 Ваша подписка ixxy:
 
 {user[5]}
-"""
 
+📲 Добавьте её в Happ.
+"""
         )
 
 
@@ -256,10 +239,8 @@ f"""
 
 
 
-
-
 # =====================
-# ПРОДЛИТЬ
+# ПРОДЛЕНИЕ
 # =====================
 
 @router.callback_query(
@@ -271,7 +252,7 @@ async def renew(
 
     await callback.message.answer(
 """
-🎫 Продление подписки
+☂️ Продление ixxy VPN
 
 Выберите способ оплаты:
 """,
