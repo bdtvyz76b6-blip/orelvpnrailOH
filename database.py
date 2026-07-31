@@ -396,7 +396,7 @@ def activate_trial(user_id, link):
 
         """,
         (
-            "🎁 Пробный период",
+            "trial",
             date,
             link,
             user_id
@@ -946,6 +946,7 @@ def extend_subscription(user_id, days):
         UPDATE users
 
         SET
+        subscription='vip',
         subscription_until=?
 
         WHERE user_id=?
