@@ -3,10 +3,12 @@ from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardBut
 from aiogram.exceptions import TelegramBadRequest
 
 from database import extend_subscription, get_user
+from github_update import update_subscription_file
+
+from datetime import datetime
 
 
 router = Router()
-
 
 
 # =====================
@@ -25,7 +27,6 @@ async def choose_extend(call: CallbackQuery):
             ""
         )
     )
-
 
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -68,7 +69,6 @@ async def choose_extend(call: CallbackQuery):
         ]
     )
 
-
     try:
 
         await call.message.edit_text(
@@ -81,11 +81,7 @@ async def choose_extend(call: CallbackQuery):
         if "message is not modified" not in str(e):
             raise
 
-
     await call.answer()
-
-
-
 
 
 # =====================
@@ -97,37 +93,51 @@ async def choose_extend(call: CallbackQuery):
 )
 async def extend_days(call: CallbackQuery):
 
-
     parts = call.data.split("_")
 
+    user_id = int(parts[2])
+    days = int(parts[3])
 
-    user_id = int(
-        parts[2]
-    )
-
-
-    days = int(
-        parts[3]
-    )
-
-
-    extend_subscription(
+    # Продлеваем в базе
+    new_date = extend_subscription(
         user_id,
         days
     )
 
+    # Обновляем файл GitHub
+    try:
 
-    user = get_user(
-        user_id
-    )
+        github_date = datetime.strptime(
+            new_date,
+            "%Y-%m-%d"
+        ).strftime("%d.%m.%Y")
 
+        update_subscription_file(
+            user_id,
+            github_date
+        )
+
+    except Exception as e:
+
+        print("GitHub update error:", e)
+
+    user = get_user(user_id)
 
     await call.message.edit_text(
         f"✅ Подписка продлена!\n\n"
         f"👤 Пользователь: @{user[1] or 'нет'}\n"
         f"⏳ Добавлено: {days} дней\n"
-        f"📅 Новый срок: {user[4]}"
+        f"📅 Новый срок: {new_date}",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="⬅️ К пользователю",
+                        callback_data=f"admin_user_{user_id}"
+                    )
+                ]
+            ]
+        )
     )
 
-
-    await call.answer()
+    await call.answer("✅ Подписка продлена")
