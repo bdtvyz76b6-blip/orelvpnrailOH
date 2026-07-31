@@ -200,3 +200,21 @@ def expire_subscription(user_id):
         path,
         EXPIRED_TEMPLATE
     )
+    
+    
+    
+    # =====================
+# ОБНОВЛЕНИЕ ФАЙЛА ПОСЛЕ ПРОДЛЕНИЯ
+# =====================
+
+def update_subscription_file(user_id, date):
+
+    path = f"users/{user_id}.txt"
+
+
+    update_file(
+        path,
+        ACTIVE_TEMPLATE.format(
+            date=date
+        )
+    )
