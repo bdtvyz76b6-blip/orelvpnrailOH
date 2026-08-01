@@ -1,6 +1,6 @@
-
 import asyncio
 import threading
+import os
 
 from flask import Flask, request
 
@@ -10,21 +10,27 @@ from config import BOT_TOKEN
 
 from database import (
     create_table,
-    check_expired_subscriptions
+    check_expired_subscriptions,
+    extend_subscription
 )
 
-from github_update import create_subscription
+from github_update import (
+    update_subscription_file
+)
 
-from database import save_subscription_link
+
+
+# =====================
+# WEBHOOK / API
+# =====================
+
+app = Flask(__name__)
 
 
 
 # =====================
 # CASHeRA WEBHOOK
 # =====================
-
-app = Flask(__name__)
-
 
 @app.route(
     "/webhook/cashera",
@@ -47,11 +53,110 @@ def cashera():
 
 
 
+
+# =====================
+# IXXY CODES API
+# =====================
+
+@app.route(
+    "/add-days",
+    methods=["POST"]
+)
+def add_days_api():
+
+    data = request.json
+
+
+    if not data:
+
+        return {
+            "status": "error",
+            "message": "no json"
+        }, 400
+
+
+
+    user_id = data.get(
+        "user_id"
+    )
+
+    days = data.get(
+        "days"
+    )
+
+
+
+    if not user_id or not days:
+
+        return {
+            "status": "error",
+            "message": "missing data"
+        }, 400
+
+
+
+
+    try:
+
+        days = int(days)
+
+
+
+        new_date = extend_subscription(
+            user_id,
+            days
+        )
+
+
+
+        update_subscription_file(
+            user_id,
+            new_date
+        )
+
+
+
+        print(
+            f"☂️ ixxycodes +{days} дней пользователю {user_id}"
+        )
+
+
+
+        return {
+            "status": "ok",
+            "date": new_date
+        }
+
+
+
+    except Exception as e:
+
+
+        print(
+            "❌ ADD DAYS ERROR:",
+            e
+        )
+
+
+        return {
+            "status": "error",
+            "message": str(e)
+        }, 500
+
+
+
+
+
 def run_webhook():
 
     app.run(
         host="0.0.0.0",
-        port=8080
+        port=int(
+            os.getenv(
+                "PORT",
+                8080
+            )
+        )
     )
 
 
@@ -71,8 +176,9 @@ from handlers.stars_payment import router as stars_router
 from handlers.sbp_payment import router as sbp_router
 
 
+
 # =====================
-# ADMIN HANDLERS
+# ADMIN
 # =====================
 
 from handlers.admin_panel import router as admin_router
@@ -91,7 +197,6 @@ from handlers.admin_broadcast import router as admin_broadcast_router
 
 from handlers.admin_settings import router as admin_settings_router
 
-# ПРОДЛЕНИЕ ПОДПИСКИ
 from handlers.admin_extend import router as admin_extend_router
 
 
@@ -169,9 +274,6 @@ dp.include_router(
     admin_settings_router
 )
 
-
-# ПРОДЛЕНИЕ
-
 dp.include_router(
     admin_extend_router
 )
@@ -192,9 +294,11 @@ async def main():
     check_expired_subscriptions()
 
 
+
     print(
         "☂️ ixxy vpn бот запущен"
     )
+
 
 
     try:
