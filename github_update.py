@@ -62,7 +62,7 @@ vless://2c634977-584e-4e1f-b501-1b70c77a6743@78.159.245.32:28474?type=tcp&securi
 
 vless://d82891a6-48da-4b5a-bc50-3d861478be2a@91.185.83.94:4443?type=tcp&security=reality&pbk=7nfL5nnISA027dQ-thHwql8JquJwH09zZJrYrw994XU&fp=firefox&sni=5post-gate.x5.ru&flow=xtls-rprx-vision#🇳🇱 нидерланды-3
 
-vless://65761043-f5c1-4e7b-8c16-b72c7a3fa4b7@176.109.85.119:443?encryption=none&security=reality&sni=yandex.ru&fp=firefox&pbk=r6LKP3g2W5ruKICTDfH8rwM1PbMjdcgHU7cG6jppxTs&sid=27e53bbcab7593d7&spx=%2F&type=tcp&flow=xtls-rprx-vision#🇸🇨 LTE | обход б/с №1
+vless://f996ecb9-4500-4251-8178-2fa6ae68ba31@91.185.83.114:443?type=tcp&security=reality&pbk=E96O40ypyPplb8XGZ9eYMtTiaATD8jlyhIgc3DOZr0o&fp=firefox&sni=5post-gate.x5.ru&flow=xtls-rprx-vision#🇸🇨 LTE | №1
 
 vless://00000000-0000-0000-0000-000000000000@expired.invalid:443?type=tcp&security=reality&sni=expired.invalid&fp=chrome&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&sid=&flow=xtls-rprx-vision#обходы б/с и wifi ⬆️
 """
