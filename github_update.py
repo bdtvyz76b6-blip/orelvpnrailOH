@@ -53,18 +53,20 @@ ACTIVE_TEMPLATE = """
 
 #profile-update-interval: 1
 
-#announce: Подписка активна до {date}
+#announce: ‼️ Подписка активна до 10.08.2026 ‼️
+                ☂️ - работает Gemini
+                🚀 - поток до 10 гб/сек
+                 ⚡️ - универсальный сервер. LTE и WiFi
 
+vless://8b706aff-ca60-4632-9658-aeb5c0f48561@84.32.102.222:443?type=tcp&security=reality&pbk=TFT7MPZtAMZ7sQgoNlxK3dIX1j3I1oSyzl4fMXyk6Ww&fp=firefox&sni=nlch.dgtserv.xyz&sid=07494b3ed9ed2128&flow=xtls-rprx-vision#🇳🇱 Нидерланды 🚀
 
-vless://8b706aff-ca60-4632-9658-aeb5c0f48561@84.32.102.222:443?type=tcp&security=reality&pbk=TFT7MPZtAMZ7sQgoNlxK3dIX1j3I1oSyzl4fMXyk6Ww&fp=firefox&sni=nlch.dgtserv.xyz&sid=07494b3ed9ed2128&flow=xtls-rprx-vision#🇳🇱 Нидерланды
+vless://04b9e828-43ed-4faf-8952-41069ec08355@217.60.193.2:443?encryption=none&security=tls&sni=ddc-akn.astralweb.tech&fp=firefox&alpn=h2&type=tcp#🇳🇱 (the best) Нидерланды-2 ☂️ 🚀 📡
 
-vless://2c634977-584e-4e1f-b501-1b70c77a6743@78.159.245.32:28474?type=tcp&security=tls&sni=secure.furrycdn.net&fp=chrome&flow=xtls-rprx-vision#🇳🇱 Нидерланды-2 (можно LTE)
-
-vless://d82891a6-48da-4b5a-bc50-3d861478be2a@91.185.83.94:4443?type=tcp&security=reality&pbk=7nfL5nnISA027dQ-thHwql8JquJwH09zZJrYrw994XU&fp=firefox&sni=5post-gate.x5.ru&flow=xtls-rprx-vision#🇳🇱 Нидерланды-3
+vless://94d2d711-76e5-4d82-a3c9-4f06fd5558c8@207.2.123.28:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=sa.ch-moltisanti.ru&fp=firefox&pbk=zb1esVBjrdlitl7Z_YkRi44kC0NXVvF5U17LAXW6fDQ&sid=825d392c67e4&type=tcp#🇺🇸 США ☂️
 
 vless://eb78e1f0-d921-4ca9-a889-261fcc5a0547@78.159.250.214:443?type=tcp&security=reality&pbk=drY21DHNOr6ezJLA2B10mzTExeJ9-gVBfTBNLwVBtWI&fp=chrome&sni=qq.utiltools.ru&sid=&flow=xtls-rprx-vision#🇷🇺 При глушилках 🚀
 
-vless://00000000-0000-0000-0000-000000000000@expired.invalid:443?type=tcp&security=reality&sni=expired.invalid&fp=chrome&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&sid=&flow=xtls-rprx-vision#🚀 Обходы б/с и wifi ⬆️
+vless://00000000-0000-0000-0000-000000000000@expired.invalid:443?type=tcp&security=reality&sni=expired.invalid&fp=chrome&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&sid=&flow=xtls-rprx-vision#Обходы б/с и wifi ⬆️
 """
 
 
