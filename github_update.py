@@ -159,7 +159,8 @@ def create_subscription(user_id, days=30):
     update_file(
         path,
         ACTIVE_TEMPLATE.format(
-            date=expire_date
+            date=expire_date,
+            user_id=user_id
         )
     )
 
@@ -213,6 +214,7 @@ def update_subscription_file(user_id, date):
     update_file(
         path,
         ACTIVE_TEMPLATE.format(
-            date=date
+            date=date,
+            user_id=user_id
         )
     )
