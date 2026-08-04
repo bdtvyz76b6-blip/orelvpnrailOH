@@ -53,7 +53,10 @@ ACTIVE_TEMPLATE = """
 
 #profile-update-interval: 1
 
-#announce: ‼️ Подписка активна до {date} ‼️    🚀 - Универсальный сервер. Для LTE и WiFi.
+#announce: ‼️ Подписка активна до {date} ‼️
+🚀 На многих серверах работает Gemini
+📡 Наш VPN обходит любые глушилки
+🆔 Ваш ID: {user_id}
 
 vless://8b706aff-ca60-4632-9658-aeb5c0f48561@84.32.102.222:443?type=tcp&security=reality&pbk=TFT7MPZtAMZ7sQgoNlxK3dIX1j3I1oSyzl4fMXyk6Ww&fp=firefox&sni=nlch.dgtserv.xyz&sid=07494b3ed9ed2128&flow=xtls-rprx-vision#🇳🇱 Нидерланды
 
