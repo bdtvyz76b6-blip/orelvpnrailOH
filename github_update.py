@@ -26,29 +26,70 @@ BRANCH = "main"
 
 
 # =====================
-# ОБЩИЙ СПИСОК СЕРВЕРОВ
+# ФАЙЛ С СЕРВЕРАМИ
 # =====================
 
-SERVERS = """
-vless://8b706aff-ca60-4632-9658-aeb5c0f48561@84.32.102.222:443?type=tcp&security=reality&pbk=TFT7MPZtAMZ7sQgoNlxK3dIX1j3I1oSyzl4fMXyk6Ww&fp=firefox&sni=nlch.dgtserv.xyz&sid=07494b3ed9ed2128&flow=xtls-rprx-vision#🇳🇱 Нидерланды #1
-
-vless://65761043-f5c1-4e7b-8c16-b72c7a3fa4b7@nl.superbuba.top:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=nl.superbuba.top&fp=firefox&pbk=z37XIezsPyfMgmdXyFd9qT4C4maDAs1OcRt-wfyrXVo&sid=9c2378562188c3cb#🇳🇱 Нидерланды #2
-
-vless://65761043-f5c1-4e7b-8c16-b72c7a3fa4b7@it.superbuba.top:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=it.superbuba.top&fp=firefox&pbk=G2U8_BvRAgcOw0sX8u_0yYdVAlD8CWLSi-uYjvH07hw&sid=4fa44664f6a566d3#🇮🇹 Италия #1
-
-vless://65761043-f5c1-4e7b-8c16-b72c7a3fa4b7@mur.burladuck.com:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=www.vk.com&fp=firefox&pbk=nkpZyXHfG7nhEh1vjBjEDV-Tn7UhHEb5iN9iA8gc9VE&sid=c31188450fe50718#🇷🇺 При глушилках #1
-
-vless://65761043-f5c1-4e7b-8c16-b72c7a3fa4b7@185.229.9.236:49005?encryption=none&flow=xtls-rprx-vision&security=reality&sni=max.ru&fp=firefox&pbk=dzjhpiDcvFBRzIODtrUVADf24qFE-636IVIdEof0XFQ&sid=512acc0133720b9e#🇷🇺 При глушилках #2
-
-vless://00000000-0000-0000-0000-000000000000@expired.invalid:443?type=tcp&security=reality&sni=expired.invalid&fp=chrome&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&sid=&flow=xtls-rprx-vision#Обходы б/с и wifi ⬆️
-""".strip()
+SERVERS_FILE = "servers.txt"
 
 
 # =====================
-# ШАБЛОНЫ
+# ЗАГРУЗКА СЕРВЕРОВ
 # =====================
 
-NEW_USER_TEMPLATE = f"""
+def load_servers():
+
+    url = (
+        f"https://raw.githubusercontent.com/"
+        f"{OWNER}/{REPO}/{BRANCH}/{SERVERS_FILE}"
+    )
+
+    response = requests.get(
+        url,
+        timeout=20
+    )
+
+    response.raise_for_status()
+
+    servers = response.text.strip()
+
+    if not servers:
+
+        raise Exception(
+            "❌ servers.txt пустой"
+        )
+
+    return servers
+
+
+# =====================
+# GITHUB HEADERS
+# =====================
+
+def github_headers():
+
+    return {
+        "Authorization": f"Bearer {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github+json"
+    }
+
+
+# =====================
+# GITHUB URL
+# =====================
+
+def github_url(path):
+
+    return (
+        f"https://api.github.com/repos/"
+        f"{OWNER}/{REPO}/contents/{path}"
+    )
+
+
+# =====================
+# ШАБЛОН НОВОГО ПОЛЬЗОВАТЕЛЯ
+# =====================
+
+NEW_USER_TEMPLATE = """
 #profile-title: ☂️ ixxy vpn
 
 #profile-update-interval: 1
@@ -58,6 +99,10 @@ NEW_USER_TEMPLATE = f"""
 vless://00000000-0000-0000-0000-000000000000@expired.invalid:443?type=tcp&security=reality&sni=expired.invalid&fp=chrome&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&sid=&flow=xtls-rprx-vision#⛔ Активируйте подписку
 """.strip()
 
+
+# =====================
+# ШАБЛОН ПРОСРОЧКИ
+# =====================
 
 EXPIRED_TEMPLATE = """
 #profile-title: ⛔ ixxy vpn
@@ -71,27 +116,7 @@ vless://00000000-0000-0000-0000-000000000000@expired.invalid:443?type=tcp&securi
 
 
 # =====================
-# GITHUB HELPERS
-# =====================
-
-def github_headers():
-
-    return {
-        "Authorization": f"Bearer {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github+json"
-    }
-
-
-def github_url(path):
-
-    return (
-        f"https://api.github.com/repos/"
-        f"{OWNER}/{REPO}/contents/{path}"
-    )
-
-
-# =====================
-# ОБНОВЛЕНИЕ ФАЙЛА
+# ОБНОВЛЕНИЕ ФАЙЛА GITHUB
 # =====================
 
 def update_file(path, content):
@@ -106,12 +131,16 @@ def update_file(path, content):
 
     data = {
         "message": "Update ixxy VPN subscription",
+
         "content": base64.b64encode(
             content.encode("utf-8")
         ).decode("utf-8"),
+
         "branch": BRANCH
     }
 
+    # Если файл уже существует —
+    # передаём SHA для обновления
     if old.status_code == 200:
 
         data["sha"] = old.json()["sha"]
@@ -147,7 +176,8 @@ def get_subscription_link(user_id):
 
 
 # =====================
-# НОВЫЙ ПОЛЬЗОВАТЕЛЬ
+# СОЗДАНИЕ ФАЙЛА НОВОГО
+# ПОЛЬЗОВАТЕЛЯ
 # =====================
 
 def create_user_subscription(user_id):
@@ -159,7 +189,9 @@ def create_user_subscription(user_id):
         NEW_USER_TEMPLATE
     )
 
-    link = get_subscription_link(user_id)
+    link = get_subscription_link(
+        user_id
+    )
 
     save_subscription_link(
         user_id,
@@ -170,15 +202,22 @@ def create_user_subscription(user_id):
 
 
 # =====================
-# АКТИВНАЯ ПОДПИСКА
+# СОЗДАНИЕ АКТИВНОЙ
+# ПОДПИСКИ
 # =====================
 
-def create_subscription(user_id, days=30):
+def create_subscription(
+    user_id,
+    days=30
+):
 
     expire_date = (
         datetime.now()
-        + timedelta(days=days)
-    ).strftime("%d.%m.%Y")
+        +
+        timedelta(days=days)
+    ).strftime(
+        "%d.%m.%Y"
+    )
 
     return activate_subscription_file(
         user_id,
@@ -186,7 +225,17 @@ def create_subscription(user_id, days=30):
     )
 
 
-def activate_subscription_file(user_id, date):
+# =====================
+# ОБНОВЛЕНИЕ АКТИВНОГО
+# ФАЙЛА
+# =====================
+
+def activate_subscription_file(
+    user_id,
+    date
+):
+
+    servers = load_servers()
 
     path = f"users/{user_id}.txt"
 
@@ -198,7 +247,7 @@ def activate_subscription_file(user_id, date):
 #announce: ‼️ Подписка активна до {date} ‼️
 🆔 Ваш ID: {user_id}
 
-{SERVERS}
+{servers}
 """.strip()
 
     update_file(
@@ -206,7 +255,9 @@ def activate_subscription_file(user_id, date):
         content
     )
 
-    link = get_subscription_link(user_id)
+    link = get_subscription_link(
+        user_id
+    )
 
     save_subscription_link(
         user_id,
@@ -217,10 +268,13 @@ def activate_subscription_file(user_id, date):
 
 
 # =====================
-# АКТИВАЦИЯ
+# АКТИВАЦИЯ ПОДПИСКИ
 # =====================
 
-def activate_user_subscription(user_id, days):
+def activate_user_subscription(
+    user_id,
+    days
+):
 
     return create_subscription(
         user_id,
@@ -229,14 +283,14 @@ def activate_user_subscription(user_id, days):
 
 
 # =====================
-# ПРОДЛЕНИЕ
+# ОБНОВЛЕНИЕ ПОСЛЕ
+# ПРОДЛЕНИЯ
 # =====================
 
-def update_subscription_file(user_id, date):
-
-    # Если дата пришла из database.py
-    # в формате YYYY-MM-DD,
-    # превращаем её в DD.MM.YYYY.
+def update_subscription_file(
+    user_id,
+    date
+):
 
     try:
 
@@ -260,10 +314,12 @@ def update_subscription_file(user_id, date):
 
 
 # =====================
-# ПРОСРОЧКА
+# ИСТЕЧЕНИЕ ПОДПИСКИ
 # =====================
 
-def expire_subscription(user_id):
+def expire_subscription(
+    user_id
+):
 
     path = f"users/{user_id}.txt"
 
@@ -275,29 +331,41 @@ def expire_subscription(user_id):
 
 # =====================
 # ОБНОВИТЬ ВСЕХ АКТИВНЫХ
+# ПОЛЬЗОВАТЕЛЕЙ
 # =====================
 
 def sync_all_active_users():
+
+    print(
+        "🔄 Начинаю синхронизацию серверов..."
+    )
 
     users = get_all_users()
 
     updated = 0
     skipped = 0
+    errors = 0
 
     for user in users:
 
+        user_id = user[0]
+
         try:
 
-            user_id = user[0]
             subscription = user[3]
             subscription_until = user[4]
 
-            # Только активные подписки
-            if subscription not in ("vip", "trial"):
+            # Только активные тарифы
+            if subscription not in (
+                "vip",
+                "trial"
+            ):
+
                 skipped += 1
                 continue
 
             if not subscription_until:
+
                 skipped += 1
                 continue
 
@@ -311,11 +379,16 @@ def sync_all_active_users():
 
             except:
 
+                print(
+                    f"⚠️ Неверная дата у {user_id}"
+                )
+
                 skipped += 1
                 continue
 
-            # Если уже истёк — не трогаем
+            # Если подписка закончилась
             if expire_date <= datetime.now():
+
                 skipped += 1
                 continue
 
@@ -323,6 +396,7 @@ def sync_all_active_users():
                 "%d.%m.%Y"
             )
 
+            # Обновляем файл
             activate_subscription_file(
                 user_id,
                 display_date
@@ -330,16 +404,40 @@ def sync_all_active_users():
 
             updated += 1
 
+            print(
+                f"✅ {user_id} обновлён"
+            )
+
         except Exception as e:
 
+            errors += 1
+
             print(
-                f"❌ Ошибка обновления пользователя "
-                f"{user_id}: {e}"
+                f"❌ Ошибка {user_id}: {e}"
             )
 
     print(
-        f"☂️ Синхронизация серверов завершена: "
-        f"{updated} обновлено, {skipped} пропущено"
+        "━━━━━━━━━━━━━━━━━━━━"
+    )
+
+    print(
+        f"☂️ Синхронизация завершена"
+    )
+
+    print(
+        f"✅ Обновлено: {updated}"
+    )
+
+    print(
+        f"⏭ Пропущено: {skipped}"
+    )
+
+    print(
+        f"❌ Ошибок: {errors}"
+    )
+
+    print(
+        "━━━━━━━━━━━━━━━━━━━━"
     )
 
     return updated
