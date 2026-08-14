@@ -3,7 +3,6 @@ import threading
 import os
 
 from flask import Flask, request
-
 from aiogram import Bot, Dispatcher
 
 from config import BOT_TOKEN
@@ -15,7 +14,8 @@ from database import (
 )
 
 from github_update import (
-    update_subscription_file
+    update_subscription_file,
+    sync_all_active_users
 )
 
 from subscription_checker import (
@@ -61,7 +61,6 @@ def add_days_api():
     data = request.json
 
     if not data:
-
         return {
             "status": "error",
             "message": "no json"
@@ -71,7 +70,6 @@ def add_days_api():
     days = data.get("days")
 
     if not user_id or not days:
-
         return {
             "status": "error",
             "message": "missing data"
@@ -79,6 +77,7 @@ def add_days_api():
 
     try:
 
+        user_id = int(user_id)
         days = int(days)
 
         new_date = extend_subscription(
@@ -86,6 +85,7 @@ def add_days_api():
             days
         )
 
+        # Обновляем персональный файл
         update_subscription_file(
             user_id,
             new_date
@@ -113,16 +113,22 @@ def add_days_api():
         }, 500
 
 
+# =====================
+# FLASK
+# =====================
+
 def run_webhook():
+
+    port = int(
+        os.getenv(
+            "PORT",
+            8080
+        )
+    )
 
     app.run(
         host="0.0.0.0",
-        port=int(
-            os.getenv(
-                "PORT",
-                8080
-            )
-        )
+        port=port
     )
 
 
@@ -166,22 +172,62 @@ dp = Dispatcher()
 # ROUTERS
 # =====================
 
-dp.include_router(start_router)
-dp.include_router(cabinet_router)
-dp.include_router(stars_router)
-dp.include_router(sbp_router)
+dp.include_router(
+    start_router
+)
 
-# ADMIN
+dp.include_router(
+    cabinet_router
+)
 
-dp.include_router(admin_router)
-dp.include_router(admin_payments_router)
-dp.include_router(admin_users_router)
-dp.include_router(admin_search_router)
-dp.include_router(admin_promos_router)
-dp.include_router(admin_stats_router)
-dp.include_router(admin_broadcast_router)
-dp.include_router(admin_settings_router)
-dp.include_router(admin_extend_router)
+dp.include_router(
+    stars_router
+)
+
+dp.include_router(
+    sbp_router
+)
+
+
+# =====================
+# ADMIN ROUTERS
+# =====================
+
+dp.include_router(
+    admin_router
+)
+
+dp.include_router(
+    admin_payments_router
+)
+
+dp.include_router(
+    admin_users_router
+)
+
+dp.include_router(
+    admin_search_router
+)
+
+dp.include_router(
+    admin_promos_router
+)
+
+dp.include_router(
+    admin_stats_router
+)
+
+dp.include_router(
+    admin_broadcast_router
+)
+
+dp.include_router(
+    admin_settings_router
+)
+
+dp.include_router(
+    admin_extend_router
+)
 
 
 # =====================
@@ -190,20 +236,81 @@ dp.include_router(admin_extend_router)
 
 async def main():
 
-    # Создаём таблицы на Volume
+    print("☂️ Запуск ixxy VPN...")
+
+
+    # =====================
+    # DATABASE
+    # =====================
+
     create_table()
 
-    # Разовая проверка при запуске
-    check_expired_subscriptions()
+    print(
+        "💾 База данных инициализирована"
+    )
+
+
+    # =====================
+    # ПРОВЕРКА ПРОСРОЧЕННЫХ
+    # =====================
+
+    try:
+
+        check_expired_subscriptions()
+
+        print(
+            "✅ Просроченные подписки проверены"
+        )
+
+    except Exception as e:
+
+        print(
+            "❌ Ошибка проверки подписок:",
+            e
+        )
+
+
+    # =====================
+    # СИНХРОНИЗАЦИЯ СЕРВЕРОВ
+    # =====================
+
+    try:
+
+        sync_all_active_users()
+
+        print(
+            "✅ Серверы синхронизированы"
+        )
+
+    except Exception as e:
+
+        print(
+            "❌ Ошибка синхронизации серверов:",
+            e
+        )
+
+
+    # =====================
+    # АВТОПРОВЕРКА
+    # =====================
+
+    asyncio.create_task(
+        check_subscriptions(bot)
+    )
+
+    print(
+        "🔄 Автоматическая проверка подписок запущена"
+    )
+
+
+    # =====================
+    # BOT
+    # =====================
 
     print(
         "☂️ ixxy vpn бот запущен"
     )
 
-    # Запускаем автоматическую проверку подписок
-    asyncio.create_task(
-        check_subscriptions(bot)
-    )
 
     try:
 
@@ -222,11 +329,14 @@ async def main():
 
 if __name__ == "__main__":
 
+    # Flask запускаем отдельно
     threading.Thread(
         target=run_webhook,
         daemon=True
     ).start()
 
+
+    # Telegram bot
     asyncio.run(
         main()
     )
