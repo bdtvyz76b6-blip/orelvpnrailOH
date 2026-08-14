@@ -1,24 +1,13 @@
 import asyncio
 
-from datetime import datetime
-
 from database import (
     get_expired_users,
     disable_subscription,
     get_user
 )
 
-from github_update import (
-    expire_subscription
-)
+from github_update import expire_subscription
 
-
-
-
-
-# =====================
-# ПРОВЕРКА ПОДПИСОК
-# =====================
 
 async def check_subscriptions(bot):
 
@@ -26,79 +15,60 @@ async def check_subscriptions(bot):
 
         try:
 
-            expired = get_expired_users()
+            expired_users = get_expired_users()
 
+            for user in expired_users:
 
+                # get_expired_users() возвращает всю строку пользователя
+                user_id = user[0]
 
-            for user_id in expired:
+                current_user = get_user(user_id)
 
-
-                user = get_user(
-                    user_id
-                )
-
-
-                if not user:
-
+                if not current_user:
                     continue
 
+                try:
+                    # Сначала меняем файл на GitHub
+                    expire_subscription(user_id)
 
+                except Exception as e:
+                    print(
+                        f"❌ Не удалось обновить GitHub для {user_id}:",
+                        e
+                    )
+                    continue
 
-                # меняем GitHub файл
-
-                expire_subscription(
-                    user_id
-                )
-
-
-
-                # отключаем в базе
-
-                disable_subscription(
-                    user_id
-                )
-
-
+                # Только если GitHub успешно обновился,
+                # отключаем подписку в базе
+                disable_subscription(user_id)
 
                 try:
 
                     await bot.send_message(
-
                         user_id,
-
-f"""
+                        """
 ⛔ Срок действия подписки закончился.
 
-
 ☂️ ixxy vpn
-
 
 🎫 Продлите подписку,
 чтобы снова получить доступ.
 """
-
                     )
 
+                except Exception as e:
 
-                except:
-
-                    pass
-
-
-
-
+                    print(
+                        f"⚠️ Не удалось отправить уведомление {user_id}:",
+                        e
+                    )
 
         except Exception as e:
 
             print(
-                "Subscription checker error:",
+                "❌ Subscription checker error:",
                 e
             )
 
-
-
-        # проверка раз в час
-
-        await asyncio.sleep(
-            3600
-        )
+        # Проверяем раз в час
+        await asyncio.sleep(3600)
