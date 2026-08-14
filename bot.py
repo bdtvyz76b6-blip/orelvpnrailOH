@@ -61,6 +61,7 @@ def add_days_api():
     data = request.json
 
     if not data:
+
         return {
             "status": "error",
             "message": "no json"
@@ -70,6 +71,7 @@ def add_days_api():
     days = data.get("days")
 
     if not user_id or not days:
+
         return {
             "status": "error",
             "message": "missing data"
@@ -79,6 +81,13 @@ def add_days_api():
 
         user_id = int(user_id)
         days = int(days)
+
+        if days <= 0:
+
+            return {
+                "status": "error",
+                "message": "days must be greater than 0"
+            }, 400
 
         new_date = extend_subscription(
             user_id,
@@ -92,7 +101,8 @@ def add_days_api():
         )
 
         print(
-            f"☂️ ixxycodes +{days} дней пользователю {user_id}"
+            f"☂️ ixxycodes +{days} дней "
+            f"пользователю {user_id}"
         )
 
         return {
@@ -294,13 +304,23 @@ async def main():
     # АВТОПРОВЕРКА
     # =====================
 
-    asyncio.create_task(
-        check_subscriptions(bot)
-    )
+    try:
 
-    print(
-        "🔄 Автоматическая проверка подписок запущена"
-    )
+        asyncio.create_task(
+            check_subscriptions(bot)
+        )
+
+        print(
+            "🔄 Автоматическая проверка "
+            "подписок запущена"
+        )
+
+    except Exception as e:
+
+        print(
+            "❌ Ошибка запуска проверки:",
+            e
+        )
 
 
     # =====================
@@ -330,13 +350,14 @@ async def main():
 if __name__ == "__main__":
 
     # Flask запускаем отдельно
+
     threading.Thread(
         target=run_webhook,
         daemon=True
     ).start()
 
-
     # Telegram bot
+
     asyncio.run(
         main()
     )
