@@ -1,11 +1,15 @@
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import StatesGroup, State
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from database import (
     get_user,
-    check_user_subscription
+    check_user_subscription,
+    extend_subscription,
+    get_promocode
 )
 
 from keyboards import (
@@ -19,6 +23,15 @@ from github_update import (
 
 
 router = Router()
+
+
+# =====================
+# ПРОМОКОД
+# =====================
+
+class PromoUse(StatesGroup):
+
+    code = State()
 
 
 # =====================
@@ -146,6 +159,148 @@ async def show_cabinet(message: Message):
 
 
 # =====================
+# ПРОМОКОД
+# =====================
+
+@router.callback_query(
+    F.data == "promo_use"
+)
+async def promo_start(
+    callback: CallbackQuery,
+    state: FSMContext
+):
+
+    await state.set_state(
+        PromoUse.code
+    )
+
+    await callback.message.answer(
+        """
+🎟 Промокод
+
+Введите промокод:
+"""
+    )
+
+    await callback.answer()
+
+
+# =====================
+# ПРОВЕРКА ПРОМОКОДА
+# =====================
+
+@router.message(
+    PromoUse.code
+)
+async def promo_enter(
+    message: Message,
+    state: FSMContext
+):
+
+    user_id = message.from_user.id
+
+    code = message.text.strip().upper()
+
+    # =====================
+    # ПОЛУЧАЕМ ДНИ
+    # =====================
+
+    days = get_promocode(code)
+
+    if not days:
+
+        await message.answer(
+            """
+❌ Промокод не найден.
+
+Проверьте правильность написания.
+"""
+        )
+
+        await state.clear()
+
+        return
+
+    # =====================
+    # ПОЛЬЗОВАТЕЛЬ
+    # =====================
+
+    user = get_user(user_id)
+
+    if not user:
+
+        await message.answer(
+            "❌ Пользователь не найден."
+        )
+
+        await state.clear()
+
+        return
+
+    # =====================
+    # ПРОДЛЕВАЕМ
+    # =====================
+
+    try:
+
+        new_date = extend_subscription(
+            user_id,
+            days
+        )
+
+        # =====================
+        # ОБНОВЛЯЕМ GITHUB
+        # =====================
+
+        update_subscription_file(
+            user_id,
+            new_date
+        )
+
+    except Exception as e:
+
+        print(
+            f"❌ PROMO ERROR {user_id}: {e}"
+        )
+
+        await message.answer(
+            """
+❌ Не удалось активировать промокод.
+
+Попробуйте ещё раз позже.
+"""
+        )
+
+        await state.clear()
+
+        return
+
+    # =====================
+    # УСПЕШНО
+    # =====================
+
+    await message.answer(
+        f"""
+🎉 Промокод активирован!
+
+🎟 Код:
+{code}
+
+➕ Начислено:
+{days} дней
+
+📅 Подписка до:
+{new_date}
+
+🔗 Ссылка осталась прежней.
+""",
+        reply_markup=cabinet_keyboard()
+    )
+
+    await state.clear()
+
+
+# =====================
 # ОБНОВИТЬ СЕРВЕРА
 # =====================
 
@@ -158,7 +313,6 @@ async def refresh_subscription(
 
     user_id = callback.from_user.id
 
-    # Проверяем подписку
     if not check_user_subscription(user_id):
 
         await callback.answer(
@@ -216,16 +370,17 @@ async def refresh_subscription(
 
     try:
 
-        # Берём свежий servers.txt
-        # и обновляем файл пользователя
         update_subscription_file(
             user_id,
             date_text
         )
 
         await callback.message.answer(
-            "✅ Серверы обновлены!\n\n"
-            "🔗 Ваша ссылка осталась прежней."
+            """
+✅ Серверы обновлены!
+
+🔗 Ваша ссылка осталась прежней.
+"""
         )
 
     except Exception as e:
@@ -236,8 +391,11 @@ async def refresh_subscription(
         )
 
         await callback.message.answer(
-            "❌ Не удалось обновить серверы.\n"
-            "Попробуйте ещё раз."
+            """
+❌ Не удалось обновить серверы.
+
+Попробуйте ещё раз.
+"""
         )
 
 
