@@ -50,7 +50,6 @@ def main_menu():
     )
 
 
-
 # =====================
 # СПОСОБ ОПЛАТЫ
 # =====================
@@ -76,7 +75,6 @@ def payment_method_keyboard():
 
         ]
     )
-
 
 
 # =====================
@@ -120,7 +118,6 @@ def stars_buy_keyboard():
     )
 
 
-
 # =====================
 # СБП ТАРИФЫ
 # =====================
@@ -162,7 +159,6 @@ def sbp_buy_keyboard():
     )
 
 
-
 # =====================
 # ЛИЧНЫЙ КАБИНЕТ
 # =====================
@@ -188,6 +184,13 @@ def cabinet_keyboard():
 
             [
                 InlineKeyboardButton(
+                    text="🎟 Промокод",
+                    callback_data="enter_promo"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
                     text="🎫 Продлить",
                     callback_data="renew"
                 )
@@ -195,7 +198,6 @@ def cabinet_keyboard():
 
         ]
     )
-
 
 
 # =====================
@@ -251,7 +253,6 @@ def admin_menu():
 
         ]
     )
-
 
 
 # =====================
