@@ -34,7 +34,6 @@ from github_update import (
 router = Router()
 
 
-
 # =====================
 # START
 # =====================
@@ -44,29 +43,30 @@ async def start(message: Message):
 
     user_id = message.from_user.id
 
-
+    # Создаём пользователя, если его ещё нет
     add_user(
         user_id,
         message.from_user.username,
         message.from_user.first_name
     )
 
+    # Получаем пользователя после add_user
+    user = get_user(user_id)
 
     # =====================
-    # ДОКУМЕНТЫ
+    # ПРОВЕРКА СОГЛАШЕНИЯ
     # =====================
 
-    if not has_accepted_terms(user_id):
+    if not user or user[8] != 1:
 
         await message.answer(
-"""
+            """
 ☂️ ixxy VPN
-
 
 Перед использованием сервиса необходимо принять условия.
 
-
 После ознакомления нажмите:
+
 ✅ Принимаю
 """,
             reply_markup=accept_terms_keyboard()
@@ -74,16 +74,11 @@ async def start(message: Message):
 
         return
 
-
-
     # =====================
     # ССЫЛКА
     # =====================
 
-    link = get_subscription_link(
-        user_id
-    )
-
+    link = get_subscription_link(user_id)
 
     if not link:
 
@@ -96,49 +91,41 @@ async def start(message: Message):
             link
         )
 
-
-
-    user = get_user(
-        user_id
-    )
-
+    # =====================
+    # СТАТУС
+    # =====================
 
     status = "❌ Не активна"
 
+    until = user[4]
 
+    if until:
 
-    if user:
+        try:
 
-        until = user[4]
+            date = datetime.strptime(
+                until,
+                "%Y-%m-%d"
+            )
 
+            if date >= datetime.now():
 
-        if until:
+                status = "🟢 Активна"
 
-            try:
+            else:
 
-                date = datetime.strptime(
-                    until,
-                    "%Y-%m-%d"
-                )
+                status = "🔴 Истекла"
 
+        except:
 
-                if date >= datetime.now():
+            status = "❌ Не активна"
 
-                    status = "🟢 Активна"
-
-                else:
-
-                    status = "🔴 Истекла"
-
-
-            except:
-
-                status = "❌ Не активна"
-
-
+    # =====================
+    # МЕНЮ
+    # =====================
 
     await message.answer(
-f"""
+        f"""
 ☂️ Добро пожаловать в ixxy!
 
 
@@ -158,9 +145,6 @@ f"""
     )
 
 
-
-
-
 # =====================
 # ПРИНЯТИЕ УСЛОВИЙ
 # =====================
@@ -174,28 +158,34 @@ async def accept(
 
     user_id = callback.from_user.id
 
-
-    accept_terms(
-        user_id
+    # На всякий случай создаём пользователя
+    add_user(
+        user_id,
+        callback.from_user.username,
+        callback.from_user.first_name
     )
 
+    # Сохраняем принятие
+    accept_terms(user_id)
 
     await callback.message.delete()
 
+    # Создаём персональный файл
+    link = get_subscription_link(user_id)
 
-    link = create_user_subscription(
-        user_id
-    )
+    if not link:
 
+        link = create_user_subscription(
+            user_id
+        )
 
-    save_subscription_link(
-        user_id,
-        link
-    )
-
+        save_subscription_link(
+            user_id,
+            link
+        )
 
     await callback.message.answer(
-f"""
+        f"""
 ✅ Условия приняты!
 
 
@@ -209,11 +199,7 @@ f"""
         reply_markup=main_menu()
     )
 
-
     await callback.answer()
-
-
-
 
 
 # =====================
@@ -226,16 +212,13 @@ f"""
 async def buy(message: Message):
 
     await message.answer(
-"""
+        """
 ☂️ ixxy VPN
 
 Выберите способ оплаты:
 """,
         reply_markup=payment_method_keyboard()
     )
-
-
-
 
 
 # =====================
@@ -250,9 +233,8 @@ async def stars(
 ):
 
     await callback.message.answer(
-"""
+        """
 ⭐ Telegram Stars
-
 
 Выберите срок:
 """,
@@ -260,9 +242,6 @@ async def stars(
     )
 
     await callback.answer()
-
-
-
 
 
 # =====================
@@ -277,9 +256,8 @@ async def sbp(
 ):
 
     await callback.message.answer(
-"""
+        """
 💳 Оплата СБП
-
 
 Выберите срок:
 """,
@@ -287,9 +265,6 @@ async def sbp(
     )
 
     await callback.answer()
-
-
-
 
 
 # =====================
@@ -305,14 +280,27 @@ async def trial(
 
     user_id = message.from_user.id
 
-
     add_user(
         user_id,
         message.from_user.username,
         message.from_user.first_name
     )
 
+    # Проверяем соглашение
+    if not has_accepted_terms(user_id):
 
+        await message.answer(
+            """
+☂️ Сначала необходимо принять условия использования.
+
+После этого пробный период станет доступен.
+""",
+            reply_markup=accept_terms_keyboard()
+        )
+
+        return
+
+    # Проверяем, использовал ли пользователь trial
     if check_trial(user_id):
 
         await message.answer(
@@ -321,28 +309,25 @@ async def trial(
 
         return
 
-
-
+    # Создаём подписку
     link = create_subscription(
         user_id,
         days=3
     )
 
-
+    # Сохраняем trial
     activate_trial(
         user_id,
         link
     )
-
 
     save_subscription_link(
         user_id,
         link
     )
 
-
     await message.answer(
-f"""
+        f"""
 🎁 Пробный период активирован!
 
 
@@ -350,7 +335,7 @@ f"""
 3 дня
 
 
-📅 До:
+📅 Подписка активна до:
 3 дня с момента активации
 
 
@@ -365,9 +350,6 @@ f"""
     )
 
 
-
-
-
 # =====================
 # ДОКУМЕНТЫ
 # =====================
@@ -380,16 +362,12 @@ async def documents(
 ):
 
     await message.answer(
-"""
+        """
 📄 Документы ☂️ ixxy:
-
 
 https://bdtvyz76b6-blip.github.io/managerorlvpnsite/
 """
     )
-
-
-
 
 
 # =====================
@@ -404,7 +382,7 @@ async def support(
 ):
 
     await message.answer(
-f"""
+        f"""
 💬 Поддержка:
 
 {SUPPORT}
