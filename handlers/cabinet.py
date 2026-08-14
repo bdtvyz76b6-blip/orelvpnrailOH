@@ -3,13 +3,13 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from database import (
     get_user,
     check_user_subscription,
-    extend_subscription,
-    get_promocode
+    get_promocode,
+    extend_subscription
 )
 
 from keyboards import (
@@ -29,9 +29,9 @@ router = Router()
 # ПРОМОКОД
 # =====================
 
-class PromoUse(StatesGroup):
+class PromoState(StatesGroup):
 
-    code = State()
+    waiting_code = State()
 
 
 # =====================
@@ -121,7 +121,7 @@ async def show_cabinet(message: Message):
 
                 status = "🔴 Истекла"
 
-        except:
+        except Exception:
 
             pass
 
@@ -144,9 +144,9 @@ async def show_cabinet(message: Message):
 
 📅 До: {until_text}
 
-⏳ Осталось: {days} дней
+⏳ Осталось: {days} дн.
 
-🔗 Подписка: {"✅ Активна" if link else "❌ Нет ссылки"}
+🔗 Подписка: {"✅ Доступна" if link else "❌ Нет ссылки"}
 
 ━━━━━━━━━━━━━━
 """
@@ -159,149 +159,7 @@ async def show_cabinet(message: Message):
 
 
 # =====================
-# ПРОМОКОД
-# =====================
-
-@router.callback_query(
-    F.data == "promo_use"
-)
-async def promo_start(
-    callback: CallbackQuery,
-    state: FSMContext
-):
-
-    await state.set_state(
-        PromoUse.code
-    )
-
-    await callback.message.answer(
-        """
-🎟 Промокод
-
-Введите промокод:
-"""
-    )
-
-    await callback.answer()
-
-
-# =====================
-# ПРОВЕРКА ПРОМОКОДА
-# =====================
-
-@router.message(
-    PromoUse.code
-)
-async def promo_enter(
-    message: Message,
-    state: FSMContext
-):
-
-    user_id = message.from_user.id
-
-    code = message.text.strip().upper()
-
-    # =====================
-    # ПОЛУЧАЕМ ДНИ
-    # =====================
-
-    days = get_promocode(code)
-
-    if not days:
-
-        await message.answer(
-            """
-❌ Промокод не найден.
-
-Проверьте правильность написания.
-"""
-        )
-
-        await state.clear()
-
-        return
-
-    # =====================
-    # ПОЛЬЗОВАТЕЛЬ
-    # =====================
-
-    user = get_user(user_id)
-
-    if not user:
-
-        await message.answer(
-            "❌ Пользователь не найден."
-        )
-
-        await state.clear()
-
-        return
-
-    # =====================
-    # ПРОДЛЕВАЕМ
-    # =====================
-
-    try:
-
-        new_date = extend_subscription(
-            user_id,
-            days
-        )
-
-        # =====================
-        # ОБНОВЛЯЕМ GITHUB
-        # =====================
-
-        update_subscription_file(
-            user_id,
-            new_date
-        )
-
-    except Exception as e:
-
-        print(
-            f"❌ PROMO ERROR {user_id}: {e}"
-        )
-
-        await message.answer(
-            """
-❌ Не удалось активировать промокод.
-
-Попробуйте ещё раз позже.
-"""
-        )
-
-        await state.clear()
-
-        return
-
-    # =====================
-    # УСПЕШНО
-    # =====================
-
-    await message.answer(
-        f"""
-🎉 Промокод активирован!
-
-🎟 Код:
-{code}
-
-➕ Начислено:
-{days} дней
-
-📅 Подписка до:
-{new_date}
-
-🔗 Ссылка осталась прежней.
-""",
-        reply_markup=cabinet_keyboard()
-    )
-
-    await state.clear()
-
-
-# =====================
-# ОБНОВИТЬ СЕРВЕРА
+# ОБНОВИТЬ СЕРВЕРЫ
 # =====================
 
 @router.callback_query(
@@ -313,6 +171,7 @@ async def refresh_subscription(
 
     user_id = callback.from_user.id
 
+    # Проверяем подписку
     if not check_user_subscription(user_id):
 
         await callback.answer(
@@ -355,7 +214,7 @@ async def refresh_subscription(
             "%d.%m.%Y"
         )
 
-    except:
+    except Exception:
 
         await callback.answer(
             "❌ Ошибка даты подписки",
@@ -370,17 +229,16 @@ async def refresh_subscription(
 
     try:
 
+        # Берём актуальный servers.txt
+        # и создаём обновлённый файл пользователя
         update_subscription_file(
             user_id,
             date_text
         )
 
         await callback.message.answer(
-            """
-✅ Серверы обновлены!
-
-🔗 Ваша ссылка осталась прежней.
-"""
+            "✅ Серверы обновлены!\n\n"
+            "🔗 Ссылка осталась прежней."
         )
 
     except Exception as e:
@@ -391,11 +249,8 @@ async def refresh_subscription(
         )
 
         await callback.message.answer(
-            """
-❌ Не удалось обновить серверы.
-
-Попробуйте ещё раз.
-"""
+            "❌ Не удалось обновить серверы.\n"
+            "Попробуйте ещё раз."
         )
 
 
@@ -428,11 +283,122 @@ async def get_link(
 
 {user[5]}
 
-📲 Добавьте её в Happ.
+📲 Добавьте ссылку в Happ.
 """
         )
 
     await callback.answer()
+
+
+# =====================
+# ПРОМОКОД — ВВОД
+# =====================
+
+@router.callback_query(
+    F.data == "enter_promo"
+)
+async def enter_promo(
+    callback: CallbackQuery,
+    state: FSMContext
+):
+
+    await state.set_state(
+        PromoState.waiting_code
+    )
+
+    await callback.message.answer(
+        "🎟 Введите промокод:"
+    )
+
+    await callback.answer()
+
+
+# =====================
+# ПРОМОКОД — АКТИВАЦИЯ
+# =====================
+
+@router.message(
+    PromoState.waiting_code
+)
+async def activate_promo(
+    message: Message,
+    state: FSMContext
+):
+
+    code = message.text.strip().upper()
+
+    days = get_promocode(code)
+
+    if not days:
+
+        await message.answer(
+            "❌ Промокод не найден."
+        )
+
+        await state.clear()
+
+        return
+
+    user_id = message.from_user.id
+
+    user = get_user(user_id)
+
+    if not user:
+
+        await message.answer(
+            "❌ Пользователь не найден."
+        )
+
+        await state.clear()
+
+        return
+
+    try:
+
+        # Начисляем дни
+        new_date = extend_subscription(
+            user_id,
+            days
+        )
+
+        # Обновляем персональный файл
+        update_subscription_file(
+            user_id,
+            new_date
+        )
+
+    except Exception as e:
+
+        print(
+            f"❌ Ошибка активации промокода "
+            f"{user_id}: {e}"
+        )
+
+        await message.answer(
+            "❌ Не удалось активировать промокод."
+        )
+
+        await state.clear()
+
+        return
+
+    await state.clear()
+
+    await message.answer(
+        f"""
+✅ Промокод активирован!
+
+🎟 Код: {code}
+
+📅 Начислено: {days} дней
+
+📅 Подписка до:
+{new_date}
+
+🔄 Серверы обновлены.
+""",
+        reply_markup=cabinet_keyboard()
+    )
 
 
 # =====================
