@@ -174,15 +174,15 @@ def cabinet_keyboard():
 
             [
                 InlineKeyboardButton(
-                    text="🔄 Обновить",
-                    callback_data="refresh_cabinet"
+                    text="🔗 Получить ссылку",
+                    callback_data="get_link"
                 )
             ],
 
             [
                 InlineKeyboardButton(
-                    text="🔗 Получить ссылку",
-                    callback_data="get_link"
+                    text="🔄 Обновить серверы",
+                    callback_data="refresh_subscription"
                 )
             ],
 
