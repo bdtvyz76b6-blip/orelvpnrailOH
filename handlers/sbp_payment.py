@@ -15,22 +15,22 @@ router = Router()
 payments = {
 
     "sbp_30": {
-        "amount": 99,
+        "amount": 1,
         "days": 30
     },
 
     "sbp_90": {
-        "amount": 249,
+        "amount": 1,
         "days": 90
     },
 
     "sbp_180": {
-        "amount": 599,
+        "amount": 1,
         "days": 180
     },
 
     "sbp_365": {
-        "amount": 999,
+        "amount": 1,
         "days": 365
     }
 
