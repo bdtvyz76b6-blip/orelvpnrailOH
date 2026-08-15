@@ -8,8 +8,7 @@ from datetime import datetime
 from database import (
     get_user,
     check_user_subscription,
-    get_promocode,
-    extend_subscription
+    use_promocode
 )
 
 from keyboards import (
@@ -30,7 +29,6 @@ router = Router()
 # =====================
 
 class PromoState(StatesGroup):
-
     waiting_code = State()
 
 
@@ -130,25 +128,18 @@ async def show_cabinet(message: Message):
     # =====================
 
     text = f"""
-☂️ ixxy VPN
+☂️ <b>ixxy VPN</b>
 
 👤 Личный кабинет
-
-━━━━━━━━━━━━━━
 
 🆔 ID: <code>{user_id}</code>
 
 🎫 Тариф: {tariff}
-
 📊 Статус: {status}
-
 📅 До: {until_text}
-
 ⏳ Осталось: {days} дн.
 
 🔗 Подписка: {"✅ Доступна" if link else "❌ Нет ссылки"}
-
-━━━━━━━━━━━━━━
 """
 
     await message.answer(
@@ -230,7 +221,7 @@ async def refresh_subscription(
     try:
 
         # Берём актуальный servers.txt
-        # и создаём обновлённый файл пользователя
+        # и обновляем персональный файл
         update_subscription_file(
             user_id,
             date_text
@@ -279,19 +270,20 @@ async def get_link(
 
         await callback.message.answer(
             f"""
-🔗 Ваша подписка:
+🔗 <b>Ваша подписка:</b>
 
 {user[5]}
 
 📲 Добавьте ссылку в Happ.
-"""
+""",
+            parse_mode="HTML"
         )
 
     await callback.answer()
 
 
 # =====================
-# ПРОМОКОД — ВВОД
+# ПРОМОКОД — НАЧАЛО
 # =====================
 
 @router.callback_query(
@@ -325,43 +317,89 @@ async def activate_promo(
     state: FSMContext
 ):
 
-    code = message.text.strip().upper()
+    user_id = message.from_user.id
 
-    days = get_promocode(code)
+    code = (
+        message.text
+        .strip()
+        .upper()
+    )
 
-    if not days:
+    # Пытаемся активировать промокод
+    try:
+
+        result = use_promocode(
+            user_id,
+            code
+        )
+
+    except Exception as e:
+
+        print(
+            f"❌ Ошибка промокода "
+            f"{user_id}: {e}"
+        )
+
+        await state.clear()
+
+        await message.answer(
+            "❌ Произошла ошибка при активации."
+        )
+
+        return
+
+    # =====================
+    # ПРОМОКОД НЕ НАЙДЕН
+    # =====================
+
+    if result["reason"] == "not_found":
+
+        await state.clear()
 
         await message.answer(
             "❌ Промокод не найден."
         )
 
+        return
+
+    # =====================
+    # УЖЕ ИСПОЛЬЗОВАН
+    # =====================
+
+    if result["reason"] == "already_used":
+
         await state.clear()
+
+        await message.answer(
+            "❌ Вы уже использовали этот промокод."
+        )
 
         return
 
-    user_id = message.from_user.id
+    # =====================
+    # ПОЛЬЗОВАТЕЛЬ НЕ НАЙДЕН
+    # =====================
 
-    user = get_user(user_id)
+    if result["reason"] == "user_not_found":
 
-    if not user:
+        await state.clear()
 
         await message.answer(
             "❌ Пользователь не найден."
         )
 
-        await state.clear()
-
         return
 
+    # =====================
+    # УСПЕШНО
+    # =====================
+
+    days = result["days"]
+    new_date = result["date"]
+
+    # Обновляем персональный файл
     try:
 
-        # Начисляем дни
-        new_date = extend_subscription(
-            user_id,
-            days
-        )
-
-        # Обновляем персональный файл
         update_subscription_file(
             user_id,
             new_date
@@ -370,34 +408,38 @@ async def activate_promo(
     except Exception as e:
 
         print(
-            f"❌ Ошибка активации промокода "
+            f"❌ Ошибка обновления серверов "
             f"{user_id}: {e}"
         )
 
-        await message.answer(
-            "❌ Не удалось активировать промокод."
+    # Форматируем дату
+    try:
+
+        date_text = datetime.strptime(
+            new_date,
+            "%Y-%m-%d"
+        ).strftime(
+            "%d.%m.%Y"
         )
 
-        await state.clear()
+    except Exception:
 
-        return
+        date_text = new_date
 
     await state.clear()
 
     await message.answer(
         f"""
-✅ Промокод активирован!
+🎉 <b>Промокод активирован!</b>
 
-🎟 Код: {code}
-
-📅 Начислено: {days} дней
-
-📅 Подписка до:
-{new_date}
+🎟 Код: <code>{code}</code>
+➕ Начислено: <b>{days} дней</b>
+📅 Подписка до: <b>{date_text}</b>
 
 🔄 Серверы обновлены.
 """,
-        reply_markup=cabinet_keyboard()
+        reply_markup=cabinet_keyboard(),
+        parse_mode="HTML"
     )
 
 
@@ -414,11 +456,12 @@ async def renew(
 
     await callback.message.answer(
         """
-☂️ Продление ixxy VPN
+☂️ <b>Продление ixxy VPN</b>
 
 Выберите способ оплаты:
 """,
-        reply_markup=payment_method_keyboard()
+        reply_markup=payment_method_keyboard(),
+        parse_mode="HTML"
     )
 
     await callback.answer()
