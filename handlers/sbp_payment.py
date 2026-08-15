@@ -3,13 +3,14 @@ from aiogram.types import CallbackQuery
 
 from cashera_api import create_cashera_payment
 
+from database import add_payment
+
 
 router = Router()
 
 
-
 # =====================
-# СБП ПЛАТЕЖИ
+# СБП ТАРИФЫ
 # =====================
 
 payments = {
@@ -37,6 +38,9 @@ payments = {
 }
 
 
+# =====================
+# СОЗДАНИЕ ПЛАТЕЖА
+# =====================
 
 @router.callback_query(
     F.data.startswith("sbp_")
@@ -47,36 +51,29 @@ async def sbp_payment(
 
     code = callback.data
 
-
     if code not in payments:
 
         await callback.answer(
-            "Ошибка тарифа"
+            "❌ Ошибка тарифа",
+            show_alert=True
         )
 
         return
 
 
-
     amount = payments[code]["amount"]
-
     days = payments[code]["days"]
 
+    user_id = callback.from_user.id
 
 
     try:
 
         result = create_cashera_payment(
-
-            user_id=callback.from_user.id,
-
+            user_id=user_id,
             amount=amount,
-
             days=days
-
         )
-
-
 
         print(
             "💳 PAYMENT RESULT:",
@@ -84,23 +81,47 @@ async def sbp_payment(
         )
 
 
+        # =====================
+        # UUID ПЛАТЕЖА
+        # =====================
 
-        link = (
-
-            result.get("payment_url")
-
-            or
-
-            result.get("url")
-
+        payment_uuid = (
+            result.get("uuid")
+            or result.get("id")
         )
 
+
+        if not payment_uuid:
+
+            await callback.message.answer(
+                f"""
+❌ Cashera не вернула ID платежа.
+
+Ответ:
+
+{result}
+"""
+            )
+
+            await callback.answer()
+
+            return
+
+
+        # =====================
+        # ССЫЛКА
+        # =====================
+
+        link = (
+            result.get("payment_url")
+            or result.get("url")
+        )
 
 
         if not link:
 
             await callback.message.answer(
-f"""
+                f"""
 ❌ Не удалось создать платёж.
 
 Ответ Cashera:
@@ -109,38 +130,62 @@ f"""
 """
             )
 
+            await callback.answer()
+
             return
 
 
+        # =====================
+        # СОХРАНЯЕМ ПЛАТЁЖ
+        # =====================
+
+        add_payment(
+            user_id=user_id,
+            photo="",
+            days=days
+        )
+
+
+        # Сохраняем UUID платежа
+        # в отдельной записи через функцию ниже
+        from database import save_payment_id
+
+        save_payment_id(
+            user_id=user_id,
+            payment_id=payment_uuid
+        )
+
+
+        # =====================
+        # ОТПРАВЛЯЕМ ССЫЛКУ
+        # =====================
 
         await callback.message.answer(
 f"""
-☂️ ixxy vpn
+☂️ ixxy VPN
 
 💳 Оплата СБП
 
+📅 Срок: {days} дней
 
-📅 Срок:
-{days} дней
-
-
-💰 Цена:
-{amount}₽
-
+💰 Цена: {amount}₽
 
 🔗 Оплатить:
 
 {link}
 
-
-После успешной оплаты подписка будет выдана автоматически.
+После успешной оплаты подписка
+выдастся автоматически.
 """
         )
 
 
-
     except Exception as e:
 
+        print(
+            "❌ SBP ERROR:",
+            e
+        )
 
         await callback.message.answer(
 f"""
@@ -149,7 +194,6 @@ f"""
 {e}
 """
         )
-
 
 
     await callback.answer()
