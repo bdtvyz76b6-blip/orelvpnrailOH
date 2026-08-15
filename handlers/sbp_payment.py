@@ -31,7 +31,7 @@ payments = {
     },
 
     "sbp_365": {
-        "amount": 1,
+        "amount": 1089,
         "days": 365
     }
 
