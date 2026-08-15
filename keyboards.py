@@ -129,28 +129,28 @@ def sbp_buy_keyboard():
 
             [
                 InlineKeyboardButton(
-                    text="💳 1 месяц — 99₽",
+                    text="💳 1 месяц — 129₽",
                     callback_data="sbp_30"
                 )
             ],
 
             [
                 InlineKeyboardButton(
-                    text="💳 3 месяца — 249₽",
+                    text="💳 3 месяца — 379₽",
                     callback_data="sbp_90"
                 )
             ],
 
             [
                 InlineKeyboardButton(
-                    text="💳 6 месяцев — 599₽",
+                    text="💳 6 месяцев — 659₽",
                     callback_data="sbp_180"
                 )
             ],
 
             [
                 InlineKeyboardButton(
-                    text="💳 12 месяцев — 999₽",
+                    text="💳 12 месяцев — 1089₽",
                     callback_data="sbp_365"
                 )
             ]
