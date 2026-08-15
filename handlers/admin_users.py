@@ -110,10 +110,10 @@ async def user_profile(call: CallbackQuery):
         f"👤 Пользователь\n\n"
         f"🆔 ID: {user[0]}\n"
         f"👤 Username: @{user[1] or 'нет'}\n\n"
-        f"📌 Тариф: {user[2]}\n"
+        f"🧑‍💻 Имя: {user[2]}\n"
         f"📅 До: {user[4] or 'нет'}\n\n"
         f"🔗 Подписка:\n"
-        f"{link or 'нет'}\n\n"
+        f"{link or 'нету'}\n\n"
         f"📊 Статус: 🟢 Активен"
     )
 
