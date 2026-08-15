@@ -1330,3 +1330,60 @@ def check_user_subscription(
     except Exception:
 
         return False
+        
+        
+        # =====================
+# СВЯЗЬ ПЛАТЕЖА С CASHeRA
+# =====================
+
+def save_payment_id(user_id, payment_id):
+
+    conn = connect()
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        UPDATE payments
+
+        SET payment_id=?
+
+        WHERE id=(
+            SELECT id
+            FROM payments
+            WHERE user_id=?
+            ORDER BY id DESC
+            LIMIT 1
+        )
+        """,
+        (
+            payment_id,
+            user_id
+        )
+    )
+
+    conn.commit()
+    conn.close()
+
+
+def get_payment_by_payment_id(payment_id):
+
+    conn = connect()
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        SELECT *
+        FROM payments
+        WHERE payment_id=?
+        LIMIT 1
+        """,
+        (
+            payment_id,
+        )
+    )
+
+    result = cur.fetchone()
+
+    conn.close()
+
+    return result
