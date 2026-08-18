@@ -12,11 +12,11 @@ def admin_menu():
                 )
             ],
             [
-                 InlineKeyboardButton(
-                     text="🔎 Найти пользователя",
-                     callback_data="admin_search"
-                 )
-             ],
+                InlineKeyboardButton(
+                    text="🔎 Найти пользователя",
+                    callback_data="admin_search"
+                )
+            ],
             [
                 InlineKeyboardButton(
                     text="💳 Платежи",
@@ -39,6 +39,12 @@ def admin_menu():
                 InlineKeyboardButton(
                     text="📊 Статистика",
                     callback_data="admin_stats"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🔄 Обновить серверы",
+                    callback_data="admin_sync_servers"
                 )
             ]
         ]
