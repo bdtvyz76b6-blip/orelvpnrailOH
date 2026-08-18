@@ -10,9 +10,9 @@ from database import (
 )
 
 
-# =====================
+# ============================================================
 # GITHUB
-# =====================
+# ============================================================
 
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 
@@ -25,22 +25,23 @@ REPO = "vpn-sub"
 BRANCH = "main"
 
 
-# =====================
-# ФАЙЛ С СЕРВЕРАМИ
-# =====================
+# ============================================================
+# ФАЙЛЫ
+# ============================================================
 
 SERVERS_FILE = "servers.txt"
+NO_SERVERS_FILE = "no_servers.txt"
 
 
-# =====================
-# ЗАГРУЗКА СЕРВЕРОВ
-# =====================
+# ============================================================
+# ЗАГРУЗКА ФАЙЛА С GITHUB
+# ============================================================
 
-def load_servers():
+def load_github_raw_file(filename):
 
     url = (
         f"https://raw.githubusercontent.com/"
-        f"{OWNER}/{REPO}/{BRANCH}/{SERVERS_FILE}"
+        f"{OWNER}/{REPO}/{BRANCH}/{filename}"
     )
 
     response = requests.get(
@@ -50,32 +51,54 @@ def load_servers():
 
     response.raise_for_status()
 
-    servers = response.text.strip()
+    content = response.text.strip()
 
-    if not servers:
-
+    if not content:
         raise Exception(
-            "❌ servers.txt пустой"
+            f"❌ {filename} пустой"
         )
 
-    return servers
+    return content
 
 
-# =====================
+# ============================================================
+# АКТИВНЫЕ СЕРВЕРЫ
+# ============================================================
+
+def load_servers():
+
+    return load_github_raw_file(
+        SERVERS_FILE
+    )
+
+
+# ============================================================
+# СЕРВЕРЫ ДЛЯ ПРОСРОЧЕННЫХ
+# ============================================================
+
+def load_no_servers():
+
+    return load_github_raw_file(
+        NO_SERVERS_FILE
+    )
+
+
+# ============================================================
 # GITHUB HEADERS
-# =====================
+# ============================================================
 
 def github_headers():
 
     return {
         "Authorization": f"Bearer {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github+json"
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28"
     }
 
 
-# =====================
-# GITHUB URL
-# =====================
+# ============================================================
+# GITHUB API URL
+# ============================================================
 
 def github_url(path):
 
@@ -85,9 +108,9 @@ def github_url(path):
     )
 
 
-# =====================
+# ============================================================
 # ШАБЛОН НОВОГО ПОЛЬЗОВАТЕЛЯ
-# =====================
+# ============================================================
 
 NEW_USER_TEMPLATE = """
 #profile-title: ☂️ ixxy vpn
@@ -100,24 +123,9 @@ vless://00000000-0000-0000-0000-000000000000@expired.invalid:443?type=tcp&securi
 """.strip()
 
 
-# =====================
-# ШАБЛОН ПРОСРОЧКИ
-# =====================
-
-EXPIRED_TEMPLATE = """
-#profile-title: ⛔ ixxy vpn
-
-#profile-update-interval: 1
-
-#announce: Срок действия подписки закончился. Продлите у @orelvpntopbot
-
-vless://00000000-0000-0000-0000-000000000000@expired.invalid:443?type=tcp&security=reality&sni=expired.invalid&fp=chrome&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&sid=&flow=xtls-rprx-vision#⛔ Подписка истекла
-""".strip()
-
-
-# =====================
-# ОБНОВЛЕНИЕ ФАЙЛА GITHUB
-# =====================
+# ============================================================
+# ОБНОВЛЕНИЕ ФАЙЛА НА GITHUB
+# ============================================================
 
 def update_file(
     path,
@@ -125,6 +133,10 @@ def update_file(
 ):
 
     url = github_url(path)
+
+    # --------------------------------------------------------
+    # Получаем существующий файл
+    # --------------------------------------------------------
 
     old = requests.get(
         url,
@@ -142,29 +154,47 @@ def update_file(
         "branch": BRANCH
     }
 
-    # =====================
-    # ФАЙЛ СУЩЕСТВУЕТ
-    # =====================
+    # --------------------------------------------------------
+    # Файл существует
+    # --------------------------------------------------------
 
     if old.status_code == 200:
 
-        data["sha"] = old.json()["sha"]
+        old_data = old.json()
 
-    # =====================
-    # ФАЙЛ НЕ СУЩЕСТВУЕТ
-    # =====================
+        sha = old_data.get("sha")
+
+        if sha:
+            data["sha"] = sha
+
+    # --------------------------------------------------------
+    # Файла нет
+    # --------------------------------------------------------
 
     elif old.status_code == 404:
 
         pass
 
-    # =====================
-    # ОШИБКА
-    # =====================
+    # --------------------------------------------------------
+    # Другая ошибка
+    # --------------------------------------------------------
 
     else:
 
+        print(
+            f"❌ GitHub GET ERROR {path}: "
+            f"{old.status_code}"
+        )
+
+        print(
+            old.text
+        )
+
         old.raise_for_status()
+
+    # --------------------------------------------------------
+    # PUT
+    # --------------------------------------------------------
 
     response = requests.put(
         url,
@@ -173,14 +203,28 @@ def update_file(
         timeout=20
     )
 
+    if response.status_code not in (
+        200,
+        201
+    ):
+
+        print(
+            f"❌ GitHub PUT ERROR {path}: "
+            f"{response.status_code}"
+        )
+
+        print(
+            response.text
+        )
+
     response.raise_for_status()
 
     return response.json()
 
 
-# =====================
+# ============================================================
 # ССЫЛКА ПОЛЬЗОВАТЕЛЯ
-# =====================
+# ============================================================
 
 def get_subscription_link(user_id):
 
@@ -192,10 +236,9 @@ def get_subscription_link(user_id):
     )
 
 
-# =====================
-# СОЗДАНИЕ ФАЙЛА НОВОГО
-# ПОЛЬЗОВАТЕЛЯ
-# =====================
+# ============================================================
+# СОЗДАНИЕ ФАЙЛА НОВОГО ПОЛЬЗОВАТЕЛЯ
+# ============================================================
 
 def create_user_subscription(user_id):
 
@@ -215,13 +258,16 @@ def create_user_subscription(user_id):
         link
     )
 
+    print(
+        f"✅ Создан файл пользователя {user_id}"
+    )
+
     return link
 
 
-# =====================
-# СОЗДАНИЕ АКТИВНОЙ
-# ПОДПИСКИ
-# =====================
+# ============================================================
+# СОЗДАНИЕ АКТИВНОЙ ПОДПИСКИ
+# ============================================================
 
 def create_subscription(
     user_id,
@@ -231,13 +277,14 @@ def create_subscription(
     days = int(days)
 
     if days < 1:
+
         raise ValueError(
             "Количество дней должно быть больше 0"
         )
 
-    # =====================
-    # Считаем дату
-    # =====================
+    # --------------------------------------------------------
+    # Дата окончания
+    # --------------------------------------------------------
 
     expire_date = (
         datetime.now().date()
@@ -255,10 +302,9 @@ def create_subscription(
     )
 
 
-# =====================
-# ОБНОВЛЕНИЕ АКТИВНОГО
-# ФАЙЛА
-# =====================
+# ============================================================
+# СОЗДАНИЕ АКТИВНОГО ФАЙЛА
+# ============================================================
 
 def activate_subscription_file(
     user_id,
@@ -294,12 +340,17 @@ def activate_subscription_file(
         link
     )
 
+    print(
+        f"✅ Активная подписка создана "
+        f"для {user_id} до {date}"
+    )
+
     return link
 
 
-# =====================
+# ============================================================
 # АКТИВАЦИЯ ПОДПИСКИ
-# =====================
+# ============================================================
 
 def activate_user_subscription(
     user_id,
@@ -312,10 +363,9 @@ def activate_user_subscription(
     )
 
 
-# =====================
-# ОБНОВЛЕНИЕ ПОСЛЕ
-# ПРОДЛЕНИЯ
-# =====================
+# ============================================================
+# ОБНОВЛЕНИЕ ПОСЛЕ ПРОДЛЕНИЯ
+# ============================================================
 
 def update_subscription_file(
     user_id,
@@ -343,9 +393,9 @@ def update_subscription_file(
     )
 
 
-# =====================
+# ============================================================
 # ИСТЕЧЕНИЕ ПОДПИСКИ
-# =====================
+# ============================================================
 
 def expire_subscription(
     user_id
@@ -353,136 +403,151 @@ def expire_subscription(
 
     path = f"users/{user_id}.txt"
 
+    # --------------------------------------------------------
+    # Загружаем no_servers.txt
+    # --------------------------------------------------------
+
+    no_servers = load_no_servers()
+
+    # --------------------------------------------------------
+    # Создаём файл пользователя
+    # --------------------------------------------------------
+
+    content = f"""
+#profile-title: ⛔ ixxy vpn
+
+#profile-update-interval: 1
+
+#announce: ⛔ Подписка истекла. Продлите подписку в @orelvpntopbot
+
+🆔 Ваш ID: {user_id}
+
+{no_servers}
+""".strip()
+
     update_file(
         path,
-        EXPIRED_TEMPLATE
+        content
     )
 
+    link = get_subscription_link(
+        user_id
+    )
 
-# =====================
-# ОБНОВИТЬ ВСЕХ АКТИВНЫХ
-# ПОЛЬЗОВАТЕЛЕЙ
-# =====================
-
-def sync_all_active_users():
+    save_subscription_link(
+        user_id,
+        link
+    )
 
     print(
-        "🔄 Начинаю синхронизацию серверов..."
+        f"⛔ {user_id} переведён "
+        f"на no_servers.txt"
     )
 
-    # Загружаем servers.txt один раз.
-    # Не нужно скачивать его отдельно
-    # для каждого пользователя.
+    return link
 
-    servers = load_servers()
 
-    users = get_all_users()
+# ============================================================
+# ОБНОВЛЕНИЕ ОДНОГО ПОЛЬЗОВАТЕЛЯ
+# ============================================================
 
-    updated = 0
-    skipped = 0
-    expired = 0
-    errors = 0
+def sync_user(
+    user_id,
+    subscription,
+    subscription_until,
+    servers,
+    no_servers,
+    today
+):
 
-    today = datetime.now().date()
+    # --------------------------------------------------------
+    # Нет подписки
+    # --------------------------------------------------------
 
-    for user in users:
+    if subscription not in (
+        "vip",
+        "trial"
+    ):
 
-        try:
+        return "skipped"
 
-            # =====================
-            # СТРУКТУРА USERS
-            # =====================
+    # --------------------------------------------------------
+    # Нет даты
+    # --------------------------------------------------------
 
-            user_id = user[0]
-            subscription = user[3]
-            subscription_until = user[4]
+    if not subscription_until:
 
-            # =====================
-            # ТОЛЬКО VIP/TRIAL
-            # =====================
+        return "skipped"
 
-            if subscription not in (
-                "vip",
-                "trial"
-            ):
+    # --------------------------------------------------------
+    # Парсим дату
+    # --------------------------------------------------------
 
-                skipped += 1
-                continue
+    try:
 
-            # =====================
-            # НЕТ ДАТЫ
-            # =====================
+        expire_date = datetime.strptime(
+            str(subscription_until),
+            "%Y-%m-%d"
+        ).date()
 
-            if not subscription_until:
+    except Exception:
 
-                skipped += 1
-                continue
+        print(
+            f"⚠️ Неверная дата у {user_id}: "
+            f"{subscription_until}"
+        )
 
-            # =====================
-            # ПАРСИМ ДАТУ
-            # =====================
+        return "skipped"
 
-            try:
+    path = f"users/{user_id}.txt"
 
-                expire_date = datetime.strptime(
-                    str(subscription_until),
-                    "%Y-%m-%d"
-                ).date()
+    # ========================================================
+    # ПРОСРОЧЕН
+    # ========================================================
 
-            except Exception:
+    if expire_date < today:
 
-                print(
-                    f"⚠️ Неверная дата у {user_id}: "
-                    f"{subscription_until}"
-                )
+        content = f"""
+#profile-title: ⛔ ixxy vpn
 
-                skipped += 1
-                continue
+#profile-update-interval: 1
 
-            # =====================
-            # ПРОСРОЧЕН
-            # =====================
+#announce: ⛔ Подписка истекла. Продлите подписку в @orelvpntopbot
 
-            if expire_date < today:
+🆔 Ваш ID: {user_id}
 
-                try:
+{no_servers}
+""".strip()
 
-                    expire_subscription(
-                        user_id
-                    )
+        update_file(
+            path,
+            content
+        )
 
-                    expired += 1
+        link = get_subscription_link(
+            user_id
+        )
 
-                    print(
-                        f"⛔ {user_id} — подписка истекла"
-                    )
+        save_subscription_link(
+            user_id,
+            link
+        )
 
-                except Exception as e:
+        print(
+            f"⛔ {user_id} — подписка истекла"
+        )
 
-                    errors += 1
+        return "expired"
 
-                    print(
-                        f"❌ Ошибка отключения "
-                        f"{user_id}: {e}"
-                    )
+    # ========================================================
+    # АКТИВЕН
+    # ========================================================
 
-                continue
+    display_date = expire_date.strftime(
+        "%d.%m.%Y"
+    )
 
-            # =====================
-            # ФОРМАТ ДАТЫ
-            # =====================
-
-            display_date = expire_date.strftime(
-                "%d.%m.%Y"
-            )
-
-            # =====================
-            # СОЗДАЁМ ФАЙЛ
-            # =====================
-
-            path = f"users/{user_id}.txt"
-
-            content = f"""
+    content = f"""
 #profile-title: ☂️ ixxy vip
 
 #profile-update-interval: 1
@@ -493,30 +558,113 @@ def sync_all_active_users():
 {servers}
 """.strip()
 
-            update_file(
-                path,
-                content
-            )
+    update_file(
+        path,
+        content
+    )
 
-            # =====================
-            # СОХРАНЯЕМ ССЫЛКУ
-            # =====================
+    link = get_subscription_link(
+        user_id
+    )
 
-            link = get_subscription_link(
-                user_id
-            )
+    save_subscription_link(
+        user_id,
+        link
+    )
 
-            save_subscription_link(
+    print(
+        f"✅ {user_id} обновлён "
+        f"до {display_date}"
+    )
+
+    return "updated"
+
+
+# ============================================================
+# ОБНОВИТЬ ВСЕХ АКТИВНЫХ И ПРОСРОЧЕННЫХ
+# ============================================================
+
+def sync_all_active_users():
+
+    print(
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    )
+
+    print(
+        "🔄 Начинаю полную синхронизацию..."
+    )
+
+    print(
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    )
+
+    # --------------------------------------------------------
+    # Загружаем оба файла ОДИН раз
+    # --------------------------------------------------------
+
+    servers = load_servers()
+
+    no_servers = load_no_servers()
+
+    # --------------------------------------------------------
+    # Пользователи
+    # --------------------------------------------------------
+
+    users = get_all_users()
+
+    updated = 0
+    skipped = 0
+    expired = 0
+    errors = 0
+
+    today = datetime.now().date()
+
+    # ========================================================
+    # ОБХОД ПОЛЬЗОВАТЕЛЕЙ
+    # ========================================================
+
+    for user in users:
+
+        user_id = user[0]
+
+        try:
+
+            # ------------------------------------------------
+            # Структура users
+            # ------------------------------------------------
+
+            subscription = user[3]
+
+            subscription_until = user[4]
+
+            # ------------------------------------------------
+            # Синхронизация
+            # ------------------------------------------------
+
+            result = sync_user(
                 user_id,
-                link
+                subscription,
+                subscription_until,
+                servers,
+                no_servers,
+                today
             )
 
-            updated += 1
+            # ------------------------------------------------
+            # Результат
+            # ------------------------------------------------
 
-            print(
-                f"✅ {user_id} обновлён "
-                f"до {display_date}"
-            )
+            if result == "updated":
+
+                updated += 1
+
+            elif result == "expired":
+
+                expired += 1
+
+            else:
+
+                skipped += 1
 
         except Exception as e:
 
@@ -527,12 +675,12 @@ def sync_all_active_users():
                 f"{user_id}: {e}"
             )
 
-    # =====================
+    # ========================================================
     # РЕЗУЛЬТАТ
-    # =====================
+    # ========================================================
 
     print(
-        "━━━━━━━━━━━━━━━━━━━━"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━"
     )
 
     print(
@@ -540,7 +688,11 @@ def sync_all_active_users():
     )
 
     print(
-        f"✅ Обновлено: {updated}"
+        f"✅ Активных обновлено: {updated}"
+    )
+
+    print(
+        f"⛔ Истёкших обновлено: {expired}"
     )
 
     print(
@@ -548,15 +700,11 @@ def sync_all_active_users():
     )
 
     print(
-        f"⛔ Просрочено: {expired}"
-    )
-
-    print(
         f"❌ Ошибок: {errors}"
     )
 
     print(
-        "━━━━━━━━━━━━━━━━━━━━"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━"
     )
 
     return {
@@ -567,16 +715,15 @@ def sync_all_active_users():
     }
 
 
-# =====================
-# СИНХРОНИЗАЦИЯ ПОСЛЕ
-# ИЗМЕНЕНИЯ SERVERS.TXT
-# =====================
+# ============================================================
+# СИНХРОНИЗАЦИЯ ПО КНОПКЕ АДМИНА
+# ============================================================
 
 def sync_servers_update():
 
     print(
-        "🔄 Обновление серверов для "
-        "всех активных подписок..."
+        "🔄 Администратор запустил "
+        "обновление серверов..."
     )
 
     return sync_all_active_users()
