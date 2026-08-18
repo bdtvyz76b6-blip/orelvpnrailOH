@@ -3,21 +3,32 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
 # =====================
 # BOT
 # =====================
 
-BOT_TOKEN = os.getenv(
-    "BOT_TOKEN",
-    "8799505763:AAFTrQi-6AxO0wWskm3kUV1Evcnux_rI4y4"
-)
+BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 
-ADMIN_ID = int(
-    os.getenv(
-        "ADMIN_ID",
+
+# =====================
+# АДМИНЫ
+# =====================
+
+# Telegram ID администраторов через запятую
+#
+# Пример:
+# ADMIN_IDS=6312016802,123456789
+
+ADMIN_IDS = {
+    int(x.strip())
+    for x in os.getenv(
+        "ADMIN_IDS",
         "6312016802"
-    )
-)
+    ).split(",")
+    if x.strip()
+}
+
 
 # =====================
 # GITHUB
@@ -32,11 +43,13 @@ GITHUB_OWNER = "bdtvyz76b6-blip"
 GITHUB_REPO = "vpn-sub"
 GITHUB_BRANCH = "main"
 
+
 # =====================
 # ПОДДЕРЖКА
 # =====================
 
 SUPPORT = "@rusrodyyya"
+
 
 # =====================
 # ОПЛАТА
@@ -44,6 +57,7 @@ SUPPORT = "@rusrodyyya"
 
 CARD_NUMBER = "2200 1513 3958 0875"
 CARD_OWNER = "@rusrodyyya"
+
 
 # =====================
 # ЦЕНЫ
@@ -53,6 +67,7 @@ PRICE_30 = "70₽"
 PRICE_90 = "190₽"
 PRICE_180 = "350₽"
 PRICE_365 = "700₽"
+
 
 # =====================
 # ТАРИФЫ
