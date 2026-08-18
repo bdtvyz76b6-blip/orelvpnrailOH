@@ -2,17 +2,16 @@ from aiogram import Router, F
 from aiogram.types import Message
 
 from keyboards.admin_keyboard import admin_menu
+from config import ADMIN_IDS
 
 
 router = Router()
 
-ADMIN_ID = 6312016802
-
 
 @router.message(F.text == "/admin")
 async def admin(message: Message):
-
-    if message.from_user.id != ADMIN_ID:
+    # Проверяем, является ли пользователь админом
+    if message.from_user.id not in ADMIN_IDS:
         return
 
     await message.answer(
