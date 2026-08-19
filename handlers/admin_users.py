@@ -13,7 +13,8 @@ from config import ADMIN_IDS
 from database import (
     get_all_users,
     get_user,
-    get_subscription_link
+    get_subscription_link,
+    disable_subscription
 )
 
 from github_update import (
@@ -93,10 +94,6 @@ def get_subscription_status(
 
     # --------------------------------------------------------
     # ИСТЁК
-    #
-    # Важно:
-    # если дата равна сегодняшней,
-    # считаем подписку истёкшей.
     # --------------------------------------------------------
 
     if expire_date <= today:
@@ -161,6 +158,7 @@ async def show_users(
             )
 
         except TelegramBadRequest:
+
             pass
 
         await call.answer()
@@ -187,7 +185,6 @@ async def show_users(
         # ----------------------------------------------------
 
         subscription = user[3]
-
         subscription_until = user[4]
 
         status, days = get_subscription_status(
@@ -471,18 +468,28 @@ async def user_profile(
     # КНОПКИ
     # ========================================================
 
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
+    buttons = []
 
-            [
-                InlineKeyboardButton(
-                    text="⏳ Продлить",
-                    callback_data=(
-                        f"extend_{user_id}"
-                    )
+    # Продлить показываем всегда
+    buttons.append(
+        [
+            InlineKeyboardButton(
+                text="⏳ Продлить",
+                callback_data=(
+                    f"extend_{user_id}"
                 )
-            ],
+            )
+        ]
+    )
 
+    # Отключить показываем только если
+    # подписка действительно активна
+    if subscription in (
+        "vip",
+        "trial"
+    ) and days > 0:
+
+        buttons.append(
             [
                 InlineKeyboardButton(
                     text="❌ Отключить",
@@ -490,16 +497,20 @@ async def user_profile(
                         f"disable_{user_id}"
                     )
                 )
-            ],
-
-            [
-                InlineKeyboardButton(
-                    text="⬅️ Назад",
-                    callback_data="admin_users"
-                )
             ]
+        )
 
+    buttons.append(
+        [
+            InlineKeyboardButton(
+                text="⬅️ Назад",
+                callback_data="admin_users"
+            )
         ]
+    )
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=buttons
     )
 
     # ========================================================
@@ -521,6 +532,167 @@ async def user_profile(
             raise
 
     await call.answer()
+
+
+# ============================================================
+# ОТКЛЮЧЕНИЕ ПОДПИСКИ
+# ============================================================
+
+@router.callback_query(
+    F.data.startswith("disable_")
+)
+async def disable_user_subscription(
+    call: CallbackQuery
+):
+
+    # --------------------------------------------------------
+    # Проверка администратора
+    # --------------------------------------------------------
+
+    if not is_admin(
+        call.from_user.id
+    ):
+
+        await call.answer(
+            "❌ Нет доступа",
+            show_alert=True
+        )
+
+        return
+
+    # --------------------------------------------------------
+    # Получаем ID пользователя
+    # --------------------------------------------------------
+
+    try:
+
+        user_id = int(
+            call.data.replace(
+                "disable_",
+                ""
+            )
+        )
+
+    except ValueError:
+
+        await call.answer(
+            "❌ Неверный ID пользователя",
+            show_alert=True
+        )
+
+        return
+
+    # --------------------------------------------------------
+    # Проверяем пользователя
+    # --------------------------------------------------------
+
+    user = get_user(
+        user_id
+    )
+
+    if not user:
+
+        await call.answer(
+            "❌ Пользователь не найден",
+            show_alert=True
+        )
+
+        return
+
+    # --------------------------------------------------------
+    # Отключаем подписку
+    # --------------------------------------------------------
+
+    try:
+
+        disable_subscription(
+            user_id
+        )
+
+    except Exception as e:
+
+        print(
+            f"❌ Ошибка отключения подписки "
+            f"{user_id}: {e}"
+        )
+
+        await call.answer(
+            "❌ Ошибка при отключении",
+            show_alert=True
+        )
+
+        return
+
+    # --------------------------------------------------------
+    # Показываем обновлённый профиль
+    # --------------------------------------------------------
+
+    username = (
+        user[1]
+        or "нет"
+    )
+
+    first_name = (
+        user[2]
+        or "нет"
+    )
+
+    text = (
+        "👤 <b>Пользователь</b>\n\n"
+
+        f"🆔 ID: "
+        f"<code>{user_id}</code>\n"
+
+        f"👤 Username: "
+        f"@{username}\n\n"
+
+        f"🧑‍💻 Имя: "
+        f"{first_name}\n\n"
+
+        "🎫 Тариф: ❌ Нет подписки\n"
+        "📊 Статус: 🔴 Неактивен\n"
+        "📅 До: нет\n"
+        "⏳ Осталось: 0 д.\n\n"
+        "🔗 Подписка:\n"
+        "нет"
+    )
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="⏳ Продлить",
+                    callback_data=(
+                        f"extend_{user_id}"
+                    )
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⬅️ Назад",
+                    callback_data="admin_users"
+                )
+            ]
+        ]
+    )
+
+    try:
+
+        await call.message.edit_text(
+            text,
+            reply_markup=keyboard,
+            parse_mode="HTML"
+        )
+
+    except TelegramBadRequest as e:
+
+        if "message is not modified" not in str(e):
+
+            raise
+
+    await call.answer(
+        "✅ Подписка отключена"
+    )
 
 
 # ============================================================
@@ -590,6 +762,7 @@ async def sync_servers(
 
             f"❌ Ошибок: "
             f"{result['errors']}",
+
             parse_mode="HTML"
         )
 
@@ -603,8 +776,10 @@ async def sync_servers(
 
             await status_message.edit_text(
                 "❌ <b>Не удалось обновить серверы.</b>\n\n"
+
                 f"Ошибка:\n"
                 f"<code>{str(e)}</code>",
+
                 parse_mode="HTML"
             )
 
