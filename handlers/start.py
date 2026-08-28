@@ -1,5 +1,9 @@
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import (
+    Message,
+    CallbackQuery,
+    ReplyKeyboardRemove,
+)
 from aiogram.filters import Command
 
 from datetime import datetime, timedelta
@@ -23,6 +27,7 @@ from keyboards import (
     stars_buy_keyboard,
     sbp_buy_keyboard,
     accept_terms_keyboard,
+    show_menu_keyboard,
 )
 
 from github_update import (
@@ -82,29 +87,18 @@ async def start(message: Message):
     # ПОЛУЧАЕМ ПЕРСОНАЛЬНУЮ ССЫЛКУ
     # ========================================================
 
-    link = get_subscription_link(
-        user_id
-    )
+    link = get_subscription_link(user_id)
 
     if not link:
 
-        try:
+        link = create_user_subscription(
+            user_id
+        )
 
-            link = create_user_subscription(
-                user_id
-            )
-
-            save_subscription_link(
-                user_id,
-                link
-            )
-
-        except Exception as e:
-
-            print(
-                f"❌ Ошибка создания "
-                f"подписки {user_id}: {e}"
-            )
+        save_subscription_link(
+            user_id,
+            link,
+        )
 
     # ========================================================
     # СТАТУС
@@ -112,9 +106,7 @@ async def start(message: Message):
 
     status = "🔴 Не активна"
 
-    user = get_user(
-        user_id
-    )
+    user = get_user(user_id)
 
     if user:
 
@@ -126,7 +118,7 @@ async def start(message: Message):
 
                 date = datetime.strptime(
                     str(until),
-                    "%Y-%m-%d"
+                    "%Y-%m-%d",
                 )
 
                 if date.date() >= datetime.now().date():
@@ -146,25 +138,23 @@ async def start(message: Message):
     # ========================================================
 
     await message.answer(
-        f"""
+        """
 ☂️ <b>ixxy VPN</b>
 
 Добро пожаловать! 👋
 
 ━━━━━━━━━━━━━━━━━━
 
-🛡 <b>Ваш VPN</b>
+🛡 <b>Ваш VPN готов</b>
 
 🎫 Подписка: {status}
 
 ━━━━━━━━━━━━━━━━━━
 
-🔗 <b>Подключение</b>
+🌐 <b>Моя подписка</b>
 
-Нажмите <b>«Подключиться»</b>,
-чтобы открыть сайт подключения.
-
-На сайте доступны:
+Откройте её прямо из меню —
+там можно:
 
 ⚡ Добавить в Happ
 🚀 Добавить в INCY
@@ -173,7 +163,9 @@ async def start(message: Message):
 ━━━━━━━━━━━━━━━━━━
 
 Выберите нужный раздел ниже 👇
-""",
+""".format(
+            status=status
+        ),
         reply_markup=main_menu(user_id),
         parse_mode="HTML",
     )
@@ -186,9 +178,7 @@ async def start(message: Message):
 @router.callback_query(
     F.data == "accept_terms"
 )
-async def accept(
-    callback: CallbackQuery
-):
+async def accept(callback: CallbackQuery):
 
     user_id = callback.from_user.id
 
@@ -206,37 +196,24 @@ async def accept(
     # СОХРАНЯЕМ СОГЛАШЕНИЕ
     # ========================================================
 
-    accept_terms(
-        user_id
-    )
+    accept_terms(user_id)
 
     # ========================================================
     # СОЗДАЁМ ПЕРСОНАЛЬНУЮ ССЫЛКУ
     # ========================================================
 
-    link = get_subscription_link(
-        user_id
-    )
+    link = get_subscription_link(user_id)
 
     if not link:
 
-        try:
+        link = create_user_subscription(
+            user_id
+        )
 
-            link = create_user_subscription(
-                user_id
-            )
-
-            save_subscription_link(
-                user_id,
-                link
-            )
-
-        except Exception as e:
-
-            print(
-                f"❌ Ошибка создания "
-                f"подписки {user_id}: {e}"
-            )
+        save_subscription_link(
+            user_id,
+            link,
+        )
 
     # ========================================================
     # УДАЛЯЕМ СООБЩЕНИЕ
@@ -263,11 +240,10 @@ async def accept(
 🔐 Ваша персональная подписка
 уже создана.
 
-🔗 Нажмите
-<b>«Подключиться»</b> в меню.
+🌐 Откройте кнопку
+<b>«Моя подписка»</b> в меню.
 
-Там откроется обычный сайт,
-где доступны:
+Там доступны:
 
 ⚡ Добавить в Happ
 🚀 Добавить в INCY
@@ -289,9 +265,7 @@ async def accept(
 @router.message(
     F.text == "🎫 Купить подписку"
 )
-async def buy(
-    message: Message
-):
+async def buy(message: Message):
 
     await message.answer(
         """
@@ -311,9 +285,7 @@ async def buy(
 @router.callback_query(
     F.data == "pay_stars"
 )
-async def stars(
-    callback: CallbackQuery
-):
+async def stars(callback: CallbackQuery):
 
     await callback.message.answer(
         """
@@ -335,9 +307,7 @@ async def stars(
 @router.callback_query(
     F.data == "pay_sbp"
 )
-async def sbp(
-    callback: CallbackQuery
-):
+async def sbp(callback: CallbackQuery):
 
     await callback.message.answer(
         """
@@ -359,9 +329,7 @@ async def sbp(
 @router.message(
     F.text == "🎁 Пробный период"
 )
-async def trial(
-    message: Message
-):
+async def trial(message: Message):
 
     user_id = message.from_user.id
 
@@ -417,30 +385,10 @@ async def trial(
     # СОЗДАЁМ ПОДПИСКУ
     # ========================================================
 
-    try:
-
-        link = create_subscription(
-            user_id,
-            days=3,
-        )
-
-    except Exception as e:
-
-        print(
-            f"❌ Ошибка создания trial "
-            f"{user_id}: {e}"
-        )
-
-        await message.answer(
-            "❌ Не удалось создать пробную подписку.\n"
-            "Попробуйте ещё раз."
-        )
-
-        return
-
-    # ========================================================
-    # АКТИВИРУЕМ
-    # ========================================================
+    link = create_subscription(
+        user_id,
+        days=3,
+    )
 
     activate_trial(
         user_id,
@@ -478,10 +426,10 @@ async def trial(
 
 ━━━━━━━━━━━━━━━━━━
 
-🔗 Нажмите
-<b>«Подключиться»</b> в меню.
+🌐 Откройте
+<b>«Моя подписка»</b> в меню.
 
-На сайте доступны:
+Там можно:
 
 ⚡ Добавить в Happ
 🚀 Добавить в INCY
@@ -503,9 +451,7 @@ async def trial(
 @router.message(
     F.text == "📄 Документы"
 )
-async def documents(
-    message: Message
-):
+async def documents(message: Message):
 
     await message.answer(
         """
@@ -524,9 +470,7 @@ https://bdt2010.github.io/managerorlvpnsite/
 @router.message(
     F.text == "💬 Поддержка"
 )
-async def support(
-    message: Message
-):
+async def support(message: Message):
 
     await message.answer(
         f"""
@@ -539,3 +483,61 @@ async def support(
 """,
         parse_mode="HTML",
     )
+
+
+# ============================================================
+# СКРЫТЬ МЕНЮ
+# ============================================================
+
+@router.message(
+    F.text == "🙈 Скрыть меню"
+)
+async def hide_menu(message: Message):
+
+    await message.answer(
+        """
+🙈 <b>Меню скрыто</b>
+
+Нажмите кнопку ниже,
+чтобы снова показать меню.
+""",
+        reply_markup=ReplyKeyboardRemove(),
+        parse_mode="HTML",
+    )
+
+    await message.answer(
+        "👇",
+        reply_markup=show_menu_keyboard(),
+    )
+
+
+# ============================================================
+# ПОКАЗАТЬ МЕНЮ
+# ============================================================
+
+@router.callback_query(
+    F.data == "show_menu"
+)
+async def show_menu(callback: CallbackQuery):
+
+    user_id = callback.from_user.id
+
+    await callback.message.answer(
+        """
+☰ <b>Главное меню снова показано!</b>
+
+Выберите нужный раздел 👇
+""",
+        reply_markup=main_menu(user_id),
+        parse_mode="HTML",
+    )
+
+    try:
+
+        await callback.message.delete()
+
+    except Exception:
+
+        pass
+
+    await callback.answer()
