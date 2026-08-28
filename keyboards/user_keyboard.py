@@ -7,31 +7,6 @@ from aiogram.types import (
 
 
 # ============================================================
-# НАСТРОЙКИ
-# ============================================================
-
-PUBLIC_SITE_URL = (
-    "https://orelvpnrailoh-1.onrender.com"
-)
-
-SUBSCRIPTION_PREFIX = "2ix847xy"
-
-
-# ============================================================
-# ССЫЛКА НА СТРАНИЦУ ПОДПИСКИ
-# ============================================================
-
-def get_subscription_site_url(user_id: int):
-
-    return (
-        f"{PUBLIC_SITE_URL}"
-        f"/s/"
-        f"{SUBSCRIPTION_PREFIX}"
-        f"{user_id}"
-    )
-
-
-# ============================================================
 # ГЛАВНОЕ МЕНЮ
 # ============================================================
 
@@ -56,7 +31,7 @@ def main_menu(user_id: int):
             ],
             [
                 KeyboardButton(
-                    text="🔌 Подключиться"
+                    text="🔗 Подключиться"
                 )
             ],
             [
@@ -68,14 +43,15 @@ def main_menu(user_id: int):
                 KeyboardButton(
                     text="💬 Поддержка"
                 )
-            ]
+            ],
         ],
-        resize_keyboard=True
+        resize_keyboard=True,
+        is_persistent=True,
     )
 
 
 # ============================================================
-# СПОСОБ ОПЛАТЫ
+# ОПЛАТА
 # ============================================================
 
 def payment_method_keyboard():
@@ -93,7 +69,7 @@ def payment_method_keyboard():
                     text="💳 СБП",
                     callback_data="pay_sbp"
                 )
-            ]
+            ],
         ]
     )
 
@@ -129,7 +105,7 @@ def stars_buy_keyboard():
                     text="⭐ 12 месяцев — 700 Stars",
                     callback_data="stars_365"
                 )
-            ]
+            ],
         ]
     )
 
@@ -165,7 +141,7 @@ def sbp_buy_keyboard():
                     text="💳 12 месяцев — 1089₽",
                     callback_data="sbp_365"
                 )
-            ]
+            ],
         ]
     )
 
@@ -174,18 +150,14 @@ def sbp_buy_keyboard():
 # ЛИЧНЫЙ КАБИНЕТ
 # ============================================================
 
-def cabinet_keyboard(user_id: int):
-
-    subscription_url = get_subscription_site_url(
-        user_id
-    )
+def cabinet_keyboard():
 
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="🔌 Подключиться",
-                    url=subscription_url
+                    text="🔗 Подключиться",
+                    callback_data="get_link"
                 )
             ],
             [
@@ -205,13 +177,13 @@ def cabinet_keyboard(user_id: int):
                     text="🎫 Продлить",
                     callback_data="renew"
                 )
-            ]
+            ],
         ]
     )
 
 
 # ============================================================
-# ДОКУМЕНТЫ / СОГЛАСИЕ
+# ПРИНЯТИЕ УСЛОВИЙ
 # ============================================================
 
 def accept_terms_keyboard():
@@ -221,10 +193,7 @@ def accept_terms_keyboard():
             [
                 InlineKeyboardButton(
                     text="📄 Документы",
-                    url=(
-                        "https://bdt2010.github.io/"
-                        "managerorlvpnsite/"
-                    )
+                    url="https://bdt2010.github.io/managerorlvpnsite/"
                 )
             ],
             [
@@ -232,6 +201,6 @@ def accept_terms_keyboard():
                     text="✅ Принимаю",
                     callback_data="accept_terms"
                 )
-            ]
+            ],
         ]
     )
