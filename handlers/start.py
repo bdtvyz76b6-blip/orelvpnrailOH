@@ -14,7 +14,7 @@ from database import (
     check_trial,
     activate_trial,
     has_accepted_terms,
-    accept_terms
+    accept_terms,
 )
 
 from keyboards import (
@@ -22,12 +22,12 @@ from keyboards import (
     payment_method_keyboard,
     stars_buy_keyboard,
     sbp_buy_keyboard,
-    accept_terms_keyboard
+    accept_terms_keyboard,
 )
 
 from github_update import (
     create_subscription,
-    create_user_subscription
+    create_user_subscription,
 )
 
 
@@ -50,7 +50,7 @@ async def start(message: Message):
     add_user(
         user_id,
         message.from_user.username,
-        message.from_user.first_name
+        message.from_user.first_name,
     )
 
     # ========================================================
@@ -73,7 +73,7 @@ async def start(message: Message):
 👇 Нажмите кнопку ниже:
 """,
             reply_markup=accept_terms_keyboard(),
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
 
         return
@@ -82,18 +82,29 @@ async def start(message: Message):
     # ПОЛУЧАЕМ ПЕРСОНАЛЬНУЮ ССЫЛКУ
     # ========================================================
 
-    link = get_subscription_link(user_id)
+    link = get_subscription_link(
+        user_id
+    )
 
     if not link:
 
-        link = create_user_subscription(
-            user_id
-        )
+        try:
 
-        save_subscription_link(
-            user_id,
-            link
-        )
+            link = create_user_subscription(
+                user_id
+            )
+
+            save_subscription_link(
+                user_id,
+                link
+            )
+
+        except Exception as e:
+
+            print(
+                f"❌ Ошибка создания "
+                f"подписки {user_id}: {e}"
+            )
 
     # ========================================================
     # СТАТУС
@@ -101,7 +112,9 @@ async def start(message: Message):
 
     status = "🔴 Не активна"
 
-    user = get_user(user_id)
+    user = get_user(
+        user_id
+    )
 
     if user:
 
@@ -133,23 +146,25 @@ async def start(message: Message):
     # ========================================================
 
     await message.answer(
-        """
+        f"""
 ☂️ <b>ixxy VPN</b>
 
 Добро пожаловать! 👋
 
 ━━━━━━━━━━━━━━━━━━
 
-🛡 <b>Ваш VPN готов</b>
+🛡 <b>Ваш VPN</b>
 
 🎫 Подписка: {status}
 
 ━━━━━━━━━━━━━━━━━━
 
-🌐 <b>Моя подписка</b>
+🔗 <b>Подключение</b>
 
-Откройте её прямо из меню —
-там можно:
+Нажмите <b>«Подключиться»</b>,
+чтобы открыть сайт подключения.
+
+На сайте доступны:
 
 ⚡ Добавить в Happ
 🚀 Добавить в INCY
@@ -158,11 +173,9 @@ async def start(message: Message):
 ━━━━━━━━━━━━━━━━━━
 
 Выберите нужный раздел ниже 👇
-""".format(
-            status=status
-        ),
+""",
         reply_markup=main_menu(user_id),
-        parse_mode="HTML"
+        parse_mode="HTML",
     )
 
 
@@ -186,31 +199,44 @@ async def accept(
     add_user(
         user_id,
         callback.from_user.username,
-        callback.from_user.first_name
+        callback.from_user.first_name,
     )
 
     # ========================================================
     # СОХРАНЯЕМ СОГЛАШЕНИЕ
     # ========================================================
 
-    accept_terms(user_id)
+    accept_terms(
+        user_id
+    )
 
     # ========================================================
     # СОЗДАЁМ ПЕРСОНАЛЬНУЮ ССЫЛКУ
     # ========================================================
 
-    link = get_subscription_link(user_id)
+    link = get_subscription_link(
+        user_id
+    )
 
     if not link:
 
-        link = create_user_subscription(
-            user_id
-        )
+        try:
 
-        save_subscription_link(
-            user_id,
-            link
-        )
+            link = create_user_subscription(
+                user_id
+            )
+
+            save_subscription_link(
+                user_id,
+                link
+            )
+
+        except Exception as e:
+
+            print(
+                f"❌ Ошибка создания "
+                f"подписки {user_id}: {e}"
+            )
 
     # ========================================================
     # УДАЛЯЕМ СООБЩЕНИЕ
@@ -237,10 +263,11 @@ async def accept(
 🔐 Ваша персональная подписка
 уже создана.
 
-🌐 Откройте кнопку
-<b>«Моя подписка»</b> в меню.
+🔗 Нажмите
+<b>«Подключиться»</b> в меню.
 
-Там доступны:
+Там откроется обычный сайт,
+где доступны:
 
 ⚡ Добавить в Happ
 🚀 Добавить в INCY
@@ -249,7 +276,7 @@ async def accept(
 👇 Всё управление VPN — в одном месте.
 """,
         reply_markup=main_menu(user_id),
-        parse_mode="HTML"
+        parse_mode="HTML",
     )
 
     await callback.answer()
@@ -262,7 +289,9 @@ async def accept(
 @router.message(
     F.text == "🎫 Купить подписку"
 )
-async def buy(message: Message):
+async def buy(
+    message: Message
+):
 
     await message.answer(
         """
@@ -271,7 +300,7 @@ async def buy(message: Message):
 💎 <b>Выберите способ оплаты:</b>
 """,
         reply_markup=payment_method_keyboard(),
-        parse_mode="HTML"
+        parse_mode="HTML",
     )
 
 
@@ -293,7 +322,7 @@ async def stars(
 Выберите срок подписки:
 """,
         reply_markup=stars_buy_keyboard(),
-        parse_mode="HTML"
+        parse_mode="HTML",
     )
 
     await callback.answer()
@@ -317,7 +346,7 @@ async def sbp(
 Выберите срок подписки:
 """,
         reply_markup=sbp_buy_keyboard(),
-        parse_mode="HTML"
+        parse_mode="HTML",
     )
 
     await callback.answer()
@@ -343,7 +372,7 @@ async def trial(
     add_user(
         user_id,
         message.from_user.username,
-        message.from_user.first_name
+        message.from_user.first_name,
     )
 
     # ========================================================
@@ -360,7 +389,7 @@ async def trial(
 пробный период на 3 дня.
 """,
             reply_markup=accept_terms_keyboard(),
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
 
         return
@@ -379,7 +408,7 @@ async def trial(
 
 🎫 <b>Купить подписку</b>
 """,
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
 
         return
@@ -388,19 +417,39 @@ async def trial(
     # СОЗДАЁМ ПОДПИСКУ
     # ========================================================
 
-    link = create_subscription(
-        user_id,
-        days=3
-    )
+    try:
+
+        link = create_subscription(
+            user_id,
+            days=3,
+        )
+
+    except Exception as e:
+
+        print(
+            f"❌ Ошибка создания trial "
+            f"{user_id}: {e}"
+        )
+
+        await message.answer(
+            "❌ Не удалось создать пробную подписку.\n"
+            "Попробуйте ещё раз."
+        )
+
+        return
+
+    # ========================================================
+    # АКТИВИРУЕМ
+    # ========================================================
 
     activate_trial(
         user_id,
-        link
+        link,
     )
 
     save_subscription_link(
         user_id,
-        link
+        link,
     )
 
     # ========================================================
@@ -429,10 +478,10 @@ async def trial(
 
 ━━━━━━━━━━━━━━━━━━
 
-🌐 Откройте
-<b>«Моя подписка»</b> в меню.
+🔗 Нажмите
+<b>«Подключиться»</b> в меню.
 
-Там можно:
+На сайте доступны:
 
 ⚡ Добавить в Happ
 🚀 Добавить в INCY
@@ -443,7 +492,7 @@ async def trial(
 Приятного использования! ☂️
 """,
         reply_markup=main_menu(user_id),
-        parse_mode="HTML"
+        parse_mode="HTML",
     )
 
 
@@ -464,7 +513,7 @@ async def documents(
 
 https://bdt2010.github.io/managerorlvpnsite/
 """,
-        parse_mode="HTML"
+        parse_mode="HTML",
     )
 
 
@@ -488,5 +537,5 @@ async def support(
 
 {SUPPORT}
 """,
-        parse_mode="HTML"
+        parse_mode="HTML",
     )
