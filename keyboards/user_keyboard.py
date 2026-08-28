@@ -2,12 +2,13 @@ from aiogram.types import (
     ReplyKeyboardMarkup,
     KeyboardButton,
     InlineKeyboardMarkup,
-    InlineKeyboardButton
+    InlineKeyboardButton,
+    WebAppInfo
 )
-
-
+# =========================================================
+# ГЛАВНОЕ МЕНЮ ПОЛЬЗОВАТЕЛЯ
+# =========================================================
 def main_menu():
-
     return ReplyKeyboardMarkup(
         keyboard=[
             [
@@ -43,10 +44,30 @@ def main_menu():
         ],
         resize_keyboard=True
     )
-
-
+# =========================================================
+# MINI APP — МОЯ ПОДПИСКА
+# =========================================================
+def my_subscription_keyboard(user_id):
+    url = (
+        "https://orelvpnrailoh-1.onrender.com/s/"
+        f"2ix847xy{user_id}"
+    )
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🌐 Открыть мою подписку",
+                    web_app=WebAppInfo(
+                        url=url
+                    )
+                )
+            ]
+        ]
+    )
+# =========================================================
+# ОПЛАТА
+# =========================================================
 def payment_method_keyboard():
-
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -63,10 +84,10 @@ def payment_method_keyboard():
             ]
         ]
     )
-
-
+# =========================================================
+# TELEGRAM STARS
+# =========================================================
 def stars_buy_keyboard():
-
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -95,10 +116,10 @@ def stars_buy_keyboard():
             ]
         ]
     )
-
-
+# =========================================================
+# СБП
+# =========================================================
 def sbp_buy_keyboard():
-
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -127,10 +148,10 @@ def sbp_buy_keyboard():
             ]
         ]
     )
-
-
+# =========================================================
+# ЛИЧНЫЙ КАБИНЕТ
+# =========================================================
 def cabinet_keyboard():
-
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -159,10 +180,10 @@ def cabinet_keyboard():
             ]
         ]
     )
-
-
+# =========================================================
+# СОГЛАШЕНИЕ
+# =========================================================
 def accept_terms_keyboard():
-
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
