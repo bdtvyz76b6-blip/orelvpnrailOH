@@ -52,19 +52,15 @@ def main_menu(user_id: int):
                 KeyboardButton(
                     text="💬 Поддержка"
                 )
-            ],
-            [
-                KeyboardButton(
-                    text="🙈 Скрыть меню"
-                )
-            ],
+            ]
         ],
         resize_keyboard=True,
+        is_persistent=True,
     )
 
 
 # ============================================================
-# ВЫБОР СПОСОБА ОПЛАТЫ
+# СПОСОБ ОПЛАТЫ
 # ============================================================
 
 def payment_method_keyboard():
@@ -82,7 +78,7 @@ def payment_method_keyboard():
                     text="💳 СБП",
                     callback_data="pay_sbp"
                 )
-            ],
+            ]
         ]
     )
 
@@ -118,7 +114,7 @@ def stars_buy_keyboard():
                     text="⭐ 12 месяцев — 700 Stars",
                     callback_data="stars_365"
                 )
-            ],
+            ]
         ]
     )
 
@@ -154,13 +150,13 @@ def sbp_buy_keyboard():
                     text="💳 12 месяцев — 1089₽",
                     callback_data="sbp_365"
                 )
-            ],
+            ]
         ]
     )
 
 
 # ============================================================
-# ЛИЧНЫЙ КАБИНЕТ
+# КНОПКИ ЛИЧНОГО КАБИНЕТА
 # ============================================================
 
 def cabinet_keyboard():
@@ -169,7 +165,7 @@ def cabinet_keyboard():
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="🔗 Подключиться",
+                    text="🔗 Получить ссылку",
                     callback_data="get_link"
                 )
             ],
@@ -190,7 +186,7 @@ def cabinet_keyboard():
                     text="🎫 Продлить",
                     callback_data="renew"
                 )
-            ],
+            ]
         ]
     )
 
@@ -213,24 +209,6 @@ def accept_terms_keyboard():
                 InlineKeyboardButton(
                     text="✅ Принимаю",
                     callback_data="accept_terms"
-                )
-            ],
-        ]
-    )
-
-
-# ============================================================
-# ПОКАЗАТЬ МЕНЮ
-# ============================================================
-
-def show_menu_keyboard():
-
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="☰ Показать меню",
-                    callback_data="show_menu"
                 )
             ]
         ]
