@@ -45,11 +45,6 @@ def main_menu(user_id: int):
             ],
             [
                 KeyboardButton(
-                    text="📄 Документы"
-                )
-            ],
-            [
-                KeyboardButton(
                     text="💬 Поддержка"
                 )
             ]
