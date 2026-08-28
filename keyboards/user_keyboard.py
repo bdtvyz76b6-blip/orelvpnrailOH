@@ -27,6 +27,11 @@ def main_menu():
             ],
             [
                 KeyboardButton(
+                    text="🌐 Моя подписка"
+                )
+            ],
+            [
+                KeyboardButton(
                     text="📄 Документы"
                 )
             ],
@@ -163,7 +168,7 @@ def accept_terms_keyboard():
             [
                 InlineKeyboardButton(
                     text="📄 Документы",
-                    url="https://bdtvyz76b6-blip.github.io/managerorlvpnsite/"
+                    url="https://bdt2010.github.io/managerorlvpnsite/"
                 )
             ],
             [
