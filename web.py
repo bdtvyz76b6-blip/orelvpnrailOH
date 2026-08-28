@@ -3,7 +3,10 @@ from urllib.parse import quote
 
 from flask import Flask, Response, abort
 
-from database import get_subscription_content, get_user
+from database import (
+    get_subscription_content,
+    get_user,
+)
 
 
 app = Flask(__name__)
@@ -25,7 +28,7 @@ SUBSCRIPTION_PREFIX = os.getenv(
 
 
 # ============================================================
-# ПОЛУЧЕНИЕ USER ID
+# USER ID ИЗ TOKEN
 # ============================================================
 
 def get_user_id_from_token(token):
@@ -49,18 +52,28 @@ def get_urls(user_id):
 
     token = f"{SUBSCRIPTION_PREFIX}{user_id}"
 
-    page_url = f"{PUBLIC_SITE_URL}/s/{token}"
+    page_url = (
+        f"{PUBLIC_SITE_URL}/s/{token}"
+    )
 
-    subscription_url = f"{PUBLIC_SITE_URL}/sub/{token}"
+    subscription_url = (
+        f"{PUBLIC_SITE_URL}/sub/{token}"
+    )
 
     happ_url = (
         "happ://add/"
-        + quote(subscription_url, safe="")
+        + quote(
+            subscription_url,
+            safe=""
+        )
     )
 
     incy_url = (
         "incy://add/"
-        + quote(subscription_url, safe="")
+        + quote(
+            subscription_url,
+            safe=""
+        )
     )
 
     return (
@@ -72,147 +85,139 @@ def get_urls(user_id):
 
 
 # ============================================================
-# СТРАНИЦА «МОЯ ПОДПИСКА»
+# ИНФОРМАЦИЯ О ПОДПИСКЕ
 # ============================================================
 
-@app.route("/s/<token>")
-def subscription_page(token):
+def get_subscription_info(user):
 
-    user_id = get_user_id_from_token(token)
+    if not user:
+        return {
+            "tariff": "❌ Нет подписки",
+            "status": "🔴 Неактивна",
+            "days": 0,
+            "date": "—",
+            "active": False,
+        }
 
-    if user_id is None:
-        abort(404)
+    subscription = user[3]
+    subscription_until = user[4]
 
-    content = get_subscription_content(user_id)
+    # --------------------------------------------------------
+    # ТАРИФ
+    # --------------------------------------------------------
 
-    if not content:
-        return """
-        <!DOCTYPE html>
-        <html lang="ru">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport"
-                  content="width=device-width, initial-scale=1.0">
-            <title>ixxy VPN</title>
-            <style>
-                body {
-                    margin: 0;
-                    min-height: 100vh;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    background: #07070b;
-                    color: white;
-                    font-family: -apple-system,
-                        BlinkMacSystemFont,
-                        "Segoe UI",
-                        Arial;
-                }
+    if subscription == "vip":
+        tariff = "👑 ixxy VIP"
 
-                .box {
-                    margin: 20px;
-                    padding: 30px;
-                    max-width: 400px;
-                    text-align: center;
-                    border-radius: 28px;
-                    background: #15151d;
-                    border: 1px solid rgba(255,255,255,.08);
-                }
-            </style>
-        </head>
+    elif subscription == "trial":
+        tariff = "🎁 Пробный период"
 
-        <body>
-            <div class="box">
-                <div style="font-size:50px">☂️</div>
-                <h2>Подписка не найдена</h2>
-                <p style="color:#8f8f9c">
-                    Проверьте ссылку или обратитесь в поддержку.
-                </p>
-            </div>
-        </body>
-        </html>
-        """, 404
+    else:
+        tariff = "❌ Нет подписки"
 
-    (
-        page_url,
-        subscription_url,
-        happ_url,
-        incy_url,
-    ) = get_urls(user_id)
+    # --------------------------------------------------------
+    # ДАТА
+    # --------------------------------------------------------
 
-    # ========================================================
-    # ДАННЫЕ ПОЛЬЗОВАТЕЛЯ
-    # ========================================================
+    if not subscription_until:
+        return {
+            "tariff": tariff,
+            "status": "🔴 Неактивна",
+            "days": 0,
+            "date": "—",
+            "active": False,
+        }
 
-    user = get_user(user_id)
+    try:
+        from datetime import datetime
 
-    username = ""
-    first_name = ""
-    until = ""
+        expire_date = datetime.strptime(
+            str(subscription_until),
+            "%Y-%m-%d"
+        ).date()
 
-    if user:
+        today = datetime.now().date()
 
-        try:
-            username = user[1] or ""
-        except Exception:
-            pass
+        # Дата окончания считается активной
+        # до конца указанного дня.
+        if expire_date < today:
+            return {
+                "tariff": tariff,
+                "status": "⛔ Истекла",
+                "days": 0,
+                "date": expire_date.strftime("%d.%m.%Y"),
+                "active": False,
+            }
 
-        try:
-            first_name = user[2] or ""
-        except Exception:
-            pass
+        days = (
+            expire_date - today
+        ).days
 
-        try:
-            until = user[4] or ""
-        except Exception:
-            pass
+        return {
+            "tariff": tariff,
+            "status": "🟢 Активна",
+            "days": days,
+            "date": expire_date.strftime("%d.%m.%Y"),
+            "active": True,
+        }
 
-    # ========================================================
-    # СТАТУС
-    # ========================================================
+    except Exception:
+        return {
+            "tariff": tariff,
+            "status": "⚠️ Ошибка даты",
+            "days": 0,
+            "date": str(subscription_until),
+            "active": False,
+        }
 
-    status_text = "🟢 Подписка активна"
-    status_class = "active"
 
-    expire_text = "Без ограничения"
+# ============================================================
+# HTML
+# ============================================================
 
-    if until:
+def render_page(
+    user_id,
+    user,
+    subscription_url,
+    happ_url,
+    incy_url,
+):
 
-        try:
-            from datetime import datetime
+    info = get_subscription_info(user)
 
-            date = datetime.strptime(
-                str(until),
-                "%Y-%m-%d"
-            )
+    username = (
+        user[1]
+        if user and user[1]
+        else "нет"
+    )
 
-            expire_text = date.strftime("%d.%m.%Y")
+    first_name = (
+        user[2]
+        if user and user[2]
+        else "нет"
+    )
 
-            if date.date() < datetime.now().date():
+    status_class = (
+        "active"
+        if info["active"]
+        else "expired"
+    )
 
-                status_text = "🔴 Подписка истекла"
-                status_class = "expired"
+    if info["active"]:
+        status_icon = "🟢"
+        status_title = "Подписка активна"
+        status_description = (
+            "VPN доступен для использования"
+        )
+    else:
+        status_icon = "🔴"
+        status_title = "Подписка недоступна"
+        status_description = (
+            "Продлите подписку для продолжения"
+        )
 
-        except Exception:
-
-            expire_text = str(until)
-
-    # ========================================================
-    # ИМЯ
-    # ========================================================
-
-    display_name = first_name.strip()
-
-    if not display_name:
-        display_name = "Пользователь"
-
-    # ========================================================
-    # HTML
-    # ========================================================
-
-    html = f"""
+    return f"""
 <!DOCTYPE html>
-
 <html lang="ru">
 
 <head>
@@ -221,10 +226,8 @@ def subscription_page(token):
 
 <meta
     name="viewport"
-    content="width=device-width,
-             initial-scale=1.0,
-             maximum-scale=1.0,
-             user-scalable=no"
+    content="width=device-width, initial-scale=1.0,
+             maximum-scale=1.0, user-scalable=no"
 >
 
 <meta
@@ -232,13 +235,7 @@ def subscription_page(token):
     content="#08080d"
 >
 
-<meta
-    name="apple-mobile-web-app-capable"
-    content="yes"
->
-
-<title>ixxy VPN — Моя подписка</title>
-
+<title>☂️ ixxy VPN — Моя подписка</title>
 
 <style>
 
@@ -248,7 +245,7 @@ def subscription_page(token):
 }}
 
 html {{
-    background: #07070b;
+    min-height: 100%;
 }}
 
 body {{
@@ -257,7 +254,12 @@ body {{
 
     min-height: 100vh;
 
-    color: #ffffff;
+    padding:
+        24px
+        16px
+        40px;
+
+    color: #fff;
 
     font-family:
         -apple-system,
@@ -268,29 +270,24 @@ body {{
         sans-serif;
 
     background:
-
         radial-gradient(
-            circle at 0% 0%,
-            rgba(255, 35, 190, .20),
+            circle at 10% 0%,
+            rgba(255, 0, 190, .30),
             transparent 32%
         ),
-
         radial-gradient(
             circle at 100% 10%,
-            rgba(0, 185, 255, .18),
+            rgba(0, 190, 255, .28),
             transparent 32%
         ),
-
         radial-gradient(
             circle at 50% 100%,
-            rgba(110, 55, 255, .20),
-            transparent 40%
+            rgba(115, 45, 255, .30),
+            transparent 42%
         ),
-
         #07070b;
 
     overflow-x: hidden;
-
 }}
 
 body::before {{
@@ -315,113 +312,36 @@ body::before {{
 
 .container {{
 
+    position: relative;
+
     width: 100%;
 
     max-width: 520px;
 
     margin: 0 auto;
 
-    padding:
-        28px
-        18px
-        40px;
-
 }}
 
-.topbar {{
-
-    display: flex;
-
-    align-items: center;
-
-    justify-content: space-between;
-
-    margin-bottom: 28px;
-
-}}
-
-.brand {{
-
-    display: flex;
-
-    align-items: center;
-
-    gap: 11px;
-
-    font-size: 17px;
-
-    font-weight: 850;
-
-}}
-
-.brand-icon {{
-
-    width: 38px;
-
-    height: 38px;
-
-    display: flex;
-
-    align-items: center;
-
-    justify-content: center;
-
-    border-radius: 13px;
-
-    font-size: 20px;
-
-    background:
-        linear-gradient(
-            135deg,
-            #ff28c8,
-            #713cff,
-            #00c8ff
-        );
-
-    box-shadow:
-        0 8px 28px
-        rgba(116,60,255,.35);
-
-}}
-
-.online {{
-
-    padding:
-        8px 11px;
-
-    border-radius: 100px;
-
-    color: #00f3a0;
-
-    background:
-        rgba(0,245,160,.08);
-
-    border:
-        1px solid
-        rgba(0,245,160,.14);
-
-    font-size: 11px;
-
-    font-weight: 750;
-
-}}
-
-.hero {{
+.header {{
 
     text-align: center;
 
-    margin-bottom: 25px;
+    margin-bottom: 24px;
+
+    animation:
+        fadeUp .45s ease both;
 
 }}
 
 .logo {{
 
-    width: 88px;
-
-    height: 88px;
+    width: 82px;
+    height: 82px;
 
     margin:
-        0 auto 18px;
+        0 auto 16px;
+
+    border-radius: 26px;
 
     display: flex;
 
@@ -429,21 +349,19 @@ body::before {{
 
     justify-content: center;
 
-    border-radius: 27px;
-
-    font-size: 44px;
+    font-size: 42px;
 
     background:
         linear-gradient(
             135deg,
-            #ff25c8,
-            #723dff,
-            #00c8ff
+            #ff28ce,
+            #743cff 55%,
+            #00c9ff
         );
 
     box-shadow:
-        0 20px 70px
-        rgba(115,60,255,.38);
+        0 18px 60px
+        rgba(117,60,255,.42);
 
 }}
 
@@ -451,19 +369,21 @@ h1 {{
 
     margin: 0;
 
-    font-size: 31px;
+    font-size: 30px;
 
     line-height: 1.1;
+
+    font-weight: 850;
 
     letter-spacing: -.7px;
 
 }}
 
-.hero-text {{
+.subtitle {{
 
-    margin-top: 9px;
+    margin-top: 8px;
 
-    color: #898995;
+    color: #92929e;
 
     font-size: 14px;
 
@@ -473,24 +393,24 @@ h1 {{
 
     padding: 18px;
 
-    border-radius: 27px;
+    border-radius: 28px;
 
     background:
-        rgba(18,18,27,.84);
+        rgba(18,18,27,.86);
 
     border:
         1px solid
-        rgba(255,255,255,.085);
+        rgba(255,255,255,.09);
 
     box-shadow:
-        0 25px 80px
-        rgba(0,0,0,.42);
+        0 25px 90px
+        rgba(0,0,0,.50);
 
     backdrop-filter:
         blur(25px);
 
-    -webkit-backdrop-filter:
-        blur(25px);
+    animation:
+        fadeUp .55s ease both;
 
 }}
 
@@ -500,66 +420,79 @@ h1 {{
 
     border-radius: 21px;
 
+    display: flex;
+
+    align-items: center;
+
+    justify-content: space-between;
+
     background:
-        linear-gradient(
-            135deg,
-            rgba(0,245,160,.11),
-            rgba(0,170,255,.055)
-        );
+        rgba(255,255,255,.045);
 
     border:
         1px solid
-        rgba(0,245,160,.12);
+        rgba(255,255,255,.07);
+
+}}
+
+.status.active {{
+
+    background:
+        linear-gradient(
+            135deg,
+            rgba(0,255,165,.13),
+            rgba(0,170,255,.07)
+        );
+
+    border-color:
+        rgba(0,255,180,.13);
 
 }}
 
 .status.expired {{
 
     background:
-        rgba(255,55,80,.08);
+        rgba(255,70,90,.08);
 
     border-color:
-        rgba(255,55,80,.14);
+        rgba(255,70,90,.13);
 
 }}
 
-.status-row {{
+.status-left {{
 
     display: flex;
 
     align-items: center;
 
-    gap: 13px;
+    gap: 12px;
 
 }}
 
-.status-icon {{
+.dot {{
 
-    width: 42px;
-
-    height: 42px;
+    width: 12px;
+    height: 12px;
 
     flex-shrink: 0;
 
-    display: flex;
+    border-radius: 50%;
 
-    align-items: center;
+    background: #ff5267;
 
-    justify-content: center;
-
-    border-radius: 14px;
-
-    background:
-        rgba(0,245,160,.12);
-
-    font-size: 20px;
+    box-shadow:
+        0 0 18px
+        rgba(255,82,103,.7);
 
 }}
 
-.expired .status-icon {{
+.active .dot {{
 
-    background:
-        rgba(255,55,80,.12);
+    background: #00f59b;
+
+    box-shadow:
+        0 0 18px
+        rgba(0,245,155,.9);
 
 }}
 
@@ -575,9 +508,15 @@ h1 {{
 
     margin-top: 4px;
 
-    color: #888894;
+    color: #858590;
 
     font-size: 12px;
+
+}}
+
+.status-icon {{
+
+    font-size: 23px;
 
 }}
 
@@ -594,7 +533,7 @@ h1 {{
 
 }}
 
-.info {{
+.info-box {{
 
     padding: 15px;
 
@@ -605,13 +544,13 @@ h1 {{
 
     border:
         1px solid
-        rgba(255,255,255,.055);
+        rgba(255,255,255,.06);
 
 }}
 
 .info-label {{
 
-    color: #777783;
+    color: #777782;
 
     font-size: 11px;
 
@@ -629,9 +568,58 @@ h1 {{
 
 }}
 
-.buttons {{
+.full-info {{
 
-    margin-top: 16px;
+    margin-top: 10px;
+
+    padding: 15px;
+
+    border-radius: 18px;
+
+    background:
+        rgba(255,255,255,.045);
+
+    border:
+        1px solid
+        rgba(255,255,255,.06);
+
+}}
+
+.full-row {{
+
+    display: flex;
+
+    justify-content: space-between;
+
+    gap: 15px;
+
+    padding: 7px 0;
+
+}}
+
+.full-row + .full-row {{
+
+    border-top:
+        1px solid
+        rgba(255,255,255,.05);
+
+}}
+
+.full-label {{
+
+    color: #777782;
+
+    font-size: 12px;
+
+}}
+
+.full-value {{
+
+    text-align: right;
+
+    font-size: 13px;
+
+    font-weight: 700;
 
 }}
 
@@ -639,12 +627,15 @@ h1 {{
 
     width: 100%;
 
-    min-height: 58px;
+    min-height: 56px;
 
-    margin-top: 10px;
+    margin-top: 11px;
 
-    padding:
-        0 18px;
+    padding: 0 16px;
+
+    border: 0;
+
+    border-radius: 18px;
 
     display: flex;
 
@@ -652,17 +643,11 @@ h1 {{
 
     justify-content: center;
 
-    gap: 10px;
+    gap: 9px;
 
-    border: 0;
-
-    border-radius: 18px;
-
-    color: #ffffff;
+    color: white;
 
     text-decoration: none;
-
-    font-family: inherit;
 
     font-size: 15px;
 
@@ -678,9 +663,9 @@ h1 {{
 
 .button:active {{
 
-    transform: scale(.965);
+    transform: scale(.97);
 
-    opacity: .88;
+    opacity: .85;
 
 }}
 
@@ -689,13 +674,13 @@ h1 {{
     background:
         linear-gradient(
             135deg,
-            #ff22b8,
-            #ff587b
+            #ff25b8,
+            #ff5d78
         );
 
     box-shadow:
-        0 12px 32px
-        rgba(255,35,180,.20);
+        0 10px 30px
+        rgba(255,37,184,.23);
 
 }}
 
@@ -704,20 +689,20 @@ h1 {{
     background:
         linear-gradient(
             135deg,
-            #7048ff,
-            #00b9ff
+            #654cff,
+            #00baff
         );
 
     box-shadow:
-        0 12px 32px
-        rgba(40,150,255,.18);
+        0 10px 30px
+        rgba(0,186,255,.20);
 
 }}
 
 .copy {{
 
     background:
-        rgba(255,255,255,.065);
+        rgba(255,255,255,.075);
 
     border:
         1px solid
@@ -725,97 +710,42 @@ h1 {{
 
 }}
 
-.link-box {{
+.subscription {{
 
-    margin-top: 15px;
+    margin-top: 17px;
 
     padding: 15px;
 
     border-radius: 18px;
 
     background:
-        rgba(0,0,0,.22);
+        rgba(0,0,0,.25);
 
     border:
         1px solid
-        rgba(255,255,255,.055);
+        rgba(255,255,255,.05);
 
 }}
 
-.link-label {{
-
-    color: #777783;
-
-    font-size: 11px;
+.subscription-title {{
 
     margin-bottom: 7px;
 
+    color: #777782;
+
+    font-size: 11px;
+
 }}
 
-.link {{
+.subscription-link {{
 
-    color: #bdbdc8;
+    color: #a9a9b5;
 
-    font-size: 12px;
+    font-size: 11px;
 
     line-height: 1.55;
 
     word-break: break-all;
-
-}}
-
-.tip {{
-
-    margin-top: 14px;
-
-    padding: 15px;
-
-    border-radius: 18px;
-
-    background:
-        rgba(255,255,255,.035);
-
-    color: #898995;
-
-    font-size: 12px;
-
-    line-height: 1.55;
-
-}}
-
-.tip b {{
-
-    color: #ffffff;
-
-}}
-
-.footer {{
-
-    padding-top: 25px;
-
-    text-align: center;
-
-    color: #555560;
-
-    font-size: 11px;
-
-}}
-
-.back {{
-
-    margin-top: 14px;
-
-    text-align: center;
-
-}}
-
-.back a {{
-
-    color: #777783;
-
-    text-decoration: none;
-
-    font-size: 12px;
 
 }}
 
@@ -827,30 +757,29 @@ h1 {{
 
     bottom: 25px;
 
+    z-index: 999;
+
     transform:
         translate(-50%, 20px);
 
     padding:
-        12px 17px;
+        12px
+        17px;
 
-    border-radius: 14px;
+    border-radius: 15px;
 
     background:
-        rgba(25,25,35,.95);
+        rgba(25,25,34,.95);
 
     border:
         1px solid
-        rgba(255,255,255,.1);
+        rgba(255,255,255,.10);
 
     box-shadow:
         0 15px 40px
-        rgba(0,0,0,.45);
-
-    color: white;
+        rgba(0,0,0,.40);
 
     font-size: 13px;
-
-    font-weight: 700;
 
     opacity: 0;
 
@@ -858,8 +787,6 @@ h1 {{
 
     transition:
         .25s ease;
-
-    z-index: 100;
 
 }}
 
@@ -872,19 +799,28 @@ h1 {{
 
 }}
 
-@media (max-width: 380px) {{
+.footer {{
 
-    .container {{
-        padding-left: 14px;
-        padding-right: 14px;
+    margin-top: 20px;
+
+    text-align: center;
+
+    color: #666672;
+
+    font-size: 11px;
+
+}}
+
+@keyframes fadeUp {{
+
+    from {{
+        opacity: 0;
+        transform: translateY(12px);
     }}
 
-    h1 {{
-        font-size: 28px;
-    }}
-
-    .card {{
-        padding: 14px;
+    to {{
+        opacity: 1;
+        transform: translateY(0);
     }}
 
 }}
@@ -893,36 +829,11 @@ h1 {{
 
 </head>
 
-
 <body>
 
 <div class="container">
 
-
-    <!-- TOP -->
-
-    <div class="topbar">
-
-        <div class="brand">
-
-            <div class="brand-icon">
-                ☂️
-            </div>
-
-            ixxy VPN
-
-        </div>
-
-        <div class="online">
-            ● ONLINE
-        </div>
-
-    </div>
-
-
-    <!-- HERO -->
-
-    <div class="hero">
+    <div class="header">
 
         <div class="logo">
             ☂️
@@ -932,167 +843,160 @@ h1 {{
             Моя подписка
         </h1>
 
-        <div class="hero-text">
-            Всё необходимое для подключения VPN
+        <div class="subtitle">
+            ixxy VPN • Личный кабинет
         </div>
 
     </div>
 
-
-    <!-- CARD -->
-
     <div class="card">
-
-
-        <!-- STATUS -->
 
         <div class="status {status_class}">
 
-            <div class="status-row">
+            <div class="status-left">
 
-                <div class="status-icon">
-                    {"🔒" if status_class == "active" else "⚠️"}
-                </div>
+                <div class="dot"></div>
 
                 <div>
 
                     <div class="status-title">
-                        {status_text}
+                        {status_title}
                     </div>
 
                     <div class="status-description">
-                        {display_name}, ваша персональная подписка
+                        {status_description}
                     </div>
 
                 </div>
 
             </div>
 
+            <div class="status-icon">
+                {status_icon}
+            </div>
+
         </div>
-
-
-        <!-- INFO -->
 
         <div class="info-grid">
 
-            <div class="info">
+            <div class="info-box">
 
                 <div class="info-label">
-                    Срок действия
+                    🎫 ТАРИФ
                 </div>
 
                 <div class="info-value">
-                    📅 {expire_text}
+                    {info["tariff"]}
                 </div>
 
             </div>
 
-
-            <div class="info">
+            <div class="info-box">
 
                 <div class="info-label">
-                    ID пользователя
+                    ⏳ ОСТАЛОСЬ
                 </div>
 
                 <div class="info-value">
-                    🆔 {user_id}
+                    {info["days"]} д.
+                </div>
+
+            </div>
+
+            <div class="info-box">
+
+                <div class="info-label">
+                    📅 ДЕЙСТВУЕТ ДО
+                </div>
+
+                <div class="info-value">
+                    {info["date"]}
+                </div>
+
+            </div>
+
+            <div class="info-box">
+
+                <div class="info-label">
+                    🆔 TELEGRAM ID
+                </div>
+
+                <div class="info-value">
+                    {user_id}
                 </div>
 
             </div>
 
         </div>
 
+        <div class="full-info">
 
-        <!-- BUTTONS -->
+            <div class="full-row">
 
-        <div class="buttons">
+                <div class="full-label">
+                    👤 Username
+                </div>
 
+                <div class="full-value">
+                    @{username}
+                </div>
 
-            <a
-                class="button happ"
-                href="{happ_url}"
-            >
-                ⚡ Добавить в Happ
-            </a>
+            </div>
 
+            <div class="full-row">
 
-            <a
-                class="button incy"
-                href="{incy_url}"
-            >
-                🚀 Добавить в INCY
-            </a>
+                <div class="full-label">
+                    🧑‍💻 Имя
+                </div>
 
+                <div class="full-value">
+                    {first_name}
+                </div>
 
-            <button
-                class="button copy"
-                onclick="copyLink()"
-            >
-                📋 Скопировать ссылку
-            </button>
-
+            </div>
 
         </div>
 
+        <a
+            class="button happ"
+            href="{happ_url}"
+        >
+            ⚡ Добавить в Happ
+        </a>
 
-        <!-- SUBSCRIPTION LINK -->
+        <a
+            class="button incy"
+            href="{incy_url}"
+        >
+            🚀 Добавить в INCY
+        </a>
 
-        <div class="link-box">
+        <button
+            class="button copy"
+            onclick="copyLink()"
+        >
+            📋 Скопировать ссылку
+        </button>
 
-            <div class="link-label">
-                Ваша персональная ссылка
+        <div class="subscription">
+
+            <div class="subscription-title">
+                🔗 ПЕРСОНАЛЬНАЯ ССЫЛКА
             </div>
 
-            <div class="link">
+            <div class="subscription-link">
                 {subscription_url}
             </div>
 
         </div>
 
-
-        <!-- TIP -->
-
-        <div class="tip">
-
-            💡 <b>Как подключить?</b><br>
-
-            Нажмите «Добавить в Happ» или
-            «Добавить в INCY».
-            Если приложение не открылось,
-            скопируйте ссылку вручную.
-
-        </div>
-
-
     </div>
-
-
-    <!-- BACK -->
-
-    <div class="back">
-
-        <a
-            href="https://t.me/"
-        >
-            ← Вернуться в Telegram
-        </a>
-
-    </div>
-
-
-    <!-- FOOTER -->
 
     <div class="footer">
-
-        ixxy VPN • Персональная подписка
-
+        ixxy VPN • Защищённое подключение
     </div>
 
-
 </div>
-
-
-<!-- TOAST -->
 
 <div
     id="toast"
@@ -1101,12 +1005,10 @@ h1 {{
     ✅ Ссылка скопирована
 </div>
 
-
 <script>
 
 const subscriptionLink =
     {subscription_url!r};
-
 
 async function copyLink() {{
 
@@ -1116,12 +1018,14 @@ async function copyLink() {{
             subscriptionLink
         );
 
-        showToast();
+        showToast(
+            "✅ Ссылка скопирована"
+        );
 
     }} catch (error) {{
 
         const input =
-            document.createElement("textarea");
+            document.createElement("input");
 
         input.value =
             subscriptionLink;
@@ -1134,34 +1038,109 @@ async function copyLink() {{
 
         input.remove();
 
-        showToast();
+        showToast(
+            "✅ Ссылка скопирована"
+        );
 
     }}
 
 }}
 
-
-function showToast() {{
+function showToast(text) {{
 
     const toast =
         document.getElementById("toast");
 
+    toast.textContent = text;
+
     toast.classList.add("show");
 
-    setTimeout(
-        () => toast.classList.remove("show"),
-        1800
-    );
+    setTimeout(() => {{
+
+        toast.classList.remove("show");
+
+    }}, 2200);
 
 }}
 
 </script>
 
-
 </body>
 
 </html>
 """
+
+
+# ============================================================
+# СТРАНИЦА ПОДПИСКИ
+# ============================================================
+
+@app.route("/s/<token>")
+def subscription_page(token):
+
+    user_id = get_user_id_from_token(token)
+
+    if user_id is None:
+        abort(404)
+
+    user = get_user(user_id)
+
+    if not user:
+        return (
+            """
+            <html>
+            <body style="
+                background:#07070b;
+                color:white;
+                font-family:Arial;
+                text-align:center;
+                padding:50px 20px;
+            ">
+                <h2>⛔ Пользователь не найден</h2>
+            </body>
+            </html>
+            """,
+            404,
+        )
+
+    content = get_subscription_content(user_id)
+
+    if not content:
+        return (
+            """
+            <html>
+            <body style="
+                background:#07070b;
+                color:white;
+                font-family:Arial;
+                text-align:center;
+                padding:50px 20px;
+            ">
+                <h2>⛔ Подписка не найдена</h2>
+                <p style="color:#888;">
+                    Для этого пользователя
+                    ещё не создана подписка.
+                </p>
+            </body>
+            </html>
+            """,
+            404,
+        )
+
+    (
+        page_url,
+        subscription_url,
+        happ_url,
+        incy_url,
+    ) = get_urls(user_id)
+
+    html = render_page(
+        user_id,
+        user,
+        subscription_url,
+        happ_url,
+        incy_url,
+    )
 
     return html
 
@@ -1183,7 +1162,7 @@ def subscription_content(token):
     if not content:
 
         return Response(
-            "#profile-title: ⛔ ixxy vpn\n\n"
+            "#profile-title: ⛔ ixxy VPN\n\n"
             "#announce: Подписка не найдена",
             status=404,
             mimetype="text/plain",
@@ -1196,10 +1175,8 @@ def subscription_content(token):
         headers={
             "Cache-Control":
                 "no-cache, no-store, must-revalidate",
-
             "Pragma":
                 "no-cache",
-
             "Expires":
                 "0",
         },
@@ -1213,78 +1190,9 @@ def subscription_content(token):
 @app.route("/")
 def index():
 
-    return """
-    <!DOCTYPE html>
-    <html lang="ru">
-
-    <head>
-        <meta charset="UTF-8">
-        <meta
-            name="viewport"
-            content="width=device-width, initial-scale=1.0"
-        >
-
-        <title>ixxy VPN</title>
-
-        <style>
-
-        body {
-            margin: 0;
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: #07070b;
-            color: white;
-            font-family:
-                -apple-system,
-                BlinkMacSystemFont,
-                "Segoe UI",
-                Arial;
-        }
-
-        .box {
-            text-align: center;
-        }
-
-        .logo {
-            font-size: 65px;
-        }
-
-        h1 {
-            margin-bottom: 8px;
-        }
-
-        p {
-            color: #777783;
-        }
-
-        </style>
-
-    </head>
-
-    <body>
-
-        <div class="box">
-
-            <div class="logo">
-                ☂️
-            </div>
-
-            <h1>
-                ixxy VPN
-            </h1>
-
-            <p>
-                Web server is running
-            </p>
-
-        </div>
-
-    </body>
-
-    </html>
-    """
+    return (
+        "☂️ ixxy VPN web server is running"
+    )
 
 
 # ============================================================
