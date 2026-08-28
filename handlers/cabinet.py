@@ -24,48 +24,45 @@ from github_update import (
 router = Router()
 
 
-# =========================================================
-# НАСТРОЙКИ
-# =========================================================
- 
-HAPP_URL = "https://apps.apple.com/app/happ-proxy-utility/id6504287215"
-
-INCY_URL = "https://apps.apple.com/app/incy/id6477785520"
-
-
-# =========================================================
+# ============================================================
 # ПРОМОКОД
-# =========================================================
+# ============================================================
 
 class PromoState(StatesGroup):
+
     waiting_code = State()
 
 
-# =========================================================
-# ЛИЧНЫЙ КАБИНЕТ
-# =========================================================
+# ============================================================
+# КАБИНЕТ
+# ============================================================
 
-@router.message(F.text == "👤 Личный кабинет")
+@router.message(
+    F.text == "👤 Личный кабинет"
+)
 async def cabinet(message: Message):
 
     await show_cabinet(message)
 
 
-# =========================================================
+# ============================================================
 # ПОКАЗ КАБИНЕТА
-# =========================================================
+# ============================================================
 
-async def show_cabinet(message: Message):
+async def show_cabinet(
+    message: Message
+):
 
     user_id = message.from_user.id
 
-    # Проверяем срок подписки
-    try:
-        check_user_subscription(user_id)
-    except Exception as e:
-        print(f"❌ CHECK SUB ERROR {user_id}: {e}")
+    # Проверяем подписку
+    check_user_subscription(
+        user_id
+    )
 
-    user = get_user(user_id)
+    user = get_user(
+        user_id
+    )
 
     if not user:
 
@@ -79,9 +76,9 @@ async def show_cabinet(message: Message):
     until = user[4]
     link = user[5]
 
-    # =====================================================
+    # ========================================================
     # ТАРИФ
-    # =====================================================
+    # ========================================================
 
     if subscription == "vip":
 
@@ -95,60 +92,76 @@ async def show_cabinet(message: Message):
 
         tariff = "❌ Нет подписки"
 
-    # =====================================================
+    # ========================================================
     # СТАТУС
-    # =====================================================
+    # ========================================================
 
     status = "❌ Не активна"
+
     until_text = "—"
+
     days = 0
 
     if until:
 
         try:
 
-            expire_date = datetime.strptime(
+            date = datetime.strptime(
                 str(until),
                 "%Y-%m-%d"
             )
 
-            until_text = expire_date.strftime(
+            until_text = date.strftime(
                 "%d.%m.%Y"
             )
 
-            now = datetime.now()
+            seconds = (
+                date - datetime.now()
+            ).total_seconds()
 
-            if expire_date > now:
+            if seconds > 0:
 
                 status = "🟢 Активна"
 
-                seconds = (
-                    expire_date - now
-                ).total_seconds()
-
                 days = max(
                     1,
-                    int(seconds // 86400)
+                    int(
+                        seconds // 86400
+                    )
                 )
 
             else:
 
                 status = "🔴 Истекла"
 
-        except Exception as e:
+        except Exception:
 
-            print(
-                f"❌ DATE ERROR {user_id}: {e}"
-            )
+            status = "❌ Не активна"
 
-    # =====================================================
+    # ========================================================
+    # ЕСЛИ ССЫЛКА ЕСТЬ
+    # ========================================================
+
+    if link:
+
+        link_text = (
+            "✅ Доступна"
+        )
+
+    else:
+
+        link_text = (
+            "❌ Отсутствует"
+        )
+
+    # ========================================================
     # КАБИНЕТ
-    # =====================================================
+    # ========================================================
 
     text = f"""
 ☂️ <b>ixxy VPN</b>
 
-👤 <b>Личный кабинет</b>
+<b>👤 Моя подписка</b>
 
 ━━━━━━━━━━━━━━━━━━
 
@@ -156,10 +169,10 @@ async def show_cabinet(message: Message):
 <code>{user_id}</code>
 
 🎫 Тариф:
-<b>{tariff}</b>
+{tariff}
 
 📊 Статус:
-<b>{status}</b>
+{status}
 
 📅 Активна до:
 <b>{until_text}</b>
@@ -167,191 +180,27 @@ async def show_cabinet(message: Message):
 ⏳ Осталось:
 <b>{days} дн.</b>
 
-━━━━━━━━━━━━━━━━━━
-
-🔗 <b>Ваша подписка</b>
-
-<code>{link if link else "Ссылка отсутствует"}</code>
+🔗 Подписка:
+{link_text}
 
 ━━━━━━━━━━━━━━━━━━
 
-📲 Добавьте подписку в приложение
+⚡ <b>Быстрое подключение</b>
+
+Добавьте подписку прямо в
+Happ или INCY через веб-страницу.
 """
 
     await message.answer(
         text,
         reply_markup=cabinet_keyboard(),
-        parse_mode="HTML"
+        parse_mode="HTML",
     )
 
 
-# =========================================================
-# ССЫЛКА
-# =========================================================
-
-@router.callback_query(F.data == "get_link")
-async def get_link(
-    callback: CallbackQuery
-):
-
-    user_id = callback.from_user.id
-
-    user = get_user(user_id)
-
-    if not user:
-
-        await callback.answer(
-            "❌ Пользователь не найден",
-            show_alert=True
-        )
-
-        return
-
-    link = user[5]
-
-    if not link:
-
-        await callback.answer(
-            "❌ Ссылка ещё не создана",
-            show_alert=True
-        )
-
-        return
-
-    await callback.message.answer(
-        f"""
-🔗 <b>Ваша ссылка подписки</b>
-
-<code>{link}</code>
-
-📲 Выберите приложение ниже.
-""",
-        parse_mode="HTML"
-    )
-
-    await callback.answer()
-
-
-# =========================================================
-# HAPP
-# =========================================================
-
-@router.callback_query(F.data == "add_happ")
-async def add_happ(
-    callback: CallbackQuery
-):
-
-    user_id = callback.from_user.id
-
-    user = get_user(user_id)
-
-    if not user or not user[5]:
-
-        await callback.answer(
-            "❌ Ссылка подписки отсутствует",
-            show_alert=True
-        )
-
-        return
-
-    link = user[5]
-
-    # Специальная ссылка Happ
-    happ_link = (
-        "happ://sync/"
-        + link
-    )
-
-    await callback.message.answer(
-        f"""
-📲 <b>Добавление в Happ</b>
-
-Нажмите кнопку ниже.
-
-После открытия Happ подписка будет добавлена автоматически.
-
-🔗 Если автоматическое добавление не сработало:
-
-<code>{link}</code>
-""",
-        reply_markup={
-            "inline_keyboard": [
-                [
-                    {
-                        "text": "📲 Открыть Happ",
-                        "url": happ_link
-                    }
-                ]
-            ]
-        },
-        parse_mode="HTML"
-    )
-
-    await callback.answer()
-
-
-# =========================================================
-# INCY
-# =========================================================
-
-@router.callback_query(F.data == "add_incy")
-async def add_incy(
-    callback: CallbackQuery
-):
-
-    user_id = callback.from_user.id
-
-    user = get_user(user_id)
-
-    if not user or not user[5]:
-
-        await callback.answer(
-            "❌ Ссылка подписки отсутствует",
-            show_alert=True
-        )
-
-        return
-
-    link = user[5]
-
-    # Ссылка для добавления подписки в INCY
-    incy_link = (
-        "incy://import/"
-        + link
-    )
-
-    await callback.message.answer(
-        f"""
-📲 <b>Добавление в INCY</b>
-
-⭐ <b>Рекомендовано</b>
-
-Нажмите кнопку ниже.
-
-Если INCY не открылся автоматически,
-скопируйте ссылку вручную:
-
-<code>{link}</code>
-""",
-        reply_markup={
-            "inline_keyboard": [
-                [
-                    {
-                        "text": "📲 Открыть INCY ⭐ Рекомендовано",
-                        "url": incy_link
-                    }
-                ]
-            ]
-        },
-        parse_mode="HTML"
-    )
-
-    await callback.answer()
-
-
-# =========================================================
-# ОБНОВИТЬ СЕРВЕРЫ
-# =========================================================
+# ============================================================
+# ОБНОВИТЬ СЕРВЕРА
+# ============================================================
 
 @router.callback_query(
     F.data == "refresh_subscription"
@@ -362,22 +211,26 @@ async def refresh_subscription(
 
     user_id = callback.from_user.id
 
-    if not check_user_subscription(user_id):
+    if not check_user_subscription(
+        user_id
+    ):
 
         await callback.answer(
             "❌ Подписка не активна",
-            show_alert=True
+            show_alert=True,
         )
 
         return
 
-    user = get_user(user_id)
+    user = get_user(
+        user_id
+    )
 
     if not user:
 
         await callback.answer(
             "❌ Пользователь не найден",
-            show_alert=True
+            show_alert=True,
         )
 
         return
@@ -388,7 +241,7 @@ async def refresh_subscription(
 
         await callback.answer(
             "❌ Нет активной подписки",
-            show_alert=True
+            show_alert=True,
         )
 
         return
@@ -408,7 +261,7 @@ async def refresh_subscription(
 
         await callback.answer(
             "❌ Ошибка даты подписки",
-            show_alert=True
+            show_alert=True,
         )
 
         return
@@ -421,38 +274,79 @@ async def refresh_subscription(
 
         update_subscription_file(
             user_id,
-            date_text
+            date_text,
         )
 
         await callback.message.answer(
-            """
-✅ <b>Серверы обновлены!</b>
-
-🔗 Ваша ссылка осталась прежней.
-📲 Можно продолжать пользоваться VPN.
-""",
-            parse_mode="HTML"
+            "✅ <b>Серверы обновлены!</b>\n\n"
+            "🔗 Ссылка осталась прежней.",
+            parse_mode="HTML",
         )
 
     except Exception as e:
 
         print(
-            f"❌ REFRESH ERROR {user_id}: {e}"
+            f"❌ Ошибка обновления "
+            f"{user_id}: {e}"
         )
 
         await callback.message.answer(
-            """
-❌ <b>Не удалось обновить серверы.</b>
-
-Попробуйте ещё раз немного позже.
-""",
-            parse_mode="HTML"
+            "❌ Не удалось обновить серверы.\n"
+            "Попробуйте ещё раз."
         )
 
 
-# =========================================================
-# ПРОМОКОД
-# =========================================================
+# ============================================================
+# ПОЛУЧИТЬ ССЫЛКУ
+# ============================================================
+
+@router.callback_query(
+    F.data == "get_link"
+)
+async def get_link(
+    callback: CallbackQuery
+):
+
+    user = get_user(
+        callback.from_user.id
+    )
+
+    if not user or not user[5]:
+
+        await callback.message.answer(
+            "❌ Ссылка отсутствует."
+        )
+
+        await callback.answer()
+
+        return
+
+    link = user[5]
+
+    await callback.message.answer(
+        f"""
+🔗 <b>Моя подписка</b>
+
+<code>{link}</code>
+
+⚡ <b>Добавить в Happ:</b>
+нажмите кнопку на веб-странице.
+
+🚀 <b>Добавить в INCY:</b>
+нажмите кнопку на веб-странице.
+
+👇 Откройте ссылку:
+{link}
+""",
+        parse_mode="HTML",
+    )
+
+    await callback.answer()
+
+
+# ============================================================
+# ПРОМОКОД — НАЧАЛО
+# ============================================================
 
 @router.callback_query(
     F.data == "enter_promo"
@@ -467,20 +361,16 @@ async def enter_promo(
     )
 
     await callback.message.answer(
-        """
-🎟 <b>Активация промокода</b>
-
-Введите промокод одним сообщением:
-""",
-        parse_mode="HTML"
+        "🎟 <b>Введите промокод:</b>",
+        parse_mode="HTML",
     )
 
     await callback.answer()
 
 
-# =========================================================
-# АКТИВАЦИЯ ПРОМОКОДА
-# =========================================================
+# ============================================================
+# ПРОМОКОД — АКТИВАЦИЯ
+# ============================================================
 
 @router.message(
     PromoState.waiting_code
@@ -492,14 +382,6 @@ async def activate_promo(
 
     user_id = message.from_user.id
 
-    if not message.text:
-
-        await message.answer(
-            "❌ Введите промокод текстом."
-        )
-
-        return
-
     code = (
         message.text
         .strip()
@@ -510,28 +392,30 @@ async def activate_promo(
 
         result = use_promocode(
             user_id,
-            code
+            code,
         )
 
     except Exception as e:
 
         print(
-            f"❌ PROMO ERROR {user_id}: {e}"
+            f"❌ Ошибка промокода "
+            f"{user_id}: {e}"
         )
 
         await state.clear()
 
         await message.answer(
-            "❌ Произошла ошибка при активации промокода."
+            "❌ Произошла ошибка "
+            "при активации."
         )
 
         return
 
-    reason = result.get(
-        "reason"
-    )
+    # ========================================================
+    # НЕ НАЙДЕН
+    # ========================================================
 
-    if reason == "not_found":
+    if result["reason"] == "not_found":
 
         await state.clear()
 
@@ -541,17 +425,26 @@ async def activate_promo(
 
         return
 
-    if reason == "already_used":
+    # ========================================================
+    # УЖЕ ИСПОЛЬЗОВАН
+    # ========================================================
+
+    if result["reason"] == "already_used":
 
         await state.clear()
 
         await message.answer(
-            "❌ Вы уже использовали этот промокод."
+            "❌ Вы уже использовали "
+            "этот промокод."
         )
 
         return
 
-    if reason == "user_not_found":
+    # ========================================================
+    # ПОЛЬЗОВАТЕЛЬ НЕ НАЙДЕН
+    # ========================================================
+
+    if result["reason"] == "user_not_found":
 
         await state.clear()
 
@@ -561,37 +454,47 @@ async def activate_promo(
 
         return
 
-    if reason != "success":
+    # ========================================================
+    # ОШИБКА
+    # ========================================================
+
+    if not result.get("success"):
 
         await state.clear()
 
         await message.answer(
-            "❌ Не удалось активировать промокод."
+            "❌ Не удалось активировать "
+            "промокод."
         )
 
         return
 
+    # ========================================================
+    # УСПЕШНО
+    # ========================================================
+
     days = result["days"]
+
     new_date = result["date"]
 
-    # Обновляем персональную подписку
     try:
 
         update_subscription_file(
             user_id,
-            new_date
+            new_date,
         )
 
     except Exception as e:
 
         print(
-            f"❌ SUB UPDATE ERROR {user_id}: {e}"
+            f"❌ Ошибка обновления "
+            f"серверов {user_id}: {e}"
         )
 
     try:
 
         date_text = datetime.strptime(
-            str(new_date),
+            new_date,
             "%Y-%m-%d"
         ).strftime(
             "%d.%m.%Y"
@@ -619,13 +522,13 @@ async def activate_promo(
 🔄 Серверы обновлены.
 """,
         reply_markup=cabinet_keyboard(),
-        parse_mode="HTML"
+        parse_mode="HTML",
     )
 
 
-# =========================================================
+# ============================================================
 # ПРОДЛЕНИЕ
-# =========================================================
+# ============================================================
 
 @router.callback_query(
     F.data == "renew"
@@ -641,33 +544,7 @@ async def renew(
 Выберите способ оплаты:
 """,
         reply_markup=payment_method_keyboard(),
-        parse_mode="HTML"
-    )
-
-    await callback.answer()
-
-
-# =========================================================
-# НАЗАД В КАБИНЕТ
-# =========================================================
-
-@router.callback_query(
-    F.data == "cabinet"
-)
-async def back_to_cabinet(
-    callback: CallbackQuery
-):
-
-    try:
-
-        await callback.message.delete()
-
-    except Exception:
-
-        pass
-
-    await show_cabinet(
-        callback.message
+        parse_mode="HTML",
     )
 
     await callback.answer()
