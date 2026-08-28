@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    >
+    <meta
+        name="theme-color"
+        content="#08090d"
+    >
+    <meta
+        name="description"
+        content="ixxy VPN — быстрое подключение к VPN"
+    >
+    <title>ixxy VPN</title>
+    <link
+        rel="stylesheet"
+        href="/style.css"
+    >
+</head>
+<body>
+    <div class="background">
+        <div class="glow glow-one"></div>
+        <div class="glow glow-two"></div>
+    </div>
+    <main class="page">
+        <section class="card">
+            <div class="logo">
+                <span>☂️</span>
+            </div>
+            <div class="brand">
+                <h1>ixxy VPN</h1>
+                <p>Безопасное подключение в один тап</p>
+            </div>
+            <div class="status">
+                <span class="status-dot"></span>
+                <span>Подписка готова</span>
+            </div>
+            <div class="divider"></div>
+            <h2>Добавьте VPN</h2>
+            <p class="subtitle">
+                Выберите приложение, в которое хотите
+                добавить подписку.
+            </p>
+            <div class="buttons">
+                <button
+                    class="app-button happ"
+                    id="happButton"
+                    type="button"
+                >
+                    <span class="button-icon">🚀</span>
+                    <span class="button-text">
+                        <strong>Добавить в Happ</strong>
+                        <small>Открыть приложение</small>
+                    </span>
+                    <span class="arrow">›</span>
+                </button>
+                <button
+                    class="app-button incy"
+                    id="incyButton"
+                    type="button"
+                >
+                    <span class="button-icon">⚡</span>
+                    <span class="button-text">
+                        <strong>Добавить в INCY</strong>
+                        <small>Открыть приложение</small>
+                    </span>
+                    <span class="arrow">›</span>
+                </button>
+            </div>
+            <div class="copy-section">
+                <div class="copy-title">
+                    <span>🔗</span>
+                    <span>Ссылка подписки</span>
+                </div>
+                <div class="link-box">
+                    <span id="subscriptionLink">
+                        Подготовка ссылки...
+                    </span>
+                </div>
+                <button
+                    class="copy-button"
+                    id="copyButton"
+                    type="button"
+                >
+                    📋 Скопировать ссылку
+                </button>
+            </div>
+            <div class="instruction">
+                <div class="instruction-title">
+                    <span>💡</span>
+                    <span>Как подключить</span>
+                </div>
+                <div class="steps">
+                    <div class="step">
+                        <span class="step-number">1</span>
+                        <div>
+                            <strong>Выберите приложение</strong>
+                            <p>Happ или INCY</p>
+                        </div>
+                    </div>
+                    <div class="step">
+                        <span class="step-number">2</span>
+                        <div>
+                            <strong>Добавьте подписку</strong>
+                            <p>Нажмите кнопку выше</p>
+                        </div>
+                    </div>
+                    <div class="step">
+                        <span class="step-number">3</span>
+                        <div>
+                            <strong>Подключитесь</strong>
+                            <p>Откройте приложение и включите VPN</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <footer>
+                <span>☂️</span>
+                <span>ixxy VPN</span>
+                <span>•</span>
+                <span>Secure connection</span>
+            </footer>
+        </section>
+    </main>
+    <div
+        class="toast"
+        id="toast"
+    >
+        <span>✓</span>
+        <span id="toastText">Ссылка скопирована</span>
+    </div>
+    <script src="/script.js"></script>
+</body>
+</html>
