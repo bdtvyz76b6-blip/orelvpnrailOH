@@ -95,6 +95,23 @@ def get_urls(user_id):
 
 
 # ============================================================
+# БЕЗОПАСНАЯ JS-СТРОКА
+# ============================================================
+
+def js_escape(value):
+
+    return (
+        str(value)
+        .replace("\\", "\\\\")
+        .replace("'", "\\'")
+        .replace('"', '\\"')
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+        .replace("</", "<\\/")
+    )
+
+
+# ============================================================
 # СТРАНИЦА ПОДПИСКИ
 # ============================================================
 
@@ -121,53 +138,74 @@ def subscription_page(token):
     if not content:
 
         return """
-        <!DOCTYPE html>
-        <html lang="ru">
-        <head>
-            <meta charset="UTF-8">
-            <meta
-                name="viewport"
-                content="width=device-width, initial-scale=1"
-            >
-            <meta name="theme-color" content="#08080d">
-            <title>ixxy VPN</title>
-        </head>
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ixxy VPN</title>
 
-        <body style="
-            margin:0;
-            min-height:100vh;
-            display:flex;
-            align-items:center;
-            justify-content:center;
-            background:#08080d;
-            color:white;
-            font-family:Arial,sans-serif;
-            text-align:center;
-        ">
+<style>
+* {
+    box-sizing:border-box;
+}
 
-            <div>
-                <div style="
-                    font-size:60px;
-                    margin-bottom:20px;
-                ">
-                    ⛔
-                </div>
+body {
+    margin:0;
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:25px;
+    background:#07070b;
+    color:white;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;
+    text-align:center;
+}
 
-                <h2>
-                    Подписка не найдена
-                </h2>
+.box {
+    width:100%;
+    max-width:430px;
+    padding:35px 25px;
+    border-radius:30px;
+    background:#15151d;
+    border:1px solid rgba(255,255,255,.08);
+}
 
-                <p style="
-                    color:#888;
-                ">
-                    Для этого пользователя
-                    пока нет активной подписки.
-                </p>
-            </div>
+.icon {
+    font-size:60px;
+    margin-bottom:15px;
+}
 
-        </body>
-        </html>
-        """, 404
+h1 {
+    margin:0 0 10px;
+}
+
+p {
+    color:#90909c;
+    line-height:1.5;
+}
+</style>
+</head>
+
+<body>
+
+<div class="box">
+
+    <div class="icon">⛔</div>
+
+    <h1>Подписка не найдена</h1>
+
+    <p>
+        Для этого пользователя пока нет
+        доступной подписки.
+    </p>
+
+</div>
+
+</body>
+</html>
+""", 404
 
     # --------------------------------------------------------
     # URL
@@ -186,6 +224,8 @@ def subscription_page(token):
 
     username = "нет"
     first_name = "Пользователь"
+    subscription = "none"
+    until = ""
 
     if user:
 
@@ -201,35 +241,108 @@ def subscription_page(token):
             else "Пользователь"
         )
 
+        subscription = (
+            str(user[3])
+            if user[3]
+            else "none"
+        )
+
+        until = (
+            str(user[4])
+            if user[4]
+            else ""
+        )
+
     username = html.escape(username)
     first_name = html.escape(first_name)
 
     # --------------------------------------------------------
-    # Безопасные JS-строки
+    # Статус
     # --------------------------------------------------------
 
-    js_subscription_url = (
+    status = "🔴 Не активна"
+    status_class = "inactive"
+    tariff = "Нет подписки"
+    days_left = 0
+    until_text = "—"
+
+    if subscription == "vip":
+
+        tariff = "👑 ixxy VIP"
+
+    elif subscription == "trial":
+
+        tariff = "🎁 Пробный период"
+
+    if until:
+
+        try:
+
+            from datetime import datetime
+
+            expire_date = datetime.strptime(
+                until,
+                "%Y-%m-%d"
+            ).date()
+
+            today = datetime.now().date()
+
+            until_text = expire_date.strftime(
+                "%d.%m.%Y"
+            )
+
+            days_left = (
+                expire_date - today
+            ).days
+
+            if days_left >= 0:
+
+                status = "🟢 Активна"
+                status_class = "active"
+
+            else:
+
+                status = "🔴 Истекла"
+                status_class = "inactive"
+                days_left = 0
+
+        except Exception:
+
+            pass
+
+    # --------------------------------------------------------
+    # Текст дней
+    # --------------------------------------------------------
+
+    if days_left == 1:
+        days_text = "1 день"
+    elif 2 <= days_left <= 4:
+        days_text = f"{days_left} дня"
+    else:
+        days_text = f"{days_left} дней"
+
+    # --------------------------------------------------------
+    # Безопасные значения
+    # --------------------------------------------------------
+
+    safe_subscription_url = html.escape(
         subscription_url
-        .replace("\\", "\\\\")
-        .replace("'", "\\'")
-        .replace("\n", "\\n")
-        .replace("\r", "\\r")
     )
 
-    js_happ_url = (
+    js_subscription_url = js_escape(
+        subscription_url
+    )
+
+    js_happ_url = js_escape(
         happ_url
-        .replace("\\", "\\\\")
-        .replace("'", "\\'")
-        .replace("\n", "\\n")
-        .replace("\r", "\\r")
     )
 
-    js_incy_url = (
+    js_incy_url = js_escape(
         incy_url
-        .replace("\\", "\\\\")
-        .replace("'", "\\'")
-        .replace("\n", "\\n")
-        .replace("\r", "\\r")
+    )
+
+    js_page_url = js_escape(
+        page_url
     )
 
     # ========================================================
@@ -263,31 +376,60 @@ def subscription_page(token):
     content="yes"
 >
 
+<meta
+    name="apple-mobile-web-app-capable"
+    content="yes"
+>
+
 <title>☂️ ixxy VPN</title>
 
 <style>
 
 * {{
-    box-sizing: border-box;
-    -webkit-tap-highlight-color: transparent;
+    box-sizing:border-box;
+    -webkit-tap-highlight-color:transparent;
+}}
+
+:root {{
+
+    --bg:#07070b;
+    --card:rgba(18,18,27,.88);
+    --card2:rgba(255,255,255,.045);
+    --text:#ffffff;
+    --muted:#91919d;
+    --border:rgba(255,255,255,.09);
+    --shadow:rgba(0,0,0,.48);
+
+}}
+
+body.light {{
+
+    --bg:#f3f4f8;
+    --card:rgba(255,255,255,.88);
+    --card2:rgba(0,0,0,.045);
+    --text:#111118;
+    --muted:#696974;
+    --border:rgba(0,0,0,.08);
+    --shadow:rgba(0,0,0,.12);
+
 }}
 
 html {{
-    min-height: 100%;
+    min-height:100%;
 }}
 
 body {{
 
-    margin: 0;
+    margin:0;
 
-    min-height: 100vh;
+    min-height:100vh;
 
     padding:
-        max(18px, env(safe-area-inset-top))
-        18px
+        max(16px, env(safe-area-inset-top))
+        16px
         max(25px, env(safe-area-inset-bottom));
 
-    color: white;
+    color:var(--text);
 
     font-family:
         -apple-system,
@@ -299,166 +441,261 @@ body {{
 
     background:
         radial-gradient(
-            circle at 10% 5%,
-            rgba(255,0,190,.28),
-            transparent 32%
+            circle at 5% 0%,
+            rgba(255,0,190,.23),
+            transparent 31%
         ),
         radial-gradient(
-            circle at 90% 10%,
-            rgba(0,190,255,.28),
-            transparent 32%
+            circle at 95% 5%,
+            rgba(0,190,255,.23),
+            transparent 31%
         ),
         radial-gradient(
             circle at 50% 100%,
-            rgba(120,40,255,.28),
-            transparent 42%
+            rgba(115,50,255,.20),
+            transparent 43%
         ),
-        #07070b;
+        var(--bg);
 
-    overscroll-behavior: none;
+    transition:
+        background .3s ease,
+        color .3s ease;
+
+    overscroll-behavior:none;
+
 }}
 
 .container {{
 
-    width: 100%;
+    width:100%;
 
-    max-width: 520px;
+    max-width:520px;
 
-    margin: 0 auto;
+    margin:0 auto;
+
+}}
+
+.topbar {{
+
+    display:flex;
+
+    justify-content:flex-end;
+
+    margin-bottom:4px;
+
+}}
+
+.theme-toggle {{
+
+    width:47px;
+
+    height:47px;
+
+    border:1px solid var(--border);
+
+    border-radius:15px;
+
+    display:flex;
+
+    align-items:center;
+
+    justify-content:center;
+
+    background:var(--card2);
+
+    color:var(--text);
+
+    font-size:20px;
+
+    cursor:pointer;
+
+    backdrop-filter:blur(15px);
+
+    -webkit-backdrop-filter:blur(15px);
+
+    transition:
+        transform .15s ease,
+        background .3s ease;
+
+}}
+
+.theme-toggle:active {{
+
+    transform:scale(.92);
 
 }}
 
 .logo {{
 
-    width: 82px;
+    width:88px;
 
-    height: 82px;
+    height:88px;
 
-    margin:
-        12px auto 16px;
+    margin:2px auto 17px;
 
-    border-radius: 26px;
+    border-radius:28px;
 
-    display: flex;
+    display:flex;
 
-    align-items: center;
+    align-items:center;
 
-    justify-content: center;
+    justify-content:center;
 
-    font-size: 42px;
+    font-size:45px;
 
     background:
         linear-gradient(
             135deg,
-            #ff28ce,
-            #743cff,
+            #ff24c5,
+            #773cff,
             #00c9ff
         );
 
     box-shadow:
-        0 18px 55px
-        rgba(117,60,255,.42);
+        0 20px 60px
+        rgba(115,60,255,.40);
+
+    animation:
+        logoFloat 4s ease-in-out infinite;
+
+}}
+
+@keyframes logoFloat {{
+
+    0%,100% {{
+        transform:translateY(0);
+    }}
+
+    50% {{
+        transform:translateY(-4px);
+    }}
 
 }}
 
 h1 {{
 
-    margin: 0;
+    margin:0;
 
-    text-align: center;
+    text-align:center;
 
-    font-size: 30px;
+    font-size:30px;
 
-    line-height: 1.1;
+    line-height:1.1;
 
-    font-weight: 850;
+    font-weight:850;
+
+    letter-spacing:-.6px;
 
 }}
 
 .subtitle {{
 
     margin:
-        8px 0 25px;
+        8px 0 22px;
 
-    text-align: center;
+    text-align:center;
 
-    color: #9696a3;
+    color:var(--muted);
 
-    font-size: 15px;
+    font-size:14px;
 
 }}
 
 .card {{
 
-    padding: 18px;
+    padding:17px;
 
-    border-radius: 28px;
+    border-radius:29px;
 
-    background:
-        rgba(18,18,27,.88);
+    background:var(--card);
 
-    border:
-        1px solid
-        rgba(255,255,255,.09);
+    border:1px solid var(--border);
 
     box-shadow:
-        0 25px 80px
-        rgba(0,0,0,.48);
+        0 25px 80px var(--shadow);
 
-    backdrop-filter:
-        blur(24px);
+    backdrop-filter:blur(25px);
 
-    -webkit-backdrop-filter:
-        blur(24px);
+    -webkit-backdrop-filter:blur(25px);
+
+    animation:
+        cardIn .45s ease;
+
+}}
+
+@keyframes cardIn {{
+
+    from {{
+        opacity:0;
+        transform:translateY(10px);
+    }}
+
+    to {{
+        opacity:1;
+        transform:translateY(0);
+    }}
 
 }}
 
 .status {{
 
-    display: flex;
+    padding:17px;
 
-    align-items: center;
+    border-radius:21px;
 
-    justify-content: space-between;
+    display:flex;
 
-    padding: 16px;
+    align-items:center;
 
-    border-radius: 20px;
+    justify-content:space-between;
+
+    border:1px solid var(--border);
+
+}}
+
+.status.active {{
 
     background:
         linear-gradient(
             135deg,
-            rgba(0,255,165,.14),
-            rgba(0,170,255,.08)
+            rgba(0,255,165,.13),
+            rgba(0,170,255,.06)
         );
 
-    border:
-        1px solid
-        rgba(0,255,180,.14);
+}}
+
+.status.inactive {{
+
+    background:
+        rgba(255,60,80,.07);
 
 }}
 
 .status-left {{
 
-    display: flex;
+    display:flex;
 
-    align-items: center;
+    align-items:center;
 
-    gap: 12px;
+    gap:12px;
 
 }}
 
 .dot {{
 
-    width: 12px;
+    width:12px;
 
-    height: 12px;
+    height:12px;
 
-    flex-shrink: 0;
+    border-radius:50%;
 
-    border-radius: 50%;
+    flex-shrink:0;
 
-    background: #00f59b;
+}}
+
+.active .dot {{
+
+    background:#00f59b;
 
     box-shadow:
         0 0 18px
@@ -466,143 +703,226 @@ h1 {{
 
 }}
 
+.inactive .dot {{
+
+    background:#ff4d61;
+
+    box-shadow:
+        0 0 15px
+        rgba(255,77,97,.65);
+
+}}
+
 .status-title {{
 
-    font-size: 15px;
+    font-size:15px;
 
-    font-weight: 800;
+    font-weight:850;
 
 }}
 
 .status-info {{
 
-    margin-top: 3px;
+    margin-top:3px;
 
-    color: #8d8d99;
+    color:var(--muted);
 
-    font-size: 12px;
+    font-size:12px;
+
+}}
+
+.lock-icon {{
+
+    font-size:21px;
+
+}}
+
+.info-grid {{
+
+    display:grid;
+
+    grid-template-columns:1fr 1fr;
+
+    gap:10px;
+
+    margin-top:11px;
+
+}}
+
+.info-box {{
+
+    padding:15px;
+
+    border-radius:19px;
+
+    background:var(--card2);
+
+    border:1px solid var(--border);
+
+}}
+
+.info-label {{
+
+    color:var(--muted);
+
+    font-size:11px;
+
+    margin-bottom:5px;
+
+}}
+
+.info-value {{
+
+    color:var(--text);
+
+    font-size:14px;
+
+    font-weight:800;
+
+    word-break:break-word;
 
 }}
 
 .profile {{
 
-    margin-top: 12px;
+    margin-top:10px;
 
-    padding: 15px 16px;
+    padding:15px;
 
-    border-radius: 18px;
+    border-radius:19px;
 
-    background:
-        rgba(255,255,255,.045);
+    background:var(--card2);
+
+    border:1px solid var(--border);
 
 }}
 
 .profile-row {{
 
-    display: flex;
+    display:flex;
 
-    justify-content: space-between;
+    justify-content:space-between;
 
-    gap: 15px;
+    gap:15px;
 
-    padding: 5px 0;
+    padding:5px 0;
 
 }}
 
 .profile-label {{
 
-    color: #858591;
+    color:var(--muted);
 
-    font-size: 13px;
+    font-size:12px;
 
 }}
 
 .profile-value {{
 
-    color: white;
+    color:var(--text);
 
-    font-size: 13px;
+    font-size:12px;
 
-    font-weight: 700;
+    font-weight:750;
 
-    text-align: right;
+    text-align:right;
 
-    word-break: break-word;
-
-}}
-
-.id {{
-
-    margin-top: 12px;
-
-    padding: 15px;
-
-    border-radius: 17px;
-
-    background:
-        rgba(255,255,255,.055);
-
-    color: #a8a8b3;
-
-    font-size: 14px;
+    word-break:break-word;
 
 }}
 
-.id code {{
+.connect-title {{
 
-    color: white;
+    margin:
+        21px 2px 8px;
 
-    font-weight: 700;
+    font-size:14px;
+
+    font-weight:850;
+
+}}
+
+.connect-subtitle {{
+
+    margin:
+        0 2px 10px;
+
+    color:var(--muted);
+
+    font-size:12px;
+
+    line-height:1.4;
 
 }}
 
 .button {{
 
-    width: 100%;
+    width:100%;
 
-    min-height: 56px;
+    min-height:56px;
 
-    margin-top: 11px;
+    margin-top:10px;
 
-    padding: 0 18px;
+    padding:0 17px;
 
-    border: 0;
+    border:0;
 
-    border-radius: 17px;
+    border-radius:17px;
 
-    display: flex;
+    display:flex;
 
-    align-items: center;
+    align-items:center;
 
-    justify-content: center;
+    justify-content:center;
 
-    gap: 9px;
+    gap:9px;
 
-    color: white;
+    color:white;
 
-    text-decoration: none;
+    text-decoration:none;
 
-    font-family: inherit;
+    font-family:inherit;
 
-    font-size: 16px;
+    font-size:15px;
 
-    font-weight: 800;
+    font-weight:850;
 
-    cursor: pointer;
+    cursor:pointer;
 
-    touch-action: manipulation;
+    touch-action:manipulation;
 
     transition:
         transform .12s ease,
-        opacity .12s ease;
+        opacity .12s ease,
+        filter .12s ease;
 
 }}
 
 .button:active {{
 
-    transform: scale(.97);
+    transform:scale(.97);
 
-    opacity: .85;
+    opacity:.86;
+
+}}
+
+.main-connect {{
+
+    min-height:62px;
+
+    font-size:17px;
+
+    background:
+        linear-gradient(
+            135deg,
+            #ff25b9,
+            #783cff,
+            #00bfff
+        );
+
+    box-shadow:
+        0 13px 35px
+        rgba(120,60,255,.28);
 
 }}
 
@@ -615,10 +935,6 @@ h1 {{
             #ff5d78
         );
 
-    box-shadow:
-        0 10px 30px
-        rgba(255,37,184,.25);
-
 }}
 
 .incy {{
@@ -630,20 +946,25 @@ h1 {{
             #00baff
         );
 
-    box-shadow:
-        0 10px 30px
-        rgba(0,186,255,.22);
-
 }}
 
 .copy {{
 
-    background:
-        rgba(255,255,255,.08);
+    background:var(--card2);
 
-    border:
-        1px solid
-        rgba(255,255,255,.09);
+    color:var(--text);
+
+    border:1px solid var(--border);
+
+}}
+
+.refresh {{
+
+    background:transparent;
+
+    color:var(--muted);
+
+    border:1px solid var(--border);
 
 }}
 
@@ -652,69 +973,136 @@ h1 {{
     margin:
         20px 2px 8px;
 
-    color: #858591;
+    color:var(--muted);
 
-    font-size: 12px;
+    font-size:11px;
 
-    font-weight: 700;
+    font-weight:750;
 
 }}
 
 .subscription {{
 
-    padding: 14px;
+    padding:14px;
 
-    border-radius: 16px;
+    border-radius:16px;
 
     background:
-        rgba(0,0,0,.25);
+        rgba(0,0,0,.18);
 
-    color: #9696a2;
+    border:1px solid var(--border);
 
-    font-size: 12px;
+    color:var(--muted);
 
-    line-height: 1.5;
+    font-size:11px;
 
-    word-break: break-all;
+    line-height:1.5;
 
-    user-select: text;
+    word-break:break-all;
 
-    -webkit-user-select: text;
+    user-select:text;
+
+    -webkit-user-select:text;
+
+}}
+
+.light .subscription {{
+
+    background:rgba(0,0,0,.035);
+
+}}
+
+.id {{
+
+    margin-top:10px;
+
+    padding:14px;
+
+    border-radius:17px;
+
+    background:var(--card2);
+
+    border:1px solid var(--border);
+
+    color:var(--muted);
+
+    font-size:12px;
+
+}}
+
+.id code {{
+
+    color:var(--text);
+
+    font-weight:800;
+
+}}
+
+.telegram {{
+
+    margin-top:10px;
+
+    min-height:48px;
+
+    display:flex;
+
+    align-items:center;
+
+    justify-content:center;
+
+    text-decoration:none;
+
+    color:var(--muted);
+
+    font-size:12px;
+
+    font-weight:700;
+
+    border-radius:15px;
+
+    border:1px solid var(--border);
+
+    background:var(--card2);
 
 }}
 
 .footer {{
 
-    margin-top: 20px;
+    margin-top:18px;
 
-    padding-bottom: 10px;
+    text-align:center;
 
-    text-align: center;
+    color:var(--muted);
 
-    color: #70707c;
+    opacity:.7;
 
-    font-size: 12px;
+    font-size:11px;
 
 }}
 
 .toast {{
 
-    position: fixed;
+    position:fixed;
 
-    left: 50%;
+    left:50%;
 
-    bottom: 25px;
+    bottom:
+        max(22px, env(safe-area-inset-bottom));
 
     transform:
-        translate(-50%, 20px);
+        translate(-50%,20px);
+
+    width:max-content;
+
+    max-width:calc(100% - 30px);
 
     padding:
-        13px 18px;
+        12px 17px;
 
-    border-radius: 15px;
+    border-radius:15px;
 
     background:
-        rgba(30,30,40,.95);
+        rgba(25,25,34,.96);
 
     border:
         1px solid
@@ -722,32 +1110,49 @@ h1 {{
 
     box-shadow:
         0 15px 45px
-        rgba(0,0,0,.45);
+        rgba(0,0,0,.4);
 
-    color: white;
+    color:white;
 
-    font-size: 14px;
+    font-size:13px;
 
-    font-weight: 700;
+    font-weight:750;
 
-    opacity: 0;
+    opacity:0;
 
-    pointer-events: none;
+    pointer-events:none;
 
     transition:
-        opacity .2s,
-        transform .2s;
+        opacity .2s ease,
+        transform .2s ease;
 
-    z-index: 9999;
+    z-index:9999;
 
 }}
 
 .toast.show {{
 
-    opacity: 1;
+    opacity:1;
 
     transform:
-        translate(-50%, 0);
+        translate(-50%,0);
+
+}}
+
+@media (max-width:380px) {{
+
+    body {{
+        padding-left:12px;
+        padding-right:12px;
+    }}
+
+    .card {{
+        padding:14px;
+    }}
+
+    h1 {{
+        font-size:27px;
+    }}
 
 }}
 
@@ -759,6 +1164,24 @@ h1 {{
 
 <div class="container">
 
+    <!-- =====================================================
+         TOP
+         ===================================================== -->
+
+    <div class="topbar">
+
+        <button
+            class="theme-toggle"
+            id="themeButton"
+            type="button"
+            onclick="toggleTheme()"
+            aria-label="Сменить тему"
+        >
+            🌙
+        </button>
+
+    </div>
+
     <div class="logo">
         ☂️
     </div>
@@ -768,12 +1191,16 @@ h1 {{
     </h1>
 
     <div class="subtitle">
-        ☂️ ixxy VPN
+        ixxy VPN • безопасное подключение
     </div>
 
     <div class="card">
 
-        <div class="status">
+        <!-- =================================================
+             STATUS
+             ================================================= -->
+
+        <div class="status {status_class}">
 
             <div class="status-left">
 
@@ -782,22 +1209,70 @@ h1 {{
                 <div>
 
                     <div class="status-title">
-                        Подписка доступна
+                        {status}
                     </div>
 
                     <div class="status-info">
-                        Ваш персональный VPN
+                        Персональный доступ ixxy VPN
                     </div>
 
                 </div>
 
             </div>
 
-            <div>
+            <div class="lock-icon">
                 🔐
             </div>
 
         </div>
+
+        <!-- =================================================
+             INFO
+             ================================================= -->
+
+        <div class="info-grid">
+
+            <div class="info-box">
+
+                <div class="info-label">
+                    🎫 Тариф
+                </div>
+
+                <div class="info-value">
+                    {html.escape(tariff)}
+                </div>
+
+            </div>
+
+            <div class="info-box">
+
+                <div class="info-label">
+                    📅 Активна до
+                </div>
+
+                <div class="info-value">
+                    {until_text}
+                </div>
+
+            </div>
+
+        </div>
+
+        <div class="info-box" style="margin-top:10px;">
+
+            <div class="info-label">
+                ⏳ Осталось
+            </div>
+
+            <div class="info-value">
+                {days_text}
+            </div>
+
+        </div>
+
+        <!-- =================================================
+             PROFILE
+             ================================================= -->
 
         <div class="profile">
 
@@ -829,26 +1304,38 @@ h1 {{
 
         <div class="id">
 
-            🆔 Ваш ID:
+            🆔 Telegram ID:
             <code>{user_id}</code>
 
         </div>
 
         <!-- =================================================
-             HAPP
+             CONNECTION
              ================================================= -->
+
+        <div class="connect-title">
+            ⚡ Подключение
+        </div>
+
+        <div class="connect-subtitle">
+            Выберите приложение для подключения VPN.
+        </div>
+
+        <button
+            type="button"
+            class="button main-connect"
+            onclick="openApp('happ')"
+        >
+            ⚡ Подключить через Happ
+        </button>
 
         <button
             type="button"
             class="button happ"
             onclick="openApp('happ')"
         >
-            ⚡ Добавить в Happ
+            📲 Добавить в Happ
         </button>
-
-        <!-- =================================================
-             INCY
-             ================================================= -->
 
         <button
             type="button"
@@ -858,10 +1345,6 @@ h1 {{
             🚀 Добавить в INCY
         </button>
 
-        <!-- =================================================
-             COPY
-             ================================================= -->
-
         <button
             type="button"
             class="button copy"
@@ -870,18 +1353,41 @@ h1 {{
             📋 Скопировать ссылку
         </button>
 
+        <button
+            type="button"
+            class="button refresh"
+            onclick="refreshPage()"
+        >
+            🔄 Обновить страницу
+        </button>
+
+        <!-- =================================================
+             LINK
+             ================================================= -->
+
         <div class="subscription-title">
-            🔗 Ссылка подписки
+            🔗 ССЫЛКА ПОДПИСКИ
         </div>
 
         <div class="subscription">
-            {html.escape(subscription_url)}
+            {safe_subscription_url}
         </div>
+
+        <!-- =================================================
+             TELEGRAM
+             ================================================= -->
+
+        <a
+            class="telegram"
+            href="https://t.me/"
+        >
+            ← Вернуться в Telegram
+        </a>
 
     </div>
 
     <div class="footer">
-        ixxy VPN • Моя подписка
+        ☂️ ixxy VPN • Ваш персональный VPN
     </div>
 
 </div>
@@ -889,8 +1395,7 @@ h1 {{
 <div
     id="toast"
     class="toast"
->
-</div>
+></div>
 
 <script>
 
@@ -902,6 +1407,63 @@ const happUrl =
 
 const incyUrl =
     '{js_incy_url}';
+
+const pageUrl =
+    '{js_page_url}';
+
+
+// ============================================================
+// THEME
+// ============================================================
+
+function applyTheme(theme) {{
+
+    if (theme === "light") {{
+
+        document.body.classList.add("light");
+
+        document
+            .getElementById("themeButton")
+            .textContent = "☀️";
+
+    }} else {{
+
+        document.body.classList.remove("light");
+
+        document
+            .getElementById("themeButton")
+            .textContent = "🌙";
+
+    }}
+
+}}
+
+
+function toggleTheme() {{
+
+    const current =
+        localStorage.getItem("ixxy_theme")
+        || "dark";
+
+    const next =
+        current === "dark"
+            ? "light"
+            : "dark";
+
+    localStorage.setItem(
+        "ixxy_theme",
+        next
+    );
+
+    applyTheme(next);
+
+}}
+
+
+applyTheme(
+    localStorage.getItem("ixxy_theme")
+    || "dark"
+);
 
 
 // ============================================================
@@ -931,7 +1493,7 @@ function showToast(text) {{
 
 
 // ============================================================
-// ОТКРЫТИЕ VPN-ПРИЛОЖЕНИЯ
+// OPEN APP
 // ============================================================
 
 function openApp(app) {{
@@ -941,76 +1503,84 @@ function openApp(app) {{
             ? happUrl
             : incyUrl;
 
-    // --------------------------------------------------------
-    // В Telegram WebView сначала пытаемся открыть приложение
-    // --------------------------------------------------------
-
-    let opened = false;
-
-    const iframe =
-        document.createElement("iframe");
-
-    iframe.style.display = "none";
-
-    iframe.src = url;
-
-    document.body.appendChild(iframe);
-
-    setTimeout(() => {{
-
-        try {{
-            document.body.removeChild(iframe);
-        }} catch (e) {{}}
-
-    }}, 1500);
+    showToast(
+        app === "happ"
+            ? "⚡ Открываем Happ..."
+            : "🚀 Открываем INCY..."
+    );
 
     // --------------------------------------------------------
-    // Дополнительная попытка через location
+    // Основная попытка
     // --------------------------------------------------------
 
     try {{
 
         window.location.href = url;
 
-        opened = true;
-
     }} catch (e) {{
 
-        opened = false;
+        console.log(e);
 
     }}
 
     // --------------------------------------------------------
-    // Если приложение не установлено
+    // Дополнительная попытка через iframe
+    // --------------------------------------------------------
+
+    setTimeout(() => {{
+
+        try {{
+
+            const iframe =
+                document.createElement("iframe");
+
+            iframe.style.display = "none";
+
+            iframe.src = url;
+
+            document.body.appendChild(
+                iframe
+            );
+
+            setTimeout(() => {{
+
+                try {{
+
+                    iframe.remove();
+
+                }} catch (e) {{}}
+
+            }}, 1200);
+
+        }} catch (e) {{
+
+            console.log(e);
+
+        }}
+
+    }}, 100);
+
+    // --------------------------------------------------------
+    // Если приложение не открылось
     // --------------------------------------------------------
 
     setTimeout(() => {{
 
         if (!document.hidden) {{
 
-            if (app === "happ") {{
-
-                showToast(
-                    "⚠️ Happ не открылся. Скопируйте ссылку подписки."
-                );
-
-            }} else {{
-
-                showToast(
-                    "⚠️ INCY не открылся. Скопируйте ссылку подписки."
-                );
-
-            }}
+            showToast(
+                "⚠️ Приложение не открылось. Скопируйте ссылку."
+            );
 
         }}
 
-    }}, 1200);
+    }}, 1600);
 
 }}
 
 
 // ============================================================
-// КОПИРОВАНИЕ
+// COPY
 // ============================================================
 
 async function copyLink() {{
@@ -1029,7 +1599,8 @@ async function copyLink() {{
 
     }} catch (e) {{
 
-        // Продолжаем fallback
+        console.log(e);
+
     }}
 
     try {{
@@ -1043,7 +1614,10 @@ async function copyLink() {{
         textarea.style.position =
             "fixed";
 
-        textarea.style.opacity =
+        textarea.style.left =
+            "-9999px";
+
+        textarea.style.top =
             "0";
 
         document.body.appendChild(
@@ -1054,17 +1628,24 @@ async function copyLink() {{
 
         textarea.select();
 
-        document.execCommand(
-            "copy"
-        );
+        const success =
+            document.execCommand("copy");
 
-        document.body.removeChild(
-            textarea
-        );
+        textarea.remove();
 
-        showToast(
-            "✅ Ссылка скопирована!"
-        );
+        if (success) {{
+
+            showToast(
+                "✅ Ссылка скопирована!"
+            );
+
+        }} else {{
+
+            throw new Error(
+                "Copy failed"
+            );
+
+        }}
 
     }} catch (e) {{
 
@@ -1074,6 +1655,28 @@ async function copyLink() {{
         );
 
     }}
+
+}}
+
+
+// ============================================================
+// REFRESH
+// ============================================================
+
+function refreshPage() {{
+
+    showToast(
+        "🔄 Обновляем..."
+    );
+
+    setTimeout(() => {{
+
+        window.location.href =
+            pageUrl
+            + "?t="
+            + Date.now();
+
+    }}, 300);
 
 }}
 
@@ -1111,7 +1714,9 @@ def subscription_content(token):
     if user_id is None:
         abort(404)
 
-    content = get_subscription_content(user_id)
+    content = get_subscription_content(
+        user_id
+    )
 
     if not content:
 
@@ -1145,58 +1750,125 @@ def subscription_content(token):
 def index():
 
     return """
-    <!DOCTYPE html>
-    <html lang="ru">
+<!DOCTYPE html>
 
-    <head>
-        <meta charset="UTF-8">
-        <meta
-            name="viewport"
-            content="width=device-width,
-            initial-scale=1.0"
-        >
-        <meta
-            name="theme-color"
-            content="#08080d"
-        >
-        <title>ixxy VPN</title>
-    </head>
+<html lang="ru">
 
-    <body style="
-        margin:0;
-        min-height:100vh;
-        display:flex;
-        align-items:center;
-        justify-content:center;
-        background:#08080d;
-        color:white;
-        font-family:Arial,sans-serif;
-        text-align:center;
-    ">
+<head>
 
-        <div>
+<meta charset="UTF-8">
 
-            <div style="
-                font-size:60px;
-                margin-bottom:15px;
-            ">
-                ☂️
-            </div>
+<meta
+    name="viewport"
+    content="width=device-width,initial-scale=1"
+>
 
-            <h1>
-                ixxy VPN
-            </h1>
+<meta
+    name="theme-color"
+    content="#08080d"
+>
 
-            <p style="color:#888;">
-                Web server is running
-            </p>
+<title>☂️ ixxy VPN</title>
 
-        </div>
+<style>
 
-    </body>
+* {
+    box-sizing:border-box;
+}
 
-    </html>
-    """
+body {
+    margin:0;
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:25px;
+    background:
+        radial-gradient(
+            circle at 20% 0%,
+            rgba(255,0,190,.22),
+            transparent 35%
+        ),
+        radial-gradient(
+            circle at 90% 10%,
+            rgba(0,190,255,.22),
+            transparent 35%
+        ),
+        #07070b;
+    color:white;
+    font-family:
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        Arial,
+        sans-serif;
+    text-align:center;
+}
+
+.box {
+    width:100%;
+    max-width:430px;
+    padding:38px 25px;
+    border-radius:30px;
+    background:rgba(18,18,27,.88);
+    border:1px solid rgba(255,255,255,.08);
+    box-shadow:0 25px 80px rgba(0,0,0,.45);
+}
+
+.logo {
+    width:80px;
+    height:80px;
+    margin:0 auto 18px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    border-radius:25px;
+    font-size:42px;
+    background:
+        linear-gradient(
+            135deg,
+            #ff25bd,
+            #773cff,
+            #00c9ff
+        );
+}
+
+h1 {
+    margin:0;
+    font-size:30px;
+}
+
+p {
+    margin:10px 0 0;
+    color:#92929e;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="box">
+
+    <div class="logo">
+        ☂️
+    </div>
+
+    <h1>
+        ixxy VPN
+    </h1>
+
+    <p>
+        Web server is running
+    </p>
+
+</div>
+
+</body>
+
+</html>
+"""
 
 
 # ============================================================
