@@ -3,7 +3,7 @@ from aiogram.types import (
     KeyboardButton,
     InlineKeyboardMarkup,
     InlineKeyboardButton,
-    WebAppInfo,
+    WebAppInfo
 )
 
 
@@ -28,7 +28,7 @@ def main_menu(user_id=None):
             KeyboardButton(
                 text="👤 Личный кабинет"
             )
-        ],
+        ]
     ]
 
     # ========================================================
@@ -38,8 +38,8 @@ def main_menu(user_id=None):
     if user_id:
 
         subscription_url = (
-            "https://orelvpnrailoh-1.onrender.com/s/"
-            f"2ix847xy{user_id}"
+            "https://orelvpnrailoh-1.onrender.com"
+            f"/s/2ix847xy{user_id}"
         )
 
         keyboard.append(
@@ -55,8 +55,6 @@ def main_menu(user_id=None):
 
     else:
 
-        # Запасной вариант, если меню вызвано
-        # без user_id
         keyboard.append(
             [
                 KeyboardButton(
@@ -65,20 +63,22 @@ def main_menu(user_id=None):
             ]
         )
 
-    keyboard.extend(
+    # ========================================================
+    # ОСТАЛЬНЫЕ КНОПКИ
+    # ========================================================
+
+    keyboard.extend([
         [
-            [
-                KeyboardButton(
-                    text="📄 Документы"
-                )
-            ],
-            [
-                KeyboardButton(
-                    text="💬 Поддержка"
-                )
-            ],
+            KeyboardButton(
+                text="📄 Документы"
+            )
+        ],
+        [
+            KeyboardButton(
+                text="💬 Поддержка"
+            )
         ]
-    )
+    ])
 
     return ReplyKeyboardMarkup(
         keyboard=keyboard,
@@ -87,7 +87,7 @@ def main_menu(user_id=None):
 
 
 # ============================================================
-# ОПЛАТА
+# СПОСОБ ОПЛАТЫ
 # ============================================================
 
 def payment_method_keyboard():
