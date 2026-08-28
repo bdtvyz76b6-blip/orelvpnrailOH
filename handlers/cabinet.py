@@ -1,5 +1,12 @@
+import os
+
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import (
+    Message,
+    CallbackQuery,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+)
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 
@@ -22,6 +29,38 @@ from github_update import (
 
 
 router = Router()
+
+
+# ============================================================
+# НАСТРОЙКИ САЙТА
+# ============================================================
+
+PUBLIC_SITE_URL = os.getenv(
+    "PUBLIC_SITE_URL",
+    "https://orelvpnrailoh-1.onrender.com",
+).rstrip("/")
+
+SUBSCRIPTION_PREFIX = os.getenv(
+    "SUBSCRIPTION_PREFIX",
+    "2ix847xy",
+).strip()
+
+
+# ============================================================
+# URL СТРАНИЦЫ ПОДКЛЮЧЕНИЯ
+# ============================================================
+
+def get_subscription_page_url(user_id: int) -> str:
+
+    token = (
+        f"{SUBSCRIPTION_PREFIX}"
+        f"{user_id}"
+    )
+
+    return (
+        f"{PUBLIC_SITE_URL}"
+        f"/s/{token}"
+    )
 
 
 # ============================================================
@@ -55,7 +94,10 @@ async def show_cabinet(
 
     user_id = message.from_user.id
 
+    # --------------------------------------------------------
     # Проверяем подписку
+    # --------------------------------------------------------
+
     check_user_subscription(
         user_id
     )
@@ -74,7 +116,6 @@ async def show_cabinet(
 
     subscription = user[3]
     until = user[4]
-    link = user[5]
 
     # ========================================================
     # ТАРИФ
@@ -139,22 +180,6 @@ async def show_cabinet(
             status = "❌ Не активна"
 
     # ========================================================
-    # ЕСЛИ ССЫЛКА ЕСТЬ
-    # ========================================================
-
-    if link:
-
-        link_text = (
-            "✅ Доступна"
-        )
-
-    else:
-
-        link_text = (
-            "❌ Отсутствует"
-        )
-
-    # ========================================================
     # КАБИНЕТ
     # ========================================================
 
@@ -180,15 +205,12 @@ async def show_cabinet(
 ⏳ Осталось:
 <b>{days} дн.</b>
 
-🔗 Подписка:
-{link_text}
-
 ━━━━━━━━━━━━━━━━━━
 
 ⚡ <b>Быстрое подключение</b>
 
-Добавьте подписку прямо в
-Happ или INCY через веб-страницу.
+Нажмите «Подключиться», чтобы
+открыть страницу вашей подписки.
 """
 
     await message.answer(
@@ -279,7 +301,7 @@ async def refresh_subscription(
 
         await callback.message.answer(
             "✅ <b>Серверы обновлены!</b>\n\n"
-            "🔗 Ссылка осталась прежней.",
+            "🔗 Ссылка подключения осталась прежней.",
             parse_mode="HTML",
         )
 
@@ -297,7 +319,7 @@ async def refresh_subscription(
 
 
 # ============================================================
-# ПОЛУЧИТЬ ССЫЛКУ
+# ПОДКЛЮЧИТЬСЯ
 # ============================================================
 
 @router.callback_query(
@@ -307,37 +329,74 @@ async def get_link(
     callback: CallbackQuery
 ):
 
-    user = get_user(
-        callback.from_user.id
-    )
+    user_id = callback.from_user.id
 
-    if not user or not user[5]:
+    # --------------------------------------------------------
+    # Проверяем подписку
+    # --------------------------------------------------------
 
-        await callback.message.answer(
-            "❌ Ссылка отсутствует."
+    if not check_user_subscription(
+        user_id
+    ):
+
+        await callback.answer(
+            "❌ Подписка не активна",
+            show_alert=True,
         )
-
-        await callback.answer()
 
         return
 
-    link = user[5]
+    user = get_user(
+        user_id
+    )
+
+    if not user:
+
+        await callback.answer(
+            "❌ Пользователь не найден",
+            show_alert=True,
+        )
+
+        return
+
+    # --------------------------------------------------------
+    # Получаем URL сайта
+    # --------------------------------------------------------
+
+    site_url = get_subscription_page_url(
+        user_id
+    )
+
+    # --------------------------------------------------------
+    # Кнопка открытия САЙТА
+    # --------------------------------------------------------
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🌐 Открыть страницу подключения",
+                    url=site_url,
+                )
+            ],
+        ]
+    )
 
     await callback.message.answer(
-        f"""
-🔗 <b>Моя подписка</b>
+        """
+🔗 <b>Подключение ixxy VPN</b>
 
-<code>{link}</code>
+Нажмите кнопку ниже.
 
-⚡ <b>Добавить в Happ:</b>
-нажмите кнопку на веб-странице.
+На странице будут доступны:
 
-🚀 <b>Добавить в INCY:</b>
-нажмите кнопку на веб-странице.
+⚡ Добавить в Happ
+🚀 Добавить в INCY
+📋 Скопировать ссылку
 
-👇 Откройте ссылку:
-{link}
+👇 <b>Открыть сайт:</b>
 """,
+        reply_markup=keyboard,
         parse_mode="HTML",
     )
 
