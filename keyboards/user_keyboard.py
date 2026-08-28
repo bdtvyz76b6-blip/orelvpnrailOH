@@ -3,16 +3,39 @@ from aiogram.types import (
     KeyboardButton,
     InlineKeyboardMarkup,
     InlineKeyboardButton,
-    WebAppInfo
 )
 
 
-def main_menu(user_id: int):
+# ============================================================
+# НАСТРОЙКИ
+# ============================================================
 
-    subscription_url = (
-        f"https://orelvpnrailoh-1.onrender.com/s/"
-        f"2ix847xy{user_id}"
+PUBLIC_SITE_URL = (
+    "https://orelvpnrailoh-1.onrender.com"
+)
+
+SUBSCRIPTION_PREFIX = "2ix847xy"
+
+
+# ============================================================
+# ССЫЛКА НА СТРАНИЦУ ПОДПИСКИ
+# ============================================================
+
+def get_subscription_site_url(user_id: int):
+
+    return (
+        f"{PUBLIC_SITE_URL}"
+        f"/s/"
+        f"{SUBSCRIPTION_PREFIX}"
+        f"{user_id}"
     )
+
+
+# ============================================================
+# ГЛАВНОЕ МЕНЮ
+# ============================================================
+
+def main_menu(user_id: int):
 
     return ReplyKeyboardMarkup(
         keyboard=[
@@ -33,10 +56,7 @@ def main_menu(user_id: int):
             ],
             [
                 KeyboardButton(
-                    text="🌐 Моя подписка",
-                    web_app=WebAppInfo(
-                        url=subscription_url
-                    )
+                    text="🔌 Подключиться"
                 )
             ],
             [
@@ -53,6 +73,10 @@ def main_menu(user_id: int):
         resize_keyboard=True
     )
 
+
+# ============================================================
+# СПОСОБ ОПЛАТЫ
+# ============================================================
 
 def payment_method_keyboard():
 
@@ -73,6 +97,10 @@ def payment_method_keyboard():
         ]
     )
 
+
+# ============================================================
+# TELEGRAM STARS
+# ============================================================
 
 def stars_buy_keyboard():
 
@@ -106,6 +134,10 @@ def stars_buy_keyboard():
     )
 
 
+# ============================================================
+# СБП
+# ============================================================
+
 def sbp_buy_keyboard():
 
     return InlineKeyboardMarkup(
@@ -138,14 +170,22 @@ def sbp_buy_keyboard():
     )
 
 
-def cabinet_keyboard():
+# ============================================================
+# ЛИЧНЫЙ КАБИНЕТ
+# ============================================================
+
+def cabinet_keyboard(user_id: int):
+
+    subscription_url = get_subscription_site_url(
+        user_id
+    )
 
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="🔗 Получить ссылку",
-                    callback_data="get_link"
+                    text="🔌 Подключиться",
+                    url=subscription_url
                 )
             ],
             [
@@ -170,6 +210,10 @@ def cabinet_keyboard():
     )
 
 
+# ============================================================
+# ДОКУМЕНТЫ / СОГЛАСИЕ
+# ============================================================
+
 def accept_terms_keyboard():
 
     return InlineKeyboardMarkup(
@@ -177,7 +221,10 @@ def accept_terms_keyboard():
             [
                 InlineKeyboardButton(
                     text="📄 Документы",
-                    url="https://bdt2010.github.io/managerorlvpnsite/"
+                    url=(
+                        "https://bdt2010.github.io/"
+                        "managerorlvpnsite/"
+                    )
                 )
             ],
             [
