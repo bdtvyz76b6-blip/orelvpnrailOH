@@ -14,14 +14,13 @@ from database import (
 # НАСТРОЙКИ
 # ============================================================
 
-# Главный адрес WEB-сервера на Render
+# ВАЖНО:
+# Теперь сайт работает через Render, а НЕ Cloudflare.
 PUBLIC_SITE_URL = os.getenv(
     "PUBLIC_SITE_URL",
     "https://orelvpnrailoh-1.onrender.com",
 ).rstrip("/")
 
-
-# Префикс персональной ссылки
 SUBSCRIPTION_PREFIX = os.getenv(
     "SUBSCRIPTION_PREFIX",
     "2ix847xy",
@@ -37,18 +36,15 @@ GITHUB_TOKEN = os.getenv(
     "",
 ).strip()
 
-
 OWNER = os.getenv(
     "GITHUB_OWNER",
     "bdtvyz76b6-blip",
 )
 
-
 REPO = os.getenv(
     "GITHUB_REPO",
     "vpn-sub",
 )
-
 
 BRANCH = os.getenv(
     "GITHUB_BRANCH",
@@ -61,16 +57,14 @@ BRANCH = os.getenv(
 # ============================================================
 
 SERVERS_FILE = "servers.txt"
-
 NO_SERVERS_FILE = "no_servers.txt"
 
 
 # ============================================================
-# GITHUB RAW URL
+# RAW GITHUB URL
 # ============================================================
 
 def raw_url(filename):
-
     return (
         f"https://raw.githubusercontent.com/"
         f"{OWNER}/{REPO}/{BRANCH}/{filename}"
@@ -78,7 +72,7 @@ def raw_url(filename):
 
 
 # ============================================================
-# ЗАГРУЗКА ФАЙЛА С СЕРВЕРАМИ
+# ЗАГРУЗКА GITHUB ФАЙЛА
 # ============================================================
 
 def load_github_file(filename):
@@ -89,7 +83,6 @@ def load_github_file(filename):
     )
 
     if response.status_code != 200:
-
         raise Exception(
             f"Не удалось загрузить {filename}: "
             f"HTTP {response.status_code}"
@@ -98,7 +91,6 @@ def load_github_file(filename):
     content = response.text.strip()
 
     if not content:
-
         raise Exception(
             f"Файл {filename} пустой"
         )
@@ -107,29 +99,27 @@ def load_github_file(filename):
 
 
 # ============================================================
-# АКТИВНЫЕ СЕРВЕРЫ
+# АКТИВНЫЕ СЕРВЕРА
 # ============================================================
 
 def load_servers():
-
     return load_github_file(
         SERVERS_FILE
     )
 
 
 # ============================================================
-# СЕРВЕРЫ ДЛЯ ПРОСРОЧЕННОЙ ПОДПИСКИ
+# СЕРВЕРА ДЛЯ ПРОСРОЧЕННОЙ ПОДПИСКИ
 # ============================================================
 
 def load_no_servers():
-
     return load_github_file(
         NO_SERVERS_FILE
     )
 
 
 # ============================================================
-# КРАСИВАЯ ССЫЛКА ПОЛЬЗОВАТЕЛЯ
+# ПЕРСОНАЛЬНАЯ СТРАНИЦА ПОДПИСКИ
 # ============================================================
 
 def get_subscription_link(user_id):
@@ -142,7 +132,7 @@ def get_subscription_link(user_id):
 
 
 # ============================================================
-# URL САМОЙ ПОДПИСКИ
+# ПРЯМАЯ ССЫЛКА ПОДПИСКИ
 # ============================================================
 
 def get_subscription_content_url(user_id):
@@ -160,7 +150,7 @@ def get_subscription_content_url(user_id):
 
 def save_user_subscription(
     user_id,
-    content,
+    content
 ):
 
     link = get_subscription_link(
@@ -181,7 +171,7 @@ def save_user_subscription(
 
 
 # ============================================================
-# ШАБЛОН НОВОГО ПОЛЬЗОВАТЕЛЯ
+# НОВЫЙ ПОЛЬЗОВАТЕЛЬ
 # ============================================================
 
 NEW_USER_TEMPLATE = """
@@ -194,7 +184,7 @@ vless://00000000-0000-0000-0000-000000000000@expired.invalid:443?type=tcp&securi
 
 
 # ============================================================
-# СОЗДАНИЕ ПОДПИСКИ НОВОГО ПОЛЬЗОВАТЕЛЯ
+# СОЗДАНИЕ ПОДПИСКИ НОВОМУ ПОЛЬЗОВАТЕЛЮ
 # ============================================================
 
 def create_user_subscription(user_id):
@@ -205,8 +195,7 @@ def create_user_subscription(user_id):
     )
 
     print(
-        f"Создана подписка пользователя "
-        f"{user_id}"
+        f"Создана подписка пользователя {user_id}"
     )
 
     print(
@@ -214,7 +203,7 @@ def create_user_subscription(user_id):
     )
 
     print(
-        f"Subscription URL: "
+        "Subscription URL: "
         f"{get_subscription_content_url(user_id)}"
     )
 
@@ -227,13 +216,12 @@ def create_user_subscription(user_id):
 
 def create_subscription(
     user_id,
-    days=30,
+    days=30
 ):
 
     days = int(days)
 
     if days <= 0:
-
         raise ValueError(
             "Количество дней должно быть больше 0"
         )
@@ -259,7 +247,7 @@ def create_subscription(
 
 def activate_subscription_file(
     user_id,
-    date,
+    date
 ):
 
     servers = load_servers()
@@ -278,8 +266,8 @@ def activate_subscription_file(
     )
 
     print(
-        f"Подписка пользователя "
-        f"{user_id} обновлена до {date}"
+        f"Подписка пользователя {user_id} "
+        f"обновлена до {date}"
     )
 
     print(
@@ -287,7 +275,7 @@ def activate_subscription_file(
     )
 
     print(
-        f"Subscription URL: "
+        "Subscription URL: "
         f"{get_subscription_content_url(user_id)}"
     )
 
@@ -295,12 +283,12 @@ def activate_subscription_file(
 
 
 # ============================================================
-# АКТИВАЦИЯ ПОЛЬЗОВАТЕЛЯ
+# АКТИВАЦИЯ
 # ============================================================
 
 def activate_user_subscription(
     user_id,
-    days,
+    days
 ):
 
     return create_subscription(
@@ -315,7 +303,7 @@ def activate_user_subscription(
 
 def update_subscription_file(
     user_id,
-    date,
+    date
 ):
 
     try:
@@ -343,9 +331,7 @@ def update_subscription_file(
 # ПРОСРОЧЕННАЯ ПОДПИСКА
 # ============================================================
 
-def expire_subscription(
-    user_id,
-):
+def expire_subscription(user_id):
 
     no_servers = load_no_servers()
 
@@ -371,16 +357,11 @@ def expire_subscription(
         f"Страница: {link}"
     )
 
-    print(
-        f"Subscription URL: "
-        f"{get_subscription_content_url(user_id)}"
-    )
-
     return link
 
 
 # ============================================================
-# СИНХРОНИЗАЦИЯ ВСЕХ ПОЛЬЗОВАТЕЛЕЙ
+# СИНХРОНИЗАЦИЯ
 # ============================================================
 
 def sync_all_active_users():
@@ -390,9 +371,7 @@ def sync_all_active_users():
     print("━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
     servers = load_servers()
-
     no_servers = load_no_servers()
-
     users = get_all_users()
 
     updated = 0
@@ -409,12 +388,7 @@ def sync_all_active_users():
         try:
 
             subscription = user[3]
-
             subscription_until = user[4]
-
-            # =================================================
-            # ПРОПУСК НЕАКТИВНЫХ
-            # =================================================
 
             if subscription not in (
                 "vip",
@@ -422,18 +396,12 @@ def sync_all_active_users():
             ):
 
                 skipped += 1
-
                 continue
 
             if not subscription_until:
 
                 skipped += 1
-
                 continue
-
-            # =================================================
-            # РАЗБОР ДАТЫ
-            # =================================================
 
             try:
 
@@ -445,13 +413,11 @@ def sync_all_active_users():
             except Exception:
 
                 print(
-                    f"Неверная дата у "
-                    f"{user_id}: "
+                    f"Неверная дата у {user_id}: "
                     f"{subscription_until}"
                 )
 
                 skipped += 1
-
                 continue
 
             # =================================================
@@ -538,7 +504,7 @@ def sync_all_active_users():
 
 
 # ============================================================
-# ОБНОВЛЕНИЕ ПО КНОПКЕ АДМИНА
+# ОБНОВЛЕНИЕ СЕРВЕРОВ ИЗ АДМИНКИ
 # ============================================================
 
 def sync_servers_update():
