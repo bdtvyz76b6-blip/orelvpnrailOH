@@ -1,12 +1,16 @@
 from aiogram import Router, F
+
 from aiogram.types import (
     CallbackQuery,
     InlineKeyboardMarkup,
-    InlineKeyboardButton
+    InlineKeyboardButton,
 )
+
 from aiogram.exceptions import TelegramBadRequest
 
 from datetime import datetime
+
+from html import escape
 
 from config import ADMIN_IDS
 
@@ -14,15 +18,32 @@ from database import (
     get_all_users,
     get_user,
     get_subscription_link,
-    disable_subscription
+    disable_subscription,
 )
 
 from github_update import (
-    sync_servers_update
+    sync_servers_update,
 )
 
 
 router = Router()
+
+
+# ============================================================
+# НАСТРОЙКИ САЙТА
+# ============================================================
+
+import os
+
+PUBLIC_SITE_URL = os.getenv(
+    "PUBLIC_SITE_URL",
+    "https://orelvpnrailoh-1.onrender.com",
+).rstrip("/")
+
+SUBSCRIPTION_PREFIX = os.getenv(
+    "SUBSCRIPTION_PREFIX",
+    "2ix847xy",
+).strip()
 
 
 # ============================================================
@@ -35,77 +56,84 @@ def is_admin(user_id):
 
 
 # ============================================================
-# ПРОВЕРКА СТАТУСА ПОДПИСКИ
+# URL ПОЛЬЗОВАТЕЛЯ
+# ============================================================
+
+def get_user_urls(user_id):
+
+    token = (
+        f"{SUBSCRIPTION_PREFIX}"
+        f"{user_id}"
+    )
+
+    site_url = (
+        f"{PUBLIC_SITE_URL}"
+        f"/s/{token}"
+    )
+
+    subscription_url = (
+        f"{PUBLIC_SITE_URL}"
+        f"/sub/{token}"
+    )
+
+    return (
+        site_url,
+        subscription_url,
+    )
+
+
+# ============================================================
+# СТАТУС ПОДПИСКИ
 # ============================================================
 
 def get_subscription_status(
     subscription,
-    subscription_until
+    subscription_until,
 ):
-
-    # --------------------------------------------------------
-    # Нет подписки
-    # --------------------------------------------------------
 
     if subscription not in (
         "vip",
-        "trial"
+        "trial",
     ):
 
         return (
             "🔴 Неактивен",
-            0
+            0,
         )
-
-    # --------------------------------------------------------
-    # Нет даты
-    # --------------------------------------------------------
 
     if not subscription_until:
 
         return (
             "🔴 Неактивен",
-            0
+            0,
         )
-
-    # --------------------------------------------------------
-    # Парсим дату
-    # --------------------------------------------------------
 
     try:
 
         expire_date = datetime.strptime(
             str(subscription_until),
-            "%Y-%m-%d"
+            "%Y-%m-%d",
         ).date()
 
     except Exception:
 
         return (
             "⚠️ Ошибка даты",
-            0
+            0,
         )
-
-    # --------------------------------------------------------
-    # Сегодня
-    # --------------------------------------------------------
 
     today = datetime.now().date()
 
     # --------------------------------------------------------
-    # ИСТЁК
+    # Дата окончания активна до конца этого дня
     # --------------------------------------------------------
 
-    if expire_date <= today:
+    if expire_date < today:
 
         return (
             "⛔ Истёк",
-            0
+            0,
         )
-
-    # --------------------------------------------------------
-    # Активен
-    # --------------------------------------------------------
 
     days = (
         expire_date - today
@@ -113,7 +141,7 @@ def get_subscription_status(
 
     return (
         "🟢 Активен",
-        days
+        days,
     )
 
 
@@ -125,12 +153,8 @@ def get_subscription_status(
     F.data == "admin_users"
 )
 async def show_users(
-    call: CallbackQuery
+    call: CallbackQuery,
 ):
-
-    # --------------------------------------------------------
-    # Проверка администратора
-    # --------------------------------------------------------
 
     if not is_admin(
         call.from_user.id
@@ -138,14 +162,10 @@ async def show_users(
 
         await call.answer(
             "❌ Нет доступа",
-            show_alert=True
+            show_alert=True,
         )
 
         return
-
-    # --------------------------------------------------------
-    # Получаем пользователей
-    # --------------------------------------------------------
 
     users = get_all_users()
 
@@ -154,7 +174,8 @@ async def show_users(
         try:
 
             await call.message.edit_text(
-                "👥 Пользователей пока нет"
+                "👥 <b>Пользователей пока нет</b>",
+                parse_mode="HTML",
             )
 
         except TelegramBadRequest:
@@ -164,10 +185,6 @@ async def show_users(
         await call.answer()
 
         return
-
-    # --------------------------------------------------------
-    # Кнопки
-    # --------------------------------------------------------
 
     buttons = []
 
@@ -180,40 +197,36 @@ async def show_users(
             or "без username"
         )
 
-        # ----------------------------------------------------
-        # Получаем статус
-        # ----------------------------------------------------
-
         subscription = user[3]
+
         subscription_until = user[4]
 
-        status, days = get_subscription_status(
-            subscription,
-            subscription_until
+        status, days = (
+            get_subscription_status(
+                subscription,
+                subscription_until,
+            )
         )
-
-        # ----------------------------------------------------
-        # Текст кнопки
-        # ----------------------------------------------------
 
         if days > 0:
 
             text = (
-                f"👤 {username} "
-                f"• 🟢 {days} д."
+                f"👤 {username}"
+                f"  •  🟢 {days} д."
             )
 
         elif status == "⛔ Истёк":
 
             text = (
-                f"👤 {username} "
-                f"• ⛔ Истёк"
+                f"👤 {username}"
+                f"  •  ⛔ Истёк"
             )
 
         else:
 
             text = (
                 f"👤 {username}"
+                f"  •  🔴"
             )
 
         buttons.append(
@@ -222,20 +235,16 @@ async def show_users(
                     text=text,
                     callback_data=(
                         f"admin_user_{user_id}"
-                    )
+                    ),
                 )
             ]
         )
-
-    # --------------------------------------------------------
-    # Назад
-    # --------------------------------------------------------
 
     buttons.append(
         [
             InlineKeyboardButton(
                 text="⬅️ Назад",
-                callback_data="admin_back"
+                callback_data="admin_back",
             )
         ]
     )
@@ -244,22 +253,21 @@ async def show_users(
         inline_keyboard=buttons
     )
 
-    # --------------------------------------------------------
-    # Показываем
-    # --------------------------------------------------------
-
     try:
 
         await call.message.edit_text(
             "👥 <b>Пользователи</b>\n\n"
             "Выбери пользователя:",
             reply_markup=keyboard,
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
 
     except TelegramBadRequest as e:
 
-        if "message is not modified" not in str(e):
+        if (
+            "message is not modified"
+            not in str(e)
+        ):
 
             raise
 
@@ -274,12 +282,8 @@ async def show_users(
     F.data.startswith("admin_user_")
 )
 async def user_profile(
-    call: CallbackQuery
+    call: CallbackQuery,
 ):
-
-    # --------------------------------------------------------
-    # Проверка администратора
-    # --------------------------------------------------------
 
     if not is_admin(
         call.from_user.id
@@ -287,21 +291,17 @@ async def user_profile(
 
         await call.answer(
             "❌ Нет доступа",
-            show_alert=True
+            show_alert=True,
         )
 
         return
-
-    # --------------------------------------------------------
-    # ID пользователя
-    # --------------------------------------------------------
 
     try:
 
         user_id = int(
             call.data.replace(
                 "admin_user_",
-                ""
+                "",
             )
         )
 
@@ -309,74 +309,54 @@ async def user_profile(
 
         await call.answer(
             "❌ Неверный ID",
-            show_alert=True
+            show_alert=True,
         )
 
         return
 
-    # --------------------------------------------------------
-    # Получаем пользователя
-    # --------------------------------------------------------
-
-    user = get_user(
-        user_id
-    )
+    user = get_user(user_id)
 
     if not user:
 
         await call.answer(
             "❌ Пользователь не найден",
-            show_alert=True
+            show_alert=True,
         )
 
         return
 
-    # --------------------------------------------------------
-    # Данные
-    # --------------------------------------------------------
+    # ========================================================
+    # ДАННЫЕ
+    # ========================================================
 
     subscription = user[3]
 
     subscription_until = user[4]
-
-    # --------------------------------------------------------
-    # Username
-    # --------------------------------------------------------
 
     username = (
         user[1]
         or "нет"
     )
 
-    # --------------------------------------------------------
-    # Имя
-    # --------------------------------------------------------
-
     first_name = (
         user[2]
         or "нет"
     )
 
-    # --------------------------------------------------------
-    # Ссылка
-    # --------------------------------------------------------
+    # ========================================================
+    # СТАТУС
+    # ========================================================
 
-    link = get_subscription_link(
-        user_id
+    status, days = (
+        get_subscription_status(
+            subscription,
+            subscription_until,
+        )
     )
 
-    # --------------------------------------------------------
-    # Статус
-    # --------------------------------------------------------
-
-    status, days = get_subscription_status(
-        subscription,
-        subscription_until
-    )
-
-    # --------------------------------------------------------
-    # Тариф
-    # --------------------------------------------------------
+    # ========================================================
+    # ТАРИФ
+    # ========================================================
 
     if subscription == "vip":
 
@@ -390,9 +370,9 @@ async def user_profile(
 
         tariff = "❌ Нет подписки"
 
-    # --------------------------------------------------------
-    # Дата
-    # --------------------------------------------------------
+    # ========================================================
+    # ДАТА
+    # ========================================================
 
     if subscription_until:
 
@@ -400,11 +380,13 @@ async def user_profile(
 
             expire_date = datetime.strptime(
                 str(subscription_until),
-                "%Y-%m-%d"
+                "%Y-%m-%d",
             )
 
-            date_text = expire_date.strftime(
-                "%d.%m.%Y"
+            date_text = (
+                expire_date.strftime(
+                    "%d.%m.%Y"
+                )
             )
 
         except Exception:
@@ -417,51 +399,62 @@ async def user_profile(
 
         date_text = "нет"
 
-    # --------------------------------------------------------
-    # Осталось
-    # --------------------------------------------------------
+    # ========================================================
+    # ССЫЛКИ
+    # ========================================================
 
-    if days > 0:
+    site_url, subscription_url = (
+        get_user_urls(user_id)
+    )
 
-        days_text = (
-            f"⏳ Осталось: {days} д."
+    # Старая ссылка из БД.
+    # Показываем её только как fallback/информацию.
+    stored_link = (
+        get_subscription_link(
+            user_id
         )
-
-    else:
-
-        days_text = (
-            "⏳ Осталось: 0 д."
-        )
+        or ""
+    )
 
     # ========================================================
-    # ТЕКСТ
+    # ЭКРАН ПРОФИЛЯ
     # ========================================================
 
     text = (
-        "👤 <b>Пользователь</b>\n\n"
+        "👤 <b>ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ</b>\n\n"
 
-        f"🆔 ID: "
-        f"<code>{user_id}</code>\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
 
-        f"👤 Username: "
-        f"@{username}\n\n"
+        "🆔 <b>ID</b>\n"
+        f"<code>{user_id}</code>\n\n"
 
-        f"🧑‍💻 Имя: "
-        f"{first_name}\n\n"
+        "👤 <b>Username</b>\n"
+        f"@{escape(str(username))}\n\n"
 
-        f"🎫 Тариф: "
-        f"{tariff}\n"
+        "🧑‍💻 <b>Имя</b>\n"
+        f"{escape(str(first_name))}\n\n"
 
-        f"📊 Статус: "
-        f"{status}\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
 
-        f"📅 До: "
-        f"{date_text}\n"
+        "🎫 <b>Тариф</b>\n"
+        f"{tariff}\n\n"
 
-        f"{days_text}\n\n"
+        "📊 <b>Статус</b>\n"
+        f"{status}\n\n"
 
-        f"🔗 Подписка:\n"
-        f"{link or 'нет'}"
+        "📅 <b>Действует до</b>\n"
+        f"{date_text}\n\n"
+
+        "⏳ <b>Осталось</b>\n"
+        f"{days} д.\n\n"
+
+        "━━━━━━━━━━━━━━━━━━\n\n"
+
+        "🌐 <b>САЙТ</b>\n"
+        f"<code>{escape(site_url)}</code>\n\n"
+
+        "🔗 <b>ПОДПИСКА</b>\n"
+        f"<code>{escape(subscription_url)}</code>"
     )
 
     # ========================================================
@@ -470,24 +463,49 @@ async def user_profile(
 
     buttons = []
 
-    # Продлить показываем всегда
+    # --------------------------------------------------------
+    # Сайт + подписка
+    # --------------------------------------------------------
+
+    buttons.append(
+        [
+            InlineKeyboardButton(
+                text="🌐 Открыть сайт",
+                url=site_url,
+            ),
+            InlineKeyboardButton(
+                text="🔗 Открыть подписку",
+                url=subscription_url,
+            ),
+        ]
+    )
+
+    # --------------------------------------------------------
+    # Продление
+    # --------------------------------------------------------
+
     buttons.append(
         [
             InlineKeyboardButton(
                 text="⏳ Продлить",
                 callback_data=(
                     f"extend_{user_id}"
-                )
+                ),
             )
         ]
     )
 
-    # Отключить показываем только если
-    # подписка действительно активна
-    if subscription in (
-        "vip",
-        "trial"
-    ) and days > 0:
+    # --------------------------------------------------------
+    # Отключение
+    # --------------------------------------------------------
+
+    if (
+        subscription in (
+            "vip",
+            "trial",
+        )
+        and days > 0
+    ):
 
         buttons.append(
             [
@@ -495,16 +513,20 @@ async def user_profile(
                     text="❌ Отключить",
                     callback_data=(
                         f"disable_{user_id}"
-                    )
+                    ),
                 )
             ]
         )
+
+    # --------------------------------------------------------
+    # Назад
+    # --------------------------------------------------------
 
     buttons.append(
         [
             InlineKeyboardButton(
                 text="⬅️ Назад",
-                callback_data="admin_users"
+                callback_data="admin_users",
             )
         ]
     )
@@ -513,21 +535,20 @@ async def user_profile(
         inline_keyboard=buttons
     )
 
-    # ========================================================
-    # ПОКАЗЫВАЕМ
-    # ========================================================
-
     try:
 
         await call.message.edit_text(
             text,
             reply_markup=keyboard,
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
 
     except TelegramBadRequest as e:
 
-        if "message is not modified" not in str(e):
+        if (
+            "message is not modified"
+            not in str(e)
+        ):
 
             raise
 
@@ -542,12 +563,8 @@ async def user_profile(
     F.data.startswith("disable_")
 )
 async def disable_user_subscription(
-    call: CallbackQuery
+    call: CallbackQuery,
 ):
-
-    # --------------------------------------------------------
-    # Проверка администратора
-    # --------------------------------------------------------
 
     if not is_admin(
         call.from_user.id
@@ -555,21 +572,17 @@ async def disable_user_subscription(
 
         await call.answer(
             "❌ Нет доступа",
-            show_alert=True
+            show_alert=True,
         )
 
         return
-
-    # --------------------------------------------------------
-    # Получаем ID пользователя
-    # --------------------------------------------------------
 
     try:
 
         user_id = int(
             call.data.replace(
                 "disable_",
-                ""
+                "",
             )
         )
 
@@ -577,31 +590,21 @@ async def disable_user_subscription(
 
         await call.answer(
             "❌ Неверный ID пользователя",
-            show_alert=True
+            show_alert=True,
         )
 
         return
 
-    # --------------------------------------------------------
-    # Проверяем пользователя
-    # --------------------------------------------------------
-
-    user = get_user(
-        user_id
-    )
+    user = get_user(user_id)
 
     if not user:
 
         await call.answer(
             "❌ Пользователь не найден",
-            show_alert=True
+            show_alert=True,
         )
 
         return
-
-    # --------------------------------------------------------
-    # Отключаем подписку
-    # --------------------------------------------------------
 
     try:
 
@@ -612,20 +615,16 @@ async def disable_user_subscription(
     except Exception as e:
 
         print(
-            f"❌ Ошибка отключения подписки "
-            f"{user_id}: {e}"
+            f"❌ Ошибка отключения "
+            f"подписки {user_id}: {e}"
         )
 
         await call.answer(
             "❌ Ошибка при отключении",
-            show_alert=True
+            show_alert=True,
         )
 
         return
-
-    # --------------------------------------------------------
-    # Показываем обновлённый профиль
-    # --------------------------------------------------------
 
     username = (
         user[1]
@@ -637,42 +636,73 @@ async def disable_user_subscription(
         or "нет"
     )
 
+    site_url, subscription_url = (
+        get_user_urls(user_id)
+    )
+
     text = (
-        "👤 <b>Пользователь</b>\n\n"
+        "👤 <b>ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ</b>\n\n"
 
-        f"🆔 ID: "
-        f"<code>{user_id}</code>\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
 
-        f"👤 Username: "
-        f"@{username}\n\n"
+        "🆔 <b>ID</b>\n"
+        f"<code>{user_id}</code>\n\n"
 
-        f"🧑‍💻 Имя: "
-        f"{first_name}\n\n"
+        "👤 <b>Username</b>\n"
+        f"@{escape(str(username))}\n\n"
 
-        "🎫 Тариф: ❌ Нет подписки\n"
-        "📊 Статус: 🔴 Неактивен\n"
-        "📅 До: нет\n"
-        "⏳ Осталось: 0 д.\n\n"
-        "🔗 Подписка:\n"
-        "нет"
+        "🧑‍💻 <b>Имя</b>\n"
+        f"{escape(str(first_name))}\n\n"
+
+        "━━━━━━━━━━━━━━━━━━\n\n"
+
+        "🎫 <b>Тариф</b>\n"
+        "❌ Нет подписки\n\n"
+
+        "📊 <b>Статус</b>\n"
+        "🔴 Неактивен\n\n"
+
+        "📅 <b>Действует до</b>\n"
+        "нет\n\n"
+
+        "⏳ <b>Осталось</b>\n"
+        "0 д.\n\n"
+
+        "━━━━━━━━━━━━━━━━━━\n\n"
+
+        "🌐 <b>САЙТ</b>\n"
+        f"<code>{escape(site_url)}</code>\n\n"
+
+        "🔗 <b>ПОДПИСКА</b>\n"
+        f"<code>{escape(subscription_url)}</code>"
     )
 
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
+                    text="🌐 Открыть сайт",
+                    url=site_url,
+                ),
+                InlineKeyboardButton(
+                    text="🔗 Подписка",
+                    url=subscription_url,
+                ),
+            ],
+            [
+                InlineKeyboardButton(
                     text="⏳ Продлить",
                     callback_data=(
                         f"extend_{user_id}"
-                    )
+                    ),
                 )
             ],
             [
                 InlineKeyboardButton(
                     text="⬅️ Назад",
-                    callback_data="admin_users"
+                    callback_data="admin_users",
                 )
-            ]
+            ],
         ]
     )
 
@@ -681,12 +711,15 @@ async def disable_user_subscription(
         await call.message.edit_text(
             text,
             reply_markup=keyboard,
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
 
     except TelegramBadRequest as e:
 
-        if "message is not modified" not in str(e):
+        if (
+            "message is not modified"
+            not in str(e)
+        ):
 
             raise
 
@@ -703,12 +736,8 @@ async def disable_user_subscription(
     F.data == "admin_sync_servers"
 )
 async def sync_servers(
-    call: CallbackQuery
+    call: CallbackQuery,
 ):
-
-    # --------------------------------------------------------
-    # Проверка администратора
-    # --------------------------------------------------------
 
     if not is_admin(
         call.from_user.id
@@ -716,33 +745,23 @@ async def sync_servers(
 
         await call.answer(
             "❌ Нет доступа",
-            show_alert=True
+            show_alert=True,
         )
 
         return
-
-    # --------------------------------------------------------
-    # Уведомление
-    # --------------------------------------------------------
 
     await call.answer(
         "🔄 Обновление началось..."
     )
 
-    # --------------------------------------------------------
-    # Сообщение
-    # --------------------------------------------------------
-
-    status_message = await call.message.answer(
-        "🔄 <b>Обновляю серверы...</b>\n\n"
-        "⏳ Проверяю активные и "
-        "истёкшие подписки...",
-        parse_mode="HTML"
+    status_message = (
+        await call.message.answer(
+            "🔄 <b>Обновляю серверы...</b>\n\n"
+            "⏳ Проверяю активные и "
+            "истёкшие подписки...",
+            parse_mode="HTML",
+        )
     )
-
-    # --------------------------------------------------------
-    # Синхронизация
-    # --------------------------------------------------------
 
     try:
 
@@ -763,7 +782,7 @@ async def sync_servers(
             f"❌ Ошибок: "
             f"{result['errors']}",
 
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
 
     except Exception as e:
@@ -775,12 +794,13 @@ async def sync_servers(
         try:
 
             await status_message.edit_text(
-                "❌ <b>Не удалось обновить серверы.</b>\n\n"
+                "❌ <b>Не удалось обновить "
+                "серверы.</b>\n\n"
 
-                f"Ошибка:\n"
-                f"<code>{str(e)}</code>",
+                "Ошибка:\n"
+                f"<code>{escape(str(e))}</code>",
 
-                parse_mode="HTML"
+                parse_mode="HTML",
             )
 
         except TelegramBadRequest:
