@@ -1,9 +1,5 @@
 from aiogram import Router, F
-from aiogram.types import (
-    Message,
-    CallbackQuery,
-    ReplyKeyboardRemove,
-)
+from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
 
 from datetime import datetime, timedelta
@@ -27,7 +23,6 @@ from keyboards import (
     stars_buy_keyboard,
     sbp_buy_keyboard,
     accept_terms_keyboard,
-    show_menu_keyboard,
 )
 
 from github_update import (
@@ -47,10 +42,6 @@ router = Router()
 async def start(message: Message):
 
     user_id = message.from_user.id
-
-    # ========================================================
-    # СОЗДАЁМ ПОЛЬЗОВАТЕЛЯ
-    # ========================================================
 
     add_user(
         user_id,
@@ -84,16 +75,14 @@ async def start(message: Message):
         return
 
     # ========================================================
-    # ПОЛУЧАЕМ ПЕРСОНАЛЬНУЮ ССЫЛКУ
+    # СОЗДАЁМ ПЕРСОНАЛЬНУЮ ПОДПИСКУ
     # ========================================================
 
     link = get_subscription_link(user_id)
 
     if not link:
 
-        link = create_user_subscription(
-            user_id
-        )
+        link = create_user_subscription(user_id)
 
         save_subscription_link(
             user_id,
@@ -182,33 +171,23 @@ async def accept(callback: CallbackQuery):
 
     user_id = callback.from_user.id
 
-    # ========================================================
-    # СОЗДАЁМ ПОЛЬЗОВАТЕЛЯ
-    # ========================================================
-
     add_user(
         user_id,
         callback.from_user.username,
         callback.from_user.first_name,
     )
 
-    # ========================================================
-    # СОХРАНЯЕМ СОГЛАШЕНИЕ
-    # ========================================================
-
     accept_terms(user_id)
 
     # ========================================================
-    # СОЗДАЁМ ПЕРСОНАЛЬНУЮ ССЫЛКУ
+    # СОЗДАЁМ ПЕРСОНАЛЬНУЮ ПОДПИСКУ
     # ========================================================
 
     link = get_subscription_link(user_id)
 
     if not link:
 
-        link = create_user_subscription(
-            user_id
-        )
+        link = create_user_subscription(user_id)
 
         save_subscription_link(
             user_id,
@@ -216,7 +195,7 @@ async def accept(callback: CallbackQuery):
         )
 
     # ========================================================
-    # УДАЛЯЕМ СООБЩЕНИЕ
+    # УДАЛЯЕМ СТАРОЕ СООБЩЕНИЕ
     # ========================================================
 
     try:
@@ -228,7 +207,7 @@ async def accept(callback: CallbackQuery):
         pass
 
     # ========================================================
-    # ГЛАВНОЕ МЕНЮ
+    # ПРИВЕТСТВИЕ
     # ========================================================
 
     await callback.message.answer(
@@ -249,7 +228,9 @@ async def accept(callback: CallbackQuery):
 🚀 Добавить в INCY
 📋 Скопировать ссылку
 
-👇 Всё управление VPN — в одном месте.
+━━━━━━━━━━━━━━━━━━
+
+👇 Выберите нужный раздел в меню.
 """,
         reply_markup=main_menu(user_id),
         parse_mode="HTML",
@@ -332,10 +313,6 @@ async def sbp(callback: CallbackQuery):
 async def trial(message: Message):
 
     user_id = message.from_user.id
-
-    # ========================================================
-    # СОЗДАЁМ ПОЛЬЗОВАТЕЛЯ
-    # ========================================================
 
     add_user(
         user_id,
@@ -483,61 +460,3 @@ async def support(message: Message):
 """,
         parse_mode="HTML",
     )
-
-
-# ============================================================
-# СКРЫТЬ МЕНЮ
-# ============================================================
-
-@router.message(
-    F.text == "🙈 Скрыть меню"
-)
-async def hide_menu(message: Message):
-
-    await message.answer(
-        """
-🙈 <b>Меню скрыто</b>
-
-Нажмите кнопку ниже,
-чтобы снова показать меню.
-""",
-        reply_markup=ReplyKeyboardRemove(),
-        parse_mode="HTML",
-    )
-
-    await message.answer(
-        "👇",
-        reply_markup=show_menu_keyboard(),
-    )
-
-
-# ============================================================
-# ПОКАЗАТЬ МЕНЮ
-# ============================================================
-
-@router.callback_query(
-    F.data == "show_menu"
-)
-async def show_menu(callback: CallbackQuery):
-
-    user_id = callback.from_user.id
-
-    await callback.message.answer(
-        """
-☰ <b>Главное меню снова показано!</b>
-
-Выберите нужный раздел 👇
-""",
-        reply_markup=main_menu(user_id),
-        parse_mode="HTML",
-    )
-
-    try:
-
-        await callback.message.delete()
-
-    except Exception:
-
-        pass
-
-    await callback.answer()
