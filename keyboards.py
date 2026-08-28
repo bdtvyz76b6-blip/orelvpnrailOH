@@ -3,7 +3,7 @@ from aiogram.types import (
     KeyboardButton,
     InlineKeyboardMarkup,
     InlineKeyboardButton,
-    WebAppInfo
+    WebAppInfo,
 )
 
 
@@ -11,38 +11,30 @@ from aiogram.types import (
 # ГЛАВНОЕ МЕНЮ
 # ============================================================
 
-def main_menu(user_id=None):
+def main_menu(user_id: int):
 
-    keyboard = [
-        [
-            KeyboardButton(
-                text="🎫 Купить подписку"
-            )
-        ],
-        [
-            KeyboardButton(
-                text="🎁 Пробный период"
-            )
-        ],
-        [
-            KeyboardButton(
-                text="👤 Личный кабинет"
-            )
-        ]
-    ]
+    subscription_url = (
+        f"https://orelvpnrailoh-1.onrender.com/s/"
+        f"2ix847xy{user_id}"
+    )
 
-    # ========================================================
-    # МОЯ ПОДПИСКА — TELEGRAM MINI APP
-    # ========================================================
-
-    if user_id:
-
-        subscription_url = (
-            "https://orelvpnrailoh-1.onrender.com"
-            f"/s/2ix847xy{user_id}"
-        )
-
-        keyboard.append(
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [
+                KeyboardButton(
+                    text="🎫 Купить подписку"
+                )
+            ],
+            [
+                KeyboardButton(
+                    text="🎁 Пробный период"
+                )
+            ],
+            [
+                KeyboardButton(
+                    text="👤 Личный кабинет"
+                )
+            ],
             [
                 KeyboardButton(
                     text="🌐 Моя подписка",
@@ -50,38 +42,18 @@ def main_menu(user_id=None):
                         url=subscription_url
                     )
                 )
-            ]
-        )
-
-    else:
-
-        keyboard.append(
+            ],
             [
                 KeyboardButton(
-                    text="🌐 Моя подписка"
+                    text="📄 Документы"
+                )
+            ],
+            [
+                KeyboardButton(
+                    text="💬 Поддержка"
                 )
             ]
-        )
-
-    # ========================================================
-    # ОСТАЛЬНЫЕ КНОПКИ
-    # ========================================================
-
-    keyboard.extend([
-        [
-            KeyboardButton(
-                text="📄 Документы"
-            )
         ],
-        [
-            KeyboardButton(
-                text="💬 Поддержка"
-            )
-        ]
-    ])
-
-    return ReplyKeyboardMarkup(
-        keyboard=keyboard,
         resize_keyboard=True
     )
 
@@ -219,7 +191,7 @@ def cabinet_keyboard():
 
 
 # ============================================================
-# СОГЛАШЕНИЕ
+# ПРИНЯТИЕ УСЛОВИЙ
 # ============================================================
 
 def accept_terms_keyboard():
@@ -229,10 +201,7 @@ def accept_terms_keyboard():
             [
                 InlineKeyboardButton(
                     text="📄 Документы",
-                    url=(
-                        "https://bdt2010.github.io/"
-                        "managerorlvpnsite/"
-                    )
+                    url="https://bdt2010.github.io/managerorlvpnsite/"
                 )
             ],
             [
