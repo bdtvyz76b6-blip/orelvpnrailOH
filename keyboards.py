@@ -2,51 +2,102 @@ from aiogram.types import (
     ReplyKeyboardMarkup,
     KeyboardButton,
     InlineKeyboardMarkup,
-    InlineKeyboardButton
+    InlineKeyboardButton,
+    WebAppInfo,
 )
 
 
-# =========================================================
+# ============================================================
 # ГЛАВНОЕ МЕНЮ
-# =========================================================
+# ============================================================
 
-def main_menu():
+def main_menu(user_id=None):
+
+    webapp_button = KeyboardButton(
+        text="🌐 Моя подписка",
+        web_app=WebAppInfo(
+            url=(
+                "https://orelvpnrailoh-1.onrender.com"
+                f"/s/2ix847xy{user_id}"
+            )
+        ) if user_id else None
+    )
 
     return ReplyKeyboardMarkup(
         keyboard=[
             [
                 KeyboardButton(
+                    text="👤 Личный кабинет"
+                ),
+                KeyboardButton(
                     text="🎫 Купить подписку"
-                )
+                ),
             ],
             [
                 KeyboardButton(
                     text="🎁 Пробный период"
-                )
-            ],
-            [
-                KeyboardButton(
-                    text="👤 Личный кабинет"
-                )
-            ],
-            [
-                KeyboardButton(
-                    text="📄 Документы"
-                )
+                ),
+                webapp_button,
             ],
             [
                 KeyboardButton(
                     text="💬 Поддержка"
-                )
-            ]
+                ),
+                KeyboardButton(
+                    text="📄 Документы"
+                ),
+            ],
         ],
-        resize_keyboard=True
+        resize_keyboard=True,
+        is_persistent=True,
     )
 
 
-# =========================================================
-# СПОСОБ ОПЛАТЫ
-# =========================================================
+# ============================================================
+# КАБИНЕТ
+# ============================================================
+
+def cabinet_keyboard():
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🌐 Моя подписка",
+                    url="https://orelvpnrailoh-1.onrender.com"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🔄 Обновить серверы",
+                    callback_data="refresh_subscription"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🔗 Получить ссылку",
+                    callback_data="get_link"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🎟 Ввести промокод",
+                    callback_data="enter_promo"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="💳 Продлить подписку",
+                    callback_data="renew"
+                )
+            ],
+        ]
+    )
+
+
+# ============================================================
+# ОПЛАТА
+# ============================================================
 
 def payment_method_keyboard():
 
@@ -63,14 +114,14 @@ def payment_method_keyboard():
                     text="💳 СБП",
                     callback_data="pay_sbp"
                 )
-            ]
+            ],
         ]
     )
 
 
-# =========================================================
-# STARS ТАРИФЫ
-# =========================================================
+# ============================================================
+# TELEGRAM STARS
+# ============================================================
 
 def stars_buy_keyboard():
 
@@ -78,35 +129,35 @@ def stars_buy_keyboard():
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="⭐ 1 месяц — 70 Stars",
+                    text="1 месяц — ⭐ 70",
                     callback_data="stars_30"
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text="⭐ 3 месяца — 190 Stars",
+                    text="3 месяца — ⭐ 190",
                     callback_data="stars_90"
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text="⭐ 6 месяцев — 350 Stars",
+                    text="6 месяцев — ⭐ 350",
                     callback_data="stars_180"
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text="⭐ 12 месяцев — 700 Stars",
+                    text="12 месяцев — ⭐ 700",
                     callback_data="stars_365"
                 )
-            ]
+            ],
         ]
     )
 
 
-# =========================================================
-# СБП ТАРИФЫ
-# =========================================================
+# ============================================================
+# СБП
+# ============================================================
 
 def sbp_buy_keyboard():
 
@@ -114,192 +165,51 @@ def sbp_buy_keyboard():
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="💳 1 месяц — 129₽",
+                    text="1 месяц",
                     callback_data="sbp_30"
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text="💳 3 месяца — 379₽",
+                    text="3 месяца",
                     callback_data="sbp_90"
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text="💳 6 месяцев — 659₽",
+                    text="6 месяцев",
                     callback_data="sbp_180"
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text="💳 12 месяцев — 1089₽",
+                    text="12 месяцев",
                     callback_data="sbp_365"
                 )
-            ]
+            ],
         ]
     )
 
 
-# =========================================================
-# ЛИЧНЫЙ КАБИНЕТ
-# =========================================================
-
-def cabinet_keyboard():
-
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-
-            # -------------------------------------------------
-            # ПРИЛОЖЕНИЯ
-            # -------------------------------------------------
-
-            [
-                InlineKeyboardButton(
-                    text="🟢 Добавить в Happ",
-                    callback_data="add_happ"
-                )
-            ],
-
-            [
-                InlineKeyboardButton(
-                    text="🟣 Добавить в INCY",
-                    callback_data="add_incy"
-                )
-            ],
-
-            # -------------------------------------------------
-            # ВЕБ-КАБИНЕТ
-            # -------------------------------------------------
-
-            [
-                InlineKeyboardButton(
-                    text="🌐 Открыть веб-кабинет",
-                    callback_data="open_web_cabinet"
-                )
-            ],
-
-            # -------------------------------------------------
-            # ССЫЛКА
-            # -------------------------------------------------
-
-            [
-                InlineKeyboardButton(
-                    text="🔗 Получить ссылку",
-                    callback_data="get_link"
-                )
-            ],
-
-            # -------------------------------------------------
-            # ОБНОВЛЕНИЕ
-            # -------------------------------------------------
-
-            [
-                InlineKeyboardButton(
-                    text="🔄 Обновить серверы",
-                    callback_data="refresh_subscription"
-                )
-            ],
-
-            # -------------------------------------------------
-            # ПРОМОКОД
-            # -------------------------------------------------
-
-            [
-                InlineKeyboardButton(
-                    text="🎟 Активировать промокод",
-                    callback_data="enter_promo"
-                )
-            ],
-
-            # -------------------------------------------------
-            # ПРОДЛЕНИЕ
-            # -------------------------------------------------
-
-            [
-                InlineKeyboardButton(
-                    text="🎫 Продлить подписку",
-                    callback_data="renew"
-                )
-            ]
-        ]
-    )
-
-
-# =========================================================
-# АДМИН ПАНЕЛЬ
-# =========================================================
-
-def admin_menu():
-
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-
-            [
-                InlineKeyboardButton(
-                    text="📊 Статистика",
-                    callback_data="admin_stats"
-                )
-            ],
-
-            [
-                InlineKeyboardButton(
-                    text="👥 Пользователи",
-                    callback_data="admin_users"
-                )
-            ],
-
-            [
-                InlineKeyboardButton(
-                    text="💳 Платежи",
-                    callback_data="admin_payments"
-                )
-            ],
-
-            [
-                InlineKeyboardButton(
-                    text="⚙️ Управление",
-                    callback_data="admin_manage"
-                )
-            ],
-
-            [
-                InlineKeyboardButton(
-                    text="📢 Рассылка",
-                    callback_data="admin_broadcast"
-                )
-            ],
-
-            [
-                InlineKeyboardButton(
-                    text="🎫 Промокоды",
-                    callback_data="admin_promos"
-                )
-            ]
-        ]
-    )
-
-
-# =========================================================
+# ============================================================
 # ПРИНЯТИЕ УСЛОВИЙ
-# =========================================================
+# ============================================================
 
 def accept_terms_keyboard():
 
     return InlineKeyboardMarkup(
         inline_keyboard=[
-
             [
                 InlineKeyboardButton(
-                    text="📄 Документы",
+                    text="📄 Условия",
                     url="https://bdtvyz76b6-blip.github.io/managerorlvpnsite/"
                 )
             ],
-
             [
                 InlineKeyboardButton(
                     text="✅ Принимаю",
                     callback_data="accept_terms"
                 )
-            ]
+            ],
         ]
     )
