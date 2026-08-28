@@ -37,15 +37,10 @@ def main_menu(user_id: int):
             ],
             [
                 KeyboardButton(
-                    text="🌐 Моя подписка",
+                    text="⚡ Подключиться",
                     web_app=WebAppInfo(
                         url=subscription_url
                     )
-                )
-            ],
-            [
-                KeyboardButton(
-                    text="📄 Документы"
                 )
             ],
             [
@@ -54,7 +49,8 @@ def main_menu(user_id: int):
                 )
             ]
         ],
-        resize_keyboard=True
+        resize_keyboard=True,
+        is_persistent=True,
     )
 
 
@@ -164,7 +160,7 @@ def cabinet_keyboard():
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="🔗 Получить ссылку",
+                    text="⚡ Подключиться",
                     callback_data="get_link"
                 )
             ],
