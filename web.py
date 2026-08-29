@@ -1,5 +1,6 @@
 import os
 import html
+from datetime import datetime
 from urllib.parse import quote
 
 from flask import Flask, Response, abort
@@ -26,6 +27,18 @@ SUBSCRIPTION_PREFIX = os.getenv(
     "SUBSCRIPTION_PREFIX",
     "2ix847xy",
 ).strip()
+
+# Если позже укажешь username бота:
+# BOT_USERNAME=your_bot
+BOT_USERNAME = os.getenv(
+    "BOT_USERNAME",
+    "",
+).strip().lstrip("@")
+
+if BOT_USERNAME:
+    TELEGRAM_URL = f"https://t.me/{BOT_USERNAME}"
+else:
+    TELEGRAM_URL = "https://t.me/"
 
 
 # ============================================================
@@ -70,6 +83,7 @@ def get_urls(user_id):
         f"{PUBLIC_SITE_URL}/sub/{token}"
     )
 
+    # Добавление подписки в Happ
     happ_url = (
         "happ://add/"
         + quote(
@@ -78,6 +92,7 @@ def get_urls(user_id):
         )
     )
 
+    # Добавление подписки в INCY
     incy_url = (
         "incy://add/"
         + quote(
@@ -112,6 +127,28 @@ def js_escape(value):
 
 
 # ============================================================
+# СКЛОНЕНИЕ ДНЕЙ
+# ============================================================
+
+def days_word(days):
+
+    days = abs(int(days))
+
+    if 11 <= days % 100 <= 14:
+        return "дней"
+
+    last = days % 10
+
+    if last == 1:
+        return "день"
+
+    if 2 <= last <= 4:
+        return "дня"
+
+    return "дней"
+
+
+# ============================================================
 # СТРАНИЦА ПОДПИСКИ
 # ============================================================
 
@@ -140,12 +177,25 @@ def subscription_page(token):
         return """
 <!DOCTYPE html>
 <html lang="ru">
+
 <head>
+
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+
+<meta
+    name="viewport"
+    content="width=device-width,initial-scale=1"
+>
+
+<meta
+    name="theme-color"
+    content="#08080d"
+>
+
 <title>ixxy VPN</title>
 
 <style>
+
 * {
     box-sizing:border-box;
 }
@@ -156,45 +206,105 @@ body {
     display:flex;
     align-items:center;
     justify-content:center;
-    padding:25px;
-    background:#07070b;
-    color:white;
-    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;
+    padding:24px;
+
+    background:
+        radial-gradient(
+            circle at 10% 0%,
+            rgba(255,0,190,.22),
+            transparent 32%
+        ),
+        radial-gradient(
+            circle at 90% 5%,
+            rgba(0,190,255,.20),
+            transparent 32%
+        ),
+        #07070b;
+
+    color:#fff;
+
+    font-family:
+        -apple-system,
+        BlinkMacSystemFont,
+        "SF Pro Display",
+        "Segoe UI",
+        Arial,
+        sans-serif;
+
     text-align:center;
 }
 
 .box {
     width:100%;
     max-width:430px;
-    padding:35px 25px;
+    padding:38px 26px;
+
     border-radius:30px;
-    background:#15151d;
-    border:1px solid rgba(255,255,255,.08);
+
+    background:
+        rgba(18,18,27,.88);
+
+    border:
+        1px solid rgba(255,255,255,.08);
+
+    box-shadow:
+        0 25px 80px rgba(0,0,0,.45);
 }
 
 .icon {
-    font-size:60px;
-    margin-bottom:15px;
+    width:80px;
+    height:80px;
+
+    margin:
+        0 auto 20px;
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+
+    border-radius:25px;
+
+    font-size:40px;
+
+    background:
+        linear-gradient(
+            135deg,
+            #ff25bd,
+            #773cff,
+            #00c9ff
+        );
+
+    box-shadow:
+        0 18px 45px
+        rgba(115,60,255,.30);
 }
 
 h1 {
     margin:0 0 10px;
+    font-size:28px;
 }
 
 p {
+    margin:0;
     color:#90909c;
-    line-height:1.5;
+    line-height:1.55;
 }
+
 </style>
+
 </head>
 
 <body>
 
 <div class="box">
 
-    <div class="icon">⛔</div>
+    <div class="icon">
+        ⛔
+    </div>
 
-    <h1>Подписка не найдена</h1>
+    <h1>
+        Подписка не найдена
+    </h1>
 
     <p>
         Для этого пользователя пока нет
@@ -204,6 +314,7 @@ p {
 </div>
 
 </body>
+
 </html>
 """, 404
 
@@ -262,23 +373,43 @@ p {
 
     status = "🔴 Не активна"
     status_class = "inactive"
+
+    tariff_label = "🎫 Тариф"
     tariff = "Нет подписки"
+
     days_left = 0
     until_text = "—"
 
+    # --------------------------------------------------------
+    # Тариф
+    # --------------------------------------------------------
+
     if subscription == "vip":
 
+        tariff_label = "🎫 Тариф"
         tariff = "👑 ixxy VIP"
 
     elif subscription == "trial":
 
-        tariff = "🎁 Пробный период"
+        tariff_label = "🎁 Пробный период"
+        tariff = "Активен"
+
+    elif subscription in (
+        "active",
+        "premium",
+        "standard",
+    ):
+
+        tariff_label = "🎫 Тариф"
+        tariff = "ixxy VPN"
+
+    # --------------------------------------------------------
+    # Дата окончания
+    # --------------------------------------------------------
 
     if until:
 
         try:
-
-            from datetime import datetime
 
             expire_date = datetime.strptime(
                 until,
@@ -297,13 +428,14 @@ p {
 
             if days_left >= 0:
 
-                status = "🟢 Активна"
+                status = "🟢 Подписка активна"
                 status_class = "active"
 
             else:
 
-                status = "🔴 Истекла"
+                status = "🔴 Подписка истекла"
                 status_class = "inactive"
+
                 days_left = 0
 
         except Exception:
@@ -311,15 +443,12 @@ p {
             pass
 
     # --------------------------------------------------------
-    # Текст дней
+    # Дни
     # --------------------------------------------------------
 
-    if days_left == 1:
-        days_text = "1 день"
-    elif 2 <= days_left <= 4:
-        days_text = f"{days_left} дня"
-    else:
-        days_text = f"{days_left} дней"
+    days_text = (
+        f"{days_left} {days_word(days_left)}"
+    )
 
     # --------------------------------------------------------
     # Безопасные значения
@@ -345,6 +474,30 @@ p {
         page_url
     )
 
+    js_telegram_url = js_escape(
+        TELEGRAM_URL
+    )
+
+    safe_first_name = html.escape(
+        first_name
+    )
+
+    safe_username = html.escape(
+        username
+    )
+
+    safe_tariff = html.escape(
+        tariff
+    )
+
+    safe_until = html.escape(
+        until_text
+    )
+
+    safe_days = html.escape(
+        days_text
+    )
+
     # ========================================================
     # HTML
     # ========================================================
@@ -360,10 +513,12 @@ p {
 
 <meta
     name="viewport"
-    content="width=device-width,
-    initial-scale=1.0,
-    maximum-scale=1.0,
-    user-scalable=no"
+    content="
+        width=device-width,
+        initial-scale=1.0,
+        maximum-scale=1.0,
+        user-scalable=no
+"
 >
 
 <meta
@@ -381,41 +536,34 @@ p {
     content="yes"
 >
 
-<title>☂️ ixxy VPN</title>
+<meta
+    name="apple-mobile-web-app-status-bar-style"
+    content="black-translucent"
+>
+
+<title>☂️ ixxy VPN — Моя подписка</title>
 
 <style>
 
+/* ============================================================
+   RESET
+============================================================ */
+
 * {{
+
     box-sizing:border-box;
-    -webkit-tap-highlight-color:transparent;
-}}
 
-:root {{
-
-    --bg:#07070b;
-    --card:rgba(18,18,27,.88);
-    --card2:rgba(255,255,255,.045);
-    --text:#ffffff;
-    --muted:#91919d;
-    --border:rgba(255,255,255,.09);
-    --shadow:rgba(0,0,0,.48);
-
-}}
-
-body.light {{
-
-    --bg:#f3f4f8;
-    --card:rgba(255,255,255,.88);
-    --card2:rgba(0,0,0,.045);
-    --text:#111118;
-    --muted:#696974;
-    --border:rgba(0,0,0,.08);
-    --shadow:rgba(0,0,0,.12);
+    -webkit-tap-highlight-color:
+        transparent;
 
 }}
 
 html {{
+
     min-height:100%;
+
+    scroll-behavior:smooth;
+
 }}
 
 body {{
@@ -425,9 +573,9 @@ body {{
     min-height:100vh;
 
     padding:
-        max(16px, env(safe-area-inset-top))
-        16px
-        max(25px, env(safe-area-inset-bottom));
+        max(14px, env(safe-area-inset-top))
+        15px
+        max(28px, env(safe-area-inset-bottom));
 
     color:var(--text);
 
@@ -440,60 +588,137 @@ body {{
         sans-serif;
 
     background:
+
         radial-gradient(
-            circle at 5% 0%,
+            circle at 0% 0%,
             rgba(255,0,190,.23),
             transparent 31%
         ),
+
         radial-gradient(
-            circle at 95% 5%,
-            rgba(0,190,255,.23),
+            circle at 100% 4%,
+            rgba(0,190,255,.21),
             transparent 31%
         ),
+
         radial-gradient(
             circle at 50% 100%,
             rgba(115,50,255,.20),
-            transparent 43%
+            transparent 42%
         ),
+
         var(--bg);
 
     transition:
         background .3s ease,
         color .3s ease;
 
-    overscroll-behavior:none;
+    overscroll-behavior-x:none;
 
 }}
+
+
+/* ============================================================
+   VARIABLES
+============================================================ */
+
+:root {{
+
+    --bg:#07070b;
+
+    --card:
+        rgba(18,18,27,.86);
+
+    --card2:
+        rgba(255,255,255,.045);
+
+    --text:#ffffff;
+
+    --muted:#91919d;
+
+    --border:
+        rgba(255,255,255,.09);
+
+    --shadow:
+        rgba(0,0,0,.48);
+
+    --green:#00f59b;
+
+    --red:#ff4d61;
+
+}}
+
+body.light {{
+
+    --bg:#f3f4f8;
+
+    --card:
+        rgba(255,255,255,.88);
+
+    --card2:
+        rgba(0,0,0,.045);
+
+    --text:#111118;
+
+    --muted:#696974;
+
+    --border:
+        rgba(0,0,0,.08);
+
+    --shadow:
+        rgba(0,0,0,.12);
+
+}}
+
+
+/* ============================================================
+   CONTAINER
+============================================================ */
 
 .container {{
 
     width:100%;
 
-    max-width:520px;
+    max-width:540px;
 
     margin:0 auto;
 
 }}
 
+
+/* ============================================================
+   TOPBAR
+============================================================ */
+
 .topbar {{
+
+    height:48px;
 
     display:flex;
 
     justify-content:flex-end;
 
-    margin-bottom:4px;
+    align-items:center;
+
+    margin-bottom:3px;
 
 }}
 
 .theme-toggle {{
 
-    width:47px;
+    width:46px;
 
-    height:47px;
+    height:46px;
 
     border:1px solid var(--border);
 
     border-radius:15px;
+
+    background:var(--card2);
+
+    color:var(--text);
+
+    font-size:19px;
 
     display:flex;
 
@@ -501,17 +726,11 @@ body {{
 
     justify-content:center;
 
-    background:var(--card2);
-
-    color:var(--text);
-
-    font-size:20px;
-
     cursor:pointer;
 
-    backdrop-filter:blur(15px);
+    backdrop-filter:blur(18px);
 
-    -webkit-backdrop-filter:blur(15px);
+    -webkit-backdrop-filter:blur(18px);
 
     transition:
         transform .15s ease,
@@ -521,7 +740,20 @@ body {{
 
 .theme-toggle:active {{
 
-    transform:scale(.92);
+    transform:scale(.91);
+
+}}
+
+
+/* ============================================================
+   HEADER
+============================================================ */
+
+.header {{
+
+    text-align:center;
+
+    margin-bottom:22px;
 
 }}
 
@@ -531,9 +763,8 @@ body {{
 
     height:88px;
 
-    margin:2px auto 17px;
-
-    border-radius:28px;
+    margin:
+        2px auto 17px;
 
     display:flex;
 
@@ -541,7 +772,9 @@ body {{
 
     justify-content:center;
 
-    font-size:45px;
+    border-radius:28px;
+
+    font-size:43px;
 
     background:
         linear-gradient(
@@ -576,24 +809,20 @@ h1 {{
 
     margin:0;
 
-    text-align:center;
-
     font-size:30px;
 
     line-height:1.1;
 
-    font-weight:850;
+    font-weight:900;
 
-    letter-spacing:-.6px;
+    letter-spacing:-.7px;
 
 }}
 
 .subtitle {{
 
     margin:
-        8px 0 22px;
-
-    text-align:center;
+        8px 0 0;
 
     color:var(--muted);
 
@@ -601,11 +830,16 @@ h1 {{
 
 }}
 
+
+/* ============================================================
+   MAIN CARD
+============================================================ */
+
 .card {{
 
     padding:17px;
 
-    border-radius:29px;
+    border-radius:30px;
 
     background:var(--card);
 
@@ -614,9 +848,9 @@ h1 {{
     box-shadow:
         0 25px 80px var(--shadow);
 
-    backdrop-filter:blur(25px);
+    backdrop-filter:blur(28px);
 
-    -webkit-backdrop-filter:blur(25px);
+    -webkit-backdrop-filter:blur(28px);
 
     animation:
         cardIn .45s ease;
@@ -627,7 +861,7 @@ h1 {{
 
     from {{
         opacity:0;
-        transform:translateY(10px);
+        transform:translateY(12px);
     }}
 
     to {{
@@ -637,11 +871,16 @@ h1 {{
 
 }}
 
+
+/* ============================================================
+   STATUS
+============================================================ */
+
 .status {{
 
     padding:17px;
 
-    border-radius:21px;
+    border-radius:22px;
 
     display:flex;
 
@@ -695,7 +934,7 @@ h1 {{
 
 .active .dot {{
 
-    background:#00f59b;
+    background:var(--green);
 
     box-shadow:
         0 0 18px
@@ -705,7 +944,7 @@ h1 {{
 
 .inactive .dot {{
 
-    background:#ff4d61;
+    background:var(--red);
 
     box-shadow:
         0 0 15px
@@ -717,13 +956,13 @@ h1 {{
 
     font-size:15px;
 
-    font-weight:850;
+    font-weight:900;
 
 }}
 
 .status-info {{
 
-    margin-top:3px;
+    margin-top:4px;
 
     color:var(--muted);
 
@@ -731,17 +970,23 @@ h1 {{
 
 }}
 
-.lock-icon {{
+.status-icon {{
 
     font-size:21px;
 
 }}
 
+
+/* ============================================================
+   INFO
+============================================================ */
+
 .info-grid {{
 
     display:grid;
 
-    grid-template-columns:1fr 1fr;
+    grid-template-columns:
+        1fr 1fr;
 
     gap:10px;
 
@@ -751,9 +996,9 @@ h1 {{
 
 .info-box {{
 
-    padding:15px;
+    padding:16px;
 
-    border-radius:19px;
+    border-radius:20px;
 
     background:var(--card2);
 
@@ -767,7 +1012,9 @@ h1 {{
 
     font-size:11px;
 
-    margin-bottom:5px;
+    margin-bottom:6px;
+
+    font-weight:700;
 
 }}
 
@@ -777,11 +1024,137 @@ h1 {{
 
     font-size:14px;
 
-    font-weight:800;
+    font-weight:850;
 
     word-break:break-word;
 
 }}
+
+.remaining {{
+
+    margin-top:10px;
+
+}}
+
+.remaining-value {{
+
+    font-size:18px;
+
+}}
+
+
+/* ============================================================
+   TIME VISUAL
+============================================================ */
+
+.time-card {{
+
+    margin-top:10px;
+
+    padding:16px;
+
+    border-radius:20px;
+
+    background:
+        linear-gradient(
+            135deg,
+            rgba(120,60,255,.10),
+            rgba(0,200,255,.06)
+        );
+
+    border:1px solid var(--border);
+
+}}
+
+.time-top {{
+
+    display:flex;
+
+    justify-content:space-between;
+
+    align-items:center;
+
+    gap:12px;
+
+}}
+
+.time-title {{
+
+    font-size:12px;
+
+    color:var(--muted);
+
+}}
+
+.time-days {{
+
+    font-size:13px;
+
+    font-weight:850;
+
+    color:var(--text);
+
+}}
+
+.time-line {{
+
+    margin-top:11px;
+
+    height:8px;
+
+    border-radius:20px;
+
+    overflow:hidden;
+
+    background:
+        rgba(255,255,255,.08);
+
+}}
+
+.time-line-inner {{
+
+    width:100%;
+
+    height:100%;
+
+    border-radius:20px;
+
+    background:
+        linear-gradient(
+            90deg,
+            #ff25bd,
+            #773cff,
+            #00c9ff
+        );
+
+    animation:
+        progressIn .8s ease;
+
+}}
+
+@keyframes progressIn {{
+
+    from {{
+        width:0;
+    }}
+
+    to {{
+        width:100%;
+    }}
+
+}}
+
+body.light .time-line {{
+
+    background:
+        rgba(0,0,0,.08);
+
+}}
+
+
+/* ============================================================
+   PROFILE
+============================================================ */
 
 .profile {{
 
@@ -789,11 +1162,21 @@ h1 {{
 
     padding:15px;
 
-    border-radius:19px;
+    border-radius:20px;
 
     background:var(--card2);
 
     border:1px solid var(--border);
+
+}}
+
+.profile-title {{
+
+    margin-bottom:7px;
+
+    font-size:13px;
+
+    font-weight:850;
 
 }}
 
@@ -803,9 +1186,11 @@ h1 {{
 
     justify-content:space-between;
 
+    align-items:flex-start;
+
     gap:15px;
 
-    padding:5px 0;
+    padding:7px 0;
 
 }}
 
@@ -823,7 +1208,7 @@ h1 {{
 
     font-size:12px;
 
-    font-weight:750;
+    font-weight:800;
 
     text-align:right;
 
@@ -831,29 +1216,70 @@ h1 {{
 
 }}
 
-.connect-title {{
 
-    margin:
-        21px 2px 8px;
+/* ============================================================
+   ID
+============================================================ */
 
-    font-size:14px;
+.id {{
 
-    font-weight:850;
+    margin-top:10px;
 
-}}
+    padding:14px 15px;
 
-.connect-subtitle {{
+    border-radius:18px;
 
-    margin:
-        0 2px 10px;
+    background:var(--card2);
+
+    border:1px solid var(--border);
 
     color:var(--muted);
 
     font-size:12px;
 
-    line-height:1.4;
+}}
+
+.id code {{
+
+    color:var(--text);
+
+    font-weight:850;
 
 }}
+
+
+/* ============================================================
+   SECTION TITLES
+============================================================ */
+
+.section-title {{
+
+    margin:
+        22px 2px 6px;
+
+    font-size:15px;
+
+    font-weight:900;
+
+}}
+
+.section-subtitle {{
+
+    margin:
+        0 2px 11px;
+
+    color:var(--muted);
+
+    font-size:12px;
+
+    line-height:1.5;
+
+}}
+
+
+/* ============================================================
+   BUTTONS
+============================================================ */
 
 .button {{
 
@@ -863,11 +1289,12 @@ h1 {{
 
     margin-top:10px;
 
-    padding:0 17px;
+    padding:
+        0 17px;
 
     border:0;
 
-    border-radius:17px;
+    border-radius:18px;
 
     display:flex;
 
@@ -885,7 +1312,7 @@ h1 {{
 
     font-size:15px;
 
-    font-weight:850;
+    font-weight:900;
 
     cursor:pointer;
 
@@ -906,25 +1333,10 @@ h1 {{
 
 }}
 
-.main-connect {{
 
-    min-height:62px;
-
-    font-size:17px;
-
-    background:
-        linear-gradient(
-            135deg,
-            #ff25b9,
-            #783cff,
-            #00bfff
-        );
-
-    box-shadow:
-        0 13px 35px
-        rgba(120,60,255,.28);
-
-}}
+/* ============================================================
+   HAPP
+============================================================ */
 
 .happ {{
 
@@ -935,7 +1347,16 @@ h1 {{
             #ff5d78
         );
 
+    box-shadow:
+        0 10px 28px
+        rgba(255,37,184,.18);
+
 }}
+
+
+/* ============================================================
+   INCY
+============================================================ */
 
 .incy {{
 
@@ -946,9 +1367,18 @@ h1 {{
             #00baff
         );
 
+    box-shadow:
+        0 10px 28px
+        rgba(70,100,255,.18);
+
 }}
 
-.copy {{
+
+/* ============================================================
+   COPY
+============================================================ */
+
+.copy-secondary {{
 
     background:var(--card2);
 
@@ -957,6 +1387,11 @@ h1 {{
     border:1px solid var(--border);
 
 }}
+
+
+/* ============================================================
+   REFRESH
+============================================================ */
 
 .refresh {{
 
@@ -968,24 +1403,18 @@ h1 {{
 
 }}
 
-.subscription-title {{
 
-    margin:
-        20px 2px 8px;
+/* ============================================================
+   SUBSCRIPTION LINK
+============================================================ */
 
-    color:var(--muted);
+.subscription-box {{
 
-    font-size:11px;
-
-    font-weight:750;
-
-}}
-
-.subscription {{
+    margin-top:10px;
 
     padding:14px;
 
-    border-radius:16px;
+    border-radius:18px;
 
     background:
         rgba(0,0,0,.18);
@@ -996,7 +1425,7 @@ h1 {{
 
     font-size:11px;
 
-    line-height:1.5;
+    line-height:1.55;
 
     word-break:break-all;
 
@@ -1004,45 +1433,209 @@ h1 {{
 
     -webkit-user-select:text;
 
-}}
-
-.light .subscription {{
-
-    background:rgba(0,0,0,.035);
+    cursor:pointer;
 
 }}
 
-.id {{
+body.light .subscription-box {{
 
-    margin-top:10px;
+    background:
+        rgba(0,0,0,.035);
 
-    padding:14px;
+}}
 
-    border-radius:17px;
+.subscription-label {{
+
+    margin:
+        20px 2px 8px;
+
+    color:var(--muted);
+
+    font-size:11px;
+
+    font-weight:800;
+
+    letter-spacing:.2px;
+
+}}
+
+
+/* ============================================================
+   INSTRUCTION CARDS
+============================================================ */
+
+.devices {{
+
+    display:grid;
+
+    grid-template-columns:
+        1fr 1fr;
+
+    gap:10px;
+
+}}
+
+.device {{
+
+    min-height:88px;
+
+    padding:15px;
+
+    border-radius:20px;
 
     background:var(--card2);
 
     border:1px solid var(--border);
 
-    color:var(--muted);
+    cursor:pointer;
 
-    font-size:12px;
+    transition:
+        transform .12s ease,
+        background .2s ease;
 
 }}
 
-.id code {{
+.device:active {{
+
+    transform:scale(.97);
+
+}}
+
+.device-icon {{
+
+    font-size:25px;
+
+    margin-bottom:8px;
+
+}}
+
+.device-name {{
+
+    font-size:13px;
+
+    font-weight:850;
+
+}}
+
+.device-hint {{
+
+    margin-top:3px;
+
+    color:var(--muted);
+
+    font-size:10px;
+
+}}
+
+
+/* ============================================================
+   ACTION CARDS
+============================================================ */
+
+.action {{
+
+    margin-top:10px;
+
+    padding:17px;
+
+    border-radius:20px;
+
+    background:var(--card2);
+
+    border:1px solid var(--border);
+
+    display:flex;
+
+    align-items:center;
+
+    gap:13px;
+
+    text-decoration:none;
 
     color:var(--text);
 
-    font-weight:800;
+    transition:
+        transform .12s ease;
 
 }}
+
+.action:active {{
+
+    transform:scale(.98);
+
+}}
+
+.action-icon {{
+
+    width:44px;
+
+    height:44px;
+
+    border-radius:14px;
+
+    display:flex;
+
+    align-items:center;
+
+    justify-content:center;
+
+    flex-shrink:0;
+
+    background:
+        linear-gradient(
+            135deg,
+            rgba(255,37,189,.25),
+            rgba(119,60,255,.25)
+        );
+
+    font-size:21px;
+
+}}
+
+.action-content {{
+
+    flex:1;
+
+}}
+
+.action-title {{
+
+    font-size:14px;
+
+    font-weight:850;
+
+}}
+
+.action-description {{
+
+    margin-top:3px;
+
+    color:var(--muted);
+
+    font-size:11px;
+
+    line-height:1.4;
+
+}}
+
+.action-arrow {{
+
+    color:var(--muted);
+
+    font-size:18px;
+
+}}
+
+
+/* ============================================================
+   TELEGRAM
+============================================================ */
 
 .telegram {{
 
     margin-top:10px;
 
-    min-height:48px;
+    min-height:52px;
 
     display:flex;
 
@@ -1052,19 +1645,24 @@ h1 {{
 
     text-decoration:none;
 
-    color:var(--muted);
+    color:var(--text);
 
-    font-size:12px;
+    font-size:13px;
 
-    font-weight:700;
+    font-weight:800;
 
-    border-radius:15px;
+    border-radius:17px;
 
     border:1px solid var(--border);
 
     background:var(--card2);
 
 }}
+
+
+/* ============================================================
+   FOOTER
+============================================================ */
 
 .footer {{
 
@@ -1080,6 +1678,11 @@ h1 {{
 
 }}
 
+
+/* ============================================================
+   TOAST
+============================================================ */
+
 .toast {{
 
     position:fixed;
@@ -1094,7 +1697,8 @@ h1 {{
 
     width:max-content;
 
-    max-width:calc(100% - 30px);
+    max-width:
+        calc(100% - 30px);
 
     padding:
         12px 17px;
@@ -1116,7 +1720,7 @@ h1 {{
 
     font-size:13px;
 
-    font-weight:750;
+    font-weight:800;
 
     opacity:0;
 
@@ -1139,11 +1743,209 @@ h1 {{
 
 }}
 
+
+/* ============================================================
+   MODAL
+============================================================ */
+
+.modal {{
+
+    position:fixed;
+
+    inset:0;
+
+    padding:20px;
+
+    display:flex;
+
+    align-items:flex-end;
+
+    justify-content:center;
+
+    background:
+        rgba(0,0,0,.55);
+
+    backdrop-filter:blur(8px);
+
+    -webkit-backdrop-filter:blur(8px);
+
+    opacity:0;
+
+    pointer-events:none;
+
+    transition:
+        opacity .2s ease;
+
+    z-index:5000;
+
+}}
+
+.modal.show {{
+
+    opacity:1;
+
+    pointer-events:auto;
+
+}}
+
+.modal-box {{
+
+    width:100%;
+
+    max-width:540px;
+
+    max-height:78vh;
+
+    overflow:auto;
+
+    padding:22px;
+
+    border-radius:
+        28px 28px 22px 22px;
+
+    background:
+        #15151d;
+
+    color:#fff;
+
+    border:
+        1px solid
+        rgba(255,255,255,.10);
+
+    box-shadow:
+        0 -15px 60px
+        rgba(0,0,0,.35);
+
+    transform:
+        translateY(20px);
+
+    transition:
+        transform .25s ease;
+
+}}
+
+.modal.show .modal-box {{
+
+    transform:
+        translateY(0);
+
+}}
+
+.modal-close {{
+
+    width:40px;
+
+    height:40px;
+
+    margin-left:auto;
+
+    display:flex;
+
+    align-items:center;
+
+    justify-content:center;
+
+    border:0;
+
+    border-radius:13px;
+
+    background:
+        rgba(255,255,255,.07);
+
+    color:#fff;
+
+    font-size:18px;
+
+    cursor:pointer;
+
+}}
+
+.modal h2 {{
+
+    margin:
+        13px 0 8px;
+
+    font-size:22px;
+
+}}
+
+.modal p {{
+
+    color:#a3a3af;
+
+    font-size:13px;
+
+    line-height:1.6;
+
+}}
+
+.steps {{
+
+    margin-top:16px;
+
+}}
+
+.step {{
+
+    display:flex;
+
+    gap:12px;
+
+    margin-bottom:13px;
+
+}}
+
+.step-number {{
+
+    width:28px;
+
+    height:28px;
+
+    border-radius:10px;
+
+    display:flex;
+
+    align-items:center;
+
+    justify-content:center;
+
+    flex-shrink:0;
+
+    background:
+        linear-gradient(
+            135deg,
+            #ff25bd,
+            #773cff
+        );
+
+    font-size:12px;
+
+    font-weight:900;
+
+}}
+
+.step-text {{
+
+    padding-top:4px;
+
+    color:#ddd;
+
+    font-size:13px;
+
+    line-height:1.5;
+
+}}
+
+
+/* ============================================================
+   SMALL SCREENS
+============================================================ */
+
 @media (max-width:380px) {{
 
     body {{
-        padding-left:12px;
-        padding-right:12px;
+        padding-left:11px;
+        padding-right:11px;
     }}
 
     .card {{
@@ -1182,17 +1984,27 @@ h1 {{
 
     </div>
 
-    <div class="logo">
-        ☂️
+
+    <!-- =====================================================
+         HEADER
+         ===================================================== -->
+
+    <div class="header">
+
+        <div class="logo">
+            ☂️
+        </div>
+
+        <h1>
+            Моя подписка
+        </h1>
+
+        <div class="subtitle">
+            ixxy VPN • безопасное подключение
+        </div>
+
     </div>
 
-    <h1>
-        Моя подписка
-    </h1>
-
-    <div class="subtitle">
-        ixxy VPN • безопасное подключение
-    </div>
 
     <div class="card">
 
@@ -1220,11 +2032,12 @@ h1 {{
 
             </div>
 
-            <div class="lock-icon">
+            <div class="status-icon">
                 🔐
             </div>
 
         </div>
+
 
         <!-- =================================================
              INFO
@@ -1235,14 +2048,15 @@ h1 {{
             <div class="info-box">
 
                 <div class="info-label">
-                    🎫 Тариф
+                    {tariff_label}
                 </div>
 
                 <div class="info-value">
-                    {html.escape(tariff)}
+                    {safe_tariff}
                 </div>
 
             </div>
+
 
             <div class="info-box">
 
@@ -1251,24 +2065,53 @@ h1 {{
                 </div>
 
                 <div class="info-value">
-                    {until_text}
+                    {safe_until}
                 </div>
 
             </div>
 
         </div>
 
-        <div class="info-box" style="margin-top:10px;">
+
+        <div class="info-box remaining">
 
             <div class="info-label">
                 ⏳ Осталось
             </div>
 
-            <div class="info-value">
-                {days_text}
+            <div class="info-value remaining-value">
+                {safe_days}
             </div>
 
         </div>
+
+
+        <!-- =================================================
+             TIME
+             ================================================= -->
+
+        <div class="time-card">
+
+            <div class="time-top">
+
+                <div class="time-title">
+                    ⏱ Состояние подписки
+                </div>
+
+                <div class="time-days">
+                    {safe_days}
+                </div>
+
+            </div>
+
+            <div class="time-line">
+
+                <div class="time-line-inner"></div>
+
+            </div>
+
+        </div>
+
 
         <!-- =================================================
              PROFILE
@@ -1276,14 +2119,18 @@ h1 {{
 
         <div class="profile">
 
+            <div class="profile-title">
+                👤 Профиль
+            </div>
+
             <div class="profile-row">
 
                 <div class="profile-label">
-                    👤 Пользователь
+                    Пользователь
                 </div>
 
                 <div class="profile-value">
-                    {first_name}
+                    {safe_first_name}
                 </div>
 
             </div>
@@ -1295,12 +2142,17 @@ h1 {{
                 </div>
 
                 <div class="profile-value">
-                    @{username}
+                    @{safe_username}
                 </div>
 
             </div>
 
         </div>
+
+
+        <!-- =================================================
+             ID
+             ================================================= -->
 
         <div class="id">
 
@@ -1309,25 +2161,23 @@ h1 {{
 
         </div>
 
+
         <!-- =================================================
              CONNECTION
              ================================================= -->
 
-        <div class="connect-title">
+        <div class="section-title">
             ⚡ Подключение
         </div>
 
-        <div class="connect-subtitle">
-            Выберите приложение для подключения VPN.
+        <div class="section-subtitle">
+            Добавьте свою подписку прямо в приложение.
         </div>
 
-        <button
-            type="button"
-            class="button main-connect"
-            onclick="openApp('happ')"
-        >
-            ⚡ Подключить через Happ
-        </button>
+
+        <!-- =================================================
+             HAPP BUTTON
+             ================================================= -->
 
         <button
             type="button"
@@ -1337,6 +2187,11 @@ h1 {{
             📲 Добавить в Happ
         </button>
 
+
+        <!-- =================================================
+             INCY BUTTON
+             ================================================= -->
+
         <button
             type="button"
             class="button incy"
@@ -1345,13 +2200,23 @@ h1 {{
             🚀 Добавить в INCY
         </button>
 
+
+        <!-- =================================================
+             COPY
+             ================================================= -->
+
         <button
             type="button"
-            class="button copy"
+            class="button copy-secondary"
             onclick="copyLink()"
         >
             📋 Скопировать ссылку
         </button>
+
+
+        <!-- =================================================
+             REFRESH
+             ================================================= -->
 
         <button
             type="button"
@@ -1361,17 +2226,22 @@ h1 {{
             🔄 Обновить страницу
         </button>
 
+
         <!-- =================================================
-             LINK
+             SUBSCRIPTION LINK
              ================================================= -->
 
-        <div class="subscription-title">
+        <div class="subscription-label">
             🔗 ССЫЛКА ПОДПИСКИ
         </div>
 
-        <div class="subscription">
+        <div
+            class="subscription-box"
+            onclick="copyLink()"
+        >
             {safe_subscription_url}
         </div>
+
 
         <!-- =================================================
              TELEGRAM
@@ -1379,12 +2249,13 @@ h1 {{
 
         <a
             class="telegram"
-            href="https://t.me/"
+            href="{js_telegram_url}"
         >
             ← Вернуться в Telegram
         </a>
 
     </div>
+
 
     <div class="footer">
         ☂️ ixxy VPN • Ваш персональный VPN
@@ -1392,12 +2263,22 @@ h1 {{
 
 </div>
 
+
+<!-- =========================================================
+     TOAST
+========================================================= -->
+
 <div
     id="toast"
     class="toast"
 ></div>
 
+
 <script>
+
+/* ============================================================
+   URL
+============================================================ */
 
 const subscriptionLink =
     '{js_subscription_url}';
@@ -1412,9 +2293,9 @@ const pageUrl =
     '{js_page_url}';
 
 
-// ============================================================
-// THEME
-// ============================================================
+/* ============================================================
+   THEME
+============================================================ */
 
 function applyTheme(theme) {{
 
@@ -1466,9 +2347,9 @@ applyTheme(
 );
 
 
-// ============================================================
-// TOAST
-// ============================================================
+/* ============================================================
+   TOAST
+============================================================ */
 
 let toastTimer = null;
 
@@ -1492,9 +2373,9 @@ function showToast(text) {{
 }}
 
 
-// ============================================================
-// OPEN APP
-// ============================================================
+/* ============================================================
+   OPEN APP
+============================================================ */
 
 function openApp(app) {{
 
@@ -1505,13 +2386,9 @@ function openApp(app) {{
 
     showToast(
         app === "happ"
-            ? "⚡ Открываем Happ..."
+            ? "📲 Открываем Happ..."
             : "🚀 Открываем INCY..."
     );
-
-    // --------------------------------------------------------
-    // Основная попытка
-    // --------------------------------------------------------
 
     try {{
 
@@ -1522,10 +2399,6 @@ function openApp(app) {{
         console.log(e);
 
     }}
-
-    // --------------------------------------------------------
-    // Дополнительная попытка через iframe
-    // --------------------------------------------------------
 
     setTimeout(() => {{
 
@@ -1560,10 +2433,6 @@ function openApp(app) {{
 
     }}, 100);
 
-    // --------------------------------------------------------
-    // Если приложение не открылось
-    // --------------------------------------------------------
-
     setTimeout(() => {{
 
         if (!document.hidden) {{
@@ -1579,9 +2448,9 @@ function openApp(app) {{
 }}
 
 
-// ============================================================
-// COPY
-// ============================================================
+/* ============================================================
+   COPY
+============================================================ */
 
 async function copyLink() {{
 
@@ -1659,9 +2528,9 @@ async function copyLink() {{
 }}
 
 
-// ============================================================
-// REFRESH
-// ============================================================
+/* ============================================================
+   REFRESH
+============================================================ */
 
 function refreshPage() {{
 
@@ -1783,6 +2652,7 @@ body {
     align-items:center;
     justify-content:center;
     padding:25px;
+
     background:
         radial-gradient(
             circle at 20% 0%,
@@ -1795,13 +2665,16 @@ body {
             transparent 35%
         ),
         #07070b;
+
     color:white;
+
     font-family:
         -apple-system,
         BlinkMacSystemFont,
         "Segoe UI",
         Arial,
         sans-serif;
+
     text-align:center;
 }
 
@@ -1809,21 +2682,34 @@ body {
     width:100%;
     max-width:430px;
     padding:38px 25px;
+
     border-radius:30px;
-    background:rgba(18,18,27,.88);
-    border:1px solid rgba(255,255,255,.08);
-    box-shadow:0 25px 80px rgba(0,0,0,.45);
+
+    background:
+        rgba(18,18,27,.88);
+
+    border:
+        1px solid rgba(255,255,255,.08);
+
+    box-shadow:
+        0 25px 80px rgba(0,0,0,.45);
 }
 
 .logo {
     width:80px;
     height:80px;
-    margin:0 auto 18px;
+
+    margin:
+        0 auto 18px;
+
     display:flex;
     align-items:center;
     justify-content:center;
+
     border-radius:25px;
+
     font-size:42px;
+
     background:
         linear-gradient(
             135deg,
