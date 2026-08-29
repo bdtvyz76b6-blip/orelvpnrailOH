@@ -37,7 +37,7 @@ def main_menu(user_id: int):
             ],
             [
                 KeyboardButton(
-                    text="⚡ Подключиться",
+                    text="🌐 Моя подписка",
                     web_app=WebAppInfo(
                         url=subscription_url
                     )
@@ -47,7 +47,7 @@ def main_menu(user_id: int):
                 KeyboardButton(
                     text="💬 Поддержка"
                 )
-            ]
+            ],
         ],
         resize_keyboard=True,
         is_persistent=True,
@@ -73,7 +73,7 @@ def payment_method_keyboard():
                     text="💳 СБП",
                     callback_data="pay_sbp"
                 )
-            ]
+            ],
         ]
     )
 
@@ -109,7 +109,7 @@ def stars_buy_keyboard():
                     text="⭐ 12 месяцев — 700 Stars",
                     callback_data="stars_365"
                 )
-            ]
+            ],
         ]
     )
 
@@ -145,7 +145,7 @@ def sbp_buy_keyboard():
                     text="💳 12 месяцев — 1089₽",
                     callback_data="sbp_365"
                 )
-            ]
+            ],
         ]
     )
 
@@ -160,8 +160,14 @@ def cabinet_keyboard():
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="⚡ Подключиться",
+                    text="🔗 Получить ссылку",
                     callback_data="get_link"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⚡ Подключиться",
+                    callback_data="connect"
                 )
             ],
             [
@@ -181,7 +187,7 @@ def cabinet_keyboard():
                     text="🎫 Продлить",
                     callback_data="renew"
                 )
-            ]
+            ],
         ]
     )
 
@@ -196,15 +202,9 @@ def accept_terms_keyboard():
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="📄 Документы",
-                    url="https://bdt2010.github.io/managerorlvpnsite/"
-                )
-            ],
-            [
-                InlineKeyboardButton(
                     text="✅ Принимаю",
                     callback_data="accept_terms"
                 )
-            ]
+            ],
         ]
     )
