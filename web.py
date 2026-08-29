@@ -28,25 +28,12 @@ SUBSCRIPTION_PREFIX = os.getenv(
     "2ix847xy",
 ).strip()
 
-# Если позже укажешь username бота:
-# BOT_USERNAME=your_bot
-BOT_USERNAME = os.getenv(
-    "BOT_USERNAME",
-    "",
-).strip().lstrip("@")
-
-if BOT_USERNAME:
-    TELEGRAM_URL = f"https://t.me/{BOT_USERNAME}"
-else:
-    TELEGRAM_URL = "https://t.me/"
-
 
 # ============================================================
 # USER ID ИЗ ТОКЕНА
 # ============================================================
 
 def get_user_id_from_token(token):
-
     if not token.startswith(SUBSCRIPTION_PREFIX):
         return None
 
@@ -63,7 +50,6 @@ def get_user_id_from_token(token):
 # ============================================================
 
 def get_token(user_id):
-
     return f"{SUBSCRIPTION_PREFIX}{user_id}"
 
 
@@ -72,33 +58,22 @@ def get_token(user_id):
 # ============================================================
 
 def get_urls(user_id):
-
     token = get_token(user_id)
 
-    page_url = (
-        f"{PUBLIC_SITE_URL}/s/{token}"
-    )
+    page_url = f"{PUBLIC_SITE_URL}/s/{token}"
 
-    subscription_url = (
-        f"{PUBLIC_SITE_URL}/sub/{token}"
-    )
+    subscription_url = f"{PUBLIC_SITE_URL}/sub/{token}"
 
-    # Добавление подписки в Happ
+    # Happ
     happ_url = (
         "happ://add/"
-        + quote(
-            subscription_url,
-            safe=""
-        )
+        + quote(subscription_url, safe="")
     )
 
-    # Добавление подписки в INCY
+    # INCY
     incy_url = (
         "incy://add/"
-        + quote(
-            subscription_url,
-            safe=""
-        )
+        + quote(subscription_url, safe="")
     )
 
     return (
@@ -114,7 +89,6 @@ def get_urls(user_id):
 # ============================================================
 
 def js_escape(value):
-
     return (
         str(value)
         .replace("\\", "\\\\")
@@ -131,7 +105,6 @@ def js_escape(value):
 # ============================================================
 
 def days_word(days):
-
     days = abs(int(days))
 
     if 11 <= days % 100 <= 14:
@@ -173,40 +146,27 @@ def subscription_page(token):
     content = get_subscription_content(user_id)
 
     if not content:
-
         return """
 <!DOCTYPE html>
 <html lang="ru">
-
 <head>
-
 <meta charset="UTF-8">
-
-<meta
-    name="viewport"
-    content="width=device-width,initial-scale=1"
->
-
-<meta
-    name="theme-color"
-    content="#08080d"
->
-
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#08080d">
 <title>ixxy VPN</title>
 
 <style>
-
 * {
-    box-sizing:border-box;
+    box-sizing: border-box;
 }
 
 body {
-    margin:0;
-    min-height:100vh;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    padding:24px;
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
 
     background:
         radial-gradient(
@@ -221,7 +181,7 @@ body {
         ),
         #07070b;
 
-    color:#fff;
+    color: #fff;
 
     font-family:
         -apple-system,
@@ -231,15 +191,15 @@ body {
         Arial,
         sans-serif;
 
-    text-align:center;
+    text-align: center;
 }
 
 .box {
-    width:100%;
-    max-width:430px;
-    padding:38px 26px;
+    width: 100%;
+    max-width: 430px;
+    padding: 38px 26px;
 
-    border-radius:30px;
+    border-radius: 30px;
 
     background:
         rgba(18,18,27,.88);
@@ -252,19 +212,18 @@ body {
 }
 
 .icon {
-    width:80px;
-    height:80px;
+    width: 80px;
+    height: 80px;
 
-    margin:
-        0 auto 20px;
+    margin: 0 auto 20px;
 
-    display:flex;
-    align-items:center;
-    justify-content:center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 
-    border-radius:25px;
+    border-radius: 25px;
 
-    font-size:40px;
+    font-size: 40px;
 
     background:
         linear-gradient(
@@ -273,25 +232,19 @@ body {
             #773cff,
             #00c9ff
         );
-
-    box-shadow:
-        0 18px 45px
-        rgba(115,60,255,.30);
 }
 
 h1 {
-    margin:0 0 10px;
-    font-size:28px;
+    margin: 0 0 10px;
+    font-size: 28px;
 }
 
 p {
-    margin:0;
-    color:#90909c;
-    line-height:1.55;
+    margin: 0;
+    color: #90909c;
+    line-height: 1.55;
 }
-
 </style>
-
 </head>
 
 <body>
@@ -314,7 +267,6 @@ p {
 </div>
 
 </body>
-
 </html>
 """, 404
 
@@ -342,36 +294,33 @@ p {
 
         username = (
             str(user[1])
-            if user[1]
+            if len(user) > 1 and user[1]
             else "нет"
         )
 
         first_name = (
             str(user[2])
-            if user[2]
+            if len(user) > 2 and user[2]
             else "Пользователь"
         )
 
         subscription = (
             str(user[3])
-            if user[3]
+            if len(user) > 3 and user[3]
             else "none"
         )
 
         until = (
             str(user[4])
-            if user[4]
+            if len(user) > 4 and user[4]
             else ""
         )
-
-    username = html.escape(username)
-    first_name = html.escape(first_name)
 
     # --------------------------------------------------------
     # Статус
     # --------------------------------------------------------
 
-    status = "🔴 Не активна"
+    status = "🔴 Подписка не активна"
     status_class = "inactive"
 
     tariff_label = "🎫 Тариф"
@@ -386,13 +335,12 @@ p {
 
     if subscription == "vip":
 
-        tariff_label = "🎫 Тариф"
         tariff = "👑 ixxy VIP"
 
     elif subscription == "trial":
 
-        tariff_label = "🎁 Пробный период"
-        tariff = "Активен"
+        tariff_label = "🎁 Тариф"
+        tariff = "Пробный период"
 
     elif subscription in (
         "active",
@@ -400,8 +348,16 @@ p {
         "standard",
     ):
 
-        tariff_label = "🎫 Тариф"
         tariff = "ixxy VPN"
+
+    elif subscription not in (
+        "",
+        "none",
+        "None",
+    ):
+
+        # Показываем неизвестный тариф как есть
+        tariff = subscription
 
     # --------------------------------------------------------
     # Дата окончания
@@ -411,9 +367,10 @@ p {
 
         try:
 
+            # Основной формат БД
             expire_date = datetime.strptime(
-                until,
-                "%Y-%m-%d"
+                str(until)[:10],
+                "%Y-%m-%d",
             ).date()
 
             today = datetime.now().date()
@@ -440,7 +397,9 @@ p {
 
         except Exception:
 
-            pass
+            # Если дата не распознана,
+            # не ломаем страницу
+            until_text = str(until)
 
     # --------------------------------------------------------
     # Дни
@@ -451,12 +410,42 @@ p {
     )
 
     # --------------------------------------------------------
-    # Безопасные значения
+    # HTML ESCAPE
     # --------------------------------------------------------
 
-    safe_subscription_url = html.escape(
-        subscription_url
+    safe_username = html.escape(
+        username,
+        quote=True,
     )
+
+    safe_first_name = html.escape(
+        first_name,
+        quote=True,
+    )
+
+    safe_tariff = html.escape(
+        tariff,
+        quote=True,
+    )
+
+    safe_until = html.escape(
+        until_text,
+        quote=True,
+    )
+
+    safe_days = html.escape(
+        days_text,
+        quote=True,
+    )
+
+    safe_subscription_url = html.escape(
+        subscription_url,
+        quote=True,
+    )
+
+    # --------------------------------------------------------
+    # JS
+    # --------------------------------------------------------
 
     js_subscription_url = js_escape(
         subscription_url
@@ -472,30 +461,6 @@ p {
 
     js_page_url = js_escape(
         page_url
-    )
-
-    js_telegram_url = js_escape(
-        TELEGRAM_URL
-    )
-
-    safe_first_name = html.escape(
-        first_name
-    )
-
-    safe_username = html.escape(
-        username
-    )
-
-    safe_tariff = html.escape(
-        tariff
-    )
-
-    safe_until = html.escape(
-        until_text
-    )
-
-    safe_days = html.escape(
-        days_text
     )
 
     # ========================================================
@@ -518,17 +483,11 @@ p {
         initial-scale=1.0,
         maximum-scale=1.0,
         user-scalable=no
-"
->
+">
 
 <meta
     name="theme-color"
     content="#08080d"
->
-
-<meta
-    name="mobile-web-app-capable"
-    content="yes"
 >
 
 <meta
@@ -545,39 +504,28 @@ p {
 
 <style>
 
-/* ============================================================
-   RESET
-============================================================ */
-
 * {{
-
-    box-sizing:border-box;
-
-    -webkit-tap-highlight-color:
-        transparent;
-
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
 }}
 
 html {{
-
-    min-height:100%;
-
-    scroll-behavior:smooth;
-
+    min-height: 100%;
+    scroll-behavior: smooth;
 }}
 
 body {{
 
-    margin:0;
+    margin: 0;
 
-    min-height:100vh;
+    min-height: 100vh;
 
     padding:
         max(14px, env(safe-area-inset-top))
         15px
         max(28px, env(safe-area-inset-bottom));
 
-    color:var(--text);
+    color: var(--text);
 
     font-family:
         -apple-system,
@@ -613,8 +561,7 @@ body {{
         background .3s ease,
         color .3s ease;
 
-    overscroll-behavior-x:none;
-
+    overscroll-behavior-x: none;
 }}
 
 
@@ -624,7 +571,7 @@ body {{
 
 :root {{
 
-    --bg:#07070b;
+    --bg: #07070b;
 
     --card:
         rgba(18,18,27,.86);
@@ -632,9 +579,9 @@ body {{
     --card2:
         rgba(255,255,255,.045);
 
-    --text:#ffffff;
+    --text: #ffffff;
 
-    --muted:#91919d;
+    --muted: #91919d;
 
     --border:
         rgba(255,255,255,.09);
@@ -642,15 +589,14 @@ body {{
     --shadow:
         rgba(0,0,0,.48);
 
-    --green:#00f59b;
+    --green: #00f59b;
 
-    --red:#ff4d61;
-
+    --red: #ff4d61;
 }}
 
 body.light {{
 
-    --bg:#f3f4f8;
+    --bg: #f3f4f8;
 
     --card:
         rgba(255,255,255,.88);
@@ -658,16 +604,15 @@ body.light {{
     --card2:
         rgba(0,0,0,.045);
 
-    --text:#111118;
+    --text: #111118;
 
-    --muted:#696974;
+    --muted: #696974;
 
     --border:
         rgba(0,0,0,.08);
 
     --shadow:
         rgba(0,0,0,.12);
-
 }}
 
 
@@ -677,12 +622,11 @@ body.light {{
 
 .container {{
 
-    width:100%;
+    width: 100%;
 
-    max-width:540px;
+    max-width: 540px;
 
-    margin:0 auto;
-
+    margin: 0 auto;
 }}
 
 
@@ -692,56 +636,53 @@ body.light {{
 
 .topbar {{
 
-    height:48px;
+    height: 48px;
 
-    display:flex;
+    display: flex;
 
-    justify-content:flex-end;
+    justify-content: flex-end;
 
-    align-items:center;
+    align-items: center;
 
-    margin-bottom:3px;
-
+    margin-bottom: 3px;
 }}
 
 .theme-toggle {{
 
-    width:46px;
+    width: 46px;
 
-    height:46px;
+    height: 46px;
 
-    border:1px solid var(--border);
+    border:
+        1px solid var(--border);
 
-    border-radius:15px;
+    border-radius: 15px;
 
-    background:var(--card2);
+    background: var(--card2);
 
-    color:var(--text);
+    color: var(--text);
 
-    font-size:19px;
+    font-size: 19px;
 
-    display:flex;
+    display: flex;
 
-    align-items:center;
+    align-items: center;
 
-    justify-content:center;
+    justify-content: center;
 
-    cursor:pointer;
+    cursor: pointer;
 
-    backdrop-filter:blur(18px);
+    backdrop-filter: blur(18px);
 
-    -webkit-backdrop-filter:blur(18px);
+    -webkit-backdrop-filter: blur(18px);
 
     transition:
         transform .15s ease,
         background .3s ease;
-
 }}
 
 .theme-toggle:active {{
-
-    transform:scale(.91);
-
+    transform: scale(.91);
 }}
 
 
@@ -751,30 +692,28 @@ body.light {{
 
 .header {{
 
-    text-align:center;
+    text-align: center;
 
-    margin-bottom:22px;
-
+    margin-bottom: 22px;
 }}
 
 .logo {{
 
-    width:88px;
+    width: 88px;
 
-    height:88px;
+    height: 88px;
 
-    margin:
-        2px auto 17px;
+    margin: 2px auto 17px;
 
-    display:flex;
+    display: flex;
 
-    align-items:center;
+    align-items: center;
 
-    justify-content:center;
+    justify-content: center;
 
-    border-radius:28px;
+    border-radius: 28px;
 
-    font-size:43px;
+    font-size: 43px;
 
     background:
         linear-gradient(
@@ -790,44 +729,39 @@ body.light {{
 
     animation:
         logoFloat 4s ease-in-out infinite;
-
 }}
 
 @keyframes logoFloat {{
 
     0%,100% {{
-        transform:translateY(0);
+        transform: translateY(0);
     }}
 
     50% {{
-        transform:translateY(-4px);
+        transform: translateY(-4px);
     }}
-
 }}
 
 h1 {{
 
-    margin:0;
+    margin: 0;
 
-    font-size:30px;
+    font-size: 30px;
 
-    line-height:1.1;
+    line-height: 1.1;
 
-    font-weight:900;
+    font-weight: 900;
 
-    letter-spacing:-.7px;
-
+    letter-spacing: -.7px;
 }}
 
 .subtitle {{
 
-    margin:
-        8px 0 0;
+    margin: 8px 0 0;
 
-    color:var(--muted);
+    color: var(--muted);
 
-    font-size:14px;
-
+    font-size: 14px;
 }}
 
 
@@ -837,38 +771,37 @@ h1 {{
 
 .card {{
 
-    padding:17px;
+    padding: 17px;
 
-    border-radius:30px;
+    border-radius: 30px;
 
-    background:var(--card);
+    background: var(--card);
 
-    border:1px solid var(--border);
+    border:
+        1px solid var(--border);
 
     box-shadow:
         0 25px 80px var(--shadow);
 
-    backdrop-filter:blur(28px);
+    backdrop-filter: blur(28px);
 
-    -webkit-backdrop-filter:blur(28px);
+    -webkit-backdrop-filter: blur(28px);
 
     animation:
         cardIn .45s ease;
-
 }}
 
 @keyframes cardIn {{
 
     from {{
-        opacity:0;
-        transform:translateY(12px);
+        opacity: 0;
+        transform: translateY(12px);
     }}
 
     to {{
-        opacity:1;
-        transform:translateY(0);
+        opacity: 1;
+        transform: translateY(0);
     }}
-
 }}
 
 
@@ -878,18 +811,18 @@ h1 {{
 
 .status {{
 
-    padding:17px;
+    padding: 17px;
 
-    border-radius:22px;
+    border-radius: 22px;
 
-    display:flex;
+    display: flex;
 
-    align-items:center;
+    align-items: center;
 
-    justify-content:space-between;
+    justify-content: space-between;
 
-    border:1px solid var(--border);
-
+    border:
+        1px solid var(--border);
 }}
 
 .status.active {{
@@ -900,80 +833,70 @@ h1 {{
             rgba(0,255,165,.13),
             rgba(0,170,255,.06)
         );
-
 }}
 
 .status.inactive {{
 
     background:
         rgba(255,60,80,.07);
-
 }}
 
 .status-left {{
 
-    display:flex;
+    display: flex;
 
-    align-items:center;
+    align-items: center;
 
-    gap:12px;
-
+    gap: 12px;
 }}
 
 .dot {{
 
-    width:12px;
+    width: 12px;
 
-    height:12px;
+    height: 12px;
 
-    border-radius:50%;
+    border-radius: 50%;
 
-    flex-shrink:0;
-
+    flex-shrink: 0;
 }}
 
 .active .dot {{
 
-    background:var(--green);
+    background: var(--green);
 
     box-shadow:
         0 0 18px
         rgba(0,245,155,.9);
-
 }}
 
 .inactive .dot {{
 
-    background:var(--red);
+    background: var(--red);
 
     box-shadow:
         0 0 15px
         rgba(255,77,97,.65);
-
 }}
 
 .status-title {{
 
-    font-size:15px;
+    font-size: 15px;
 
-    font-weight:900;
-
+    font-weight: 900;
 }}
 
 .status-info {{
 
-    margin-top:4px;
+    margin-top: 4px;
 
-    color:var(--muted);
+    color: var(--muted);
 
-    font-size:12px;
-
+    font-size: 12px;
 }}
 
 .status-icon {{
-
-    font-size:21px;
-
+    font-size: 21px;
 }}
 
 
@@ -983,77 +906,70 @@ h1 {{
 
 .info-grid {{
 
-    display:grid;
+    display: grid;
 
     grid-template-columns:
         1fr 1fr;
 
-    gap:10px;
+    gap: 10px;
 
-    margin-top:11px;
-
+    margin-top: 11px;
 }}
 
 .info-box {{
 
-    padding:16px;
+    padding: 16px;
 
-    border-radius:20px;
+    border-radius: 20px;
 
-    background:var(--card2);
+    background: var(--card2);
 
-    border:1px solid var(--border);
-
+    border:
+        1px solid var(--border);
 }}
 
 .info-label {{
 
-    color:var(--muted);
+    color: var(--muted);
 
-    font-size:11px;
+    font-size: 11px;
 
-    margin-bottom:6px;
+    margin-bottom: 6px;
 
-    font-weight:700;
-
+    font-weight: 700;
 }}
 
 .info-value {{
 
-    color:var(--text);
+    color: var(--text);
 
-    font-size:14px;
+    font-size: 14px;
 
-    font-weight:850;
+    font-weight: 850;
 
-    word-break:break-word;
-
+    word-break: break-word;
 }}
 
 .remaining {{
-
-    margin-top:10px;
-
+    margin-top: 10px;
 }}
 
 .remaining-value {{
-
-    font-size:18px;
-
+    font-size: 18px;
 }}
 
 
 /* ============================================================
-   TIME VISUAL
+   TIME
 ============================================================ */
 
 .time-card {{
 
-    margin-top:10px;
+    margin-top: 10px;
 
-    padding:16px;
+    padding: 16px;
 
-    border-radius:20px;
+    border-radius: 20px;
 
     background:
         linear-gradient(
@@ -1062,62 +978,58 @@ h1 {{
             rgba(0,200,255,.06)
         );
 
-    border:1px solid var(--border);
-
+    border:
+        1px solid var(--border);
 }}
 
 .time-top {{
 
-    display:flex;
+    display: flex;
 
-    justify-content:space-between;
+    justify-content: space-between;
 
-    align-items:center;
+    align-items: center;
 
-    gap:12px;
-
+    gap: 12px;
 }}
 
 .time-title {{
 
-    font-size:12px;
+    font-size: 12px;
 
-    color:var(--muted);
-
+    color: var(--muted);
 }}
 
 .time-days {{
 
-    font-size:13px;
+    font-size: 13px;
 
-    font-weight:850;
+    font-weight: 850;
 
-    color:var(--text);
-
+    color: var(--text);
 }}
 
 .time-line {{
 
-    margin-top:11px;
+    margin-top: 11px;
 
-    height:8px;
+    height: 8px;
 
-    border-radius:20px;
+    border-radius: 20px;
 
-    overflow:hidden;
+    overflow: hidden;
 
     background:
         rgba(255,255,255,.08);
-
 }}
 
 .time-line-inner {{
 
-    width:100%;
+    width: 100%;
 
-    height:100%;
+    height: 100%;
 
-    border-radius:20px;
+    border-radius: 20px;
 
     background:
         linear-gradient(
@@ -1129,26 +1041,22 @@ h1 {{
 
     animation:
         progressIn .8s ease;
-
 }}
 
 @keyframes progressIn {{
 
     from {{
-        width:0;
+        width: 0;
     }}
 
     to {{
-        width:100%;
+        width: 100%;
     }}
-
 }}
 
 body.light .time-line {{
-
     background:
         rgba(0,0,0,.08);
-
 }}
 
 
@@ -1158,62 +1066,58 @@ body.light .time-line {{
 
 .profile {{
 
-    margin-top:10px;
+    margin-top: 10px;
 
-    padding:15px;
+    padding: 15px;
 
-    border-radius:20px;
+    border-radius: 20px;
 
-    background:var(--card2);
+    background: var(--card2);
 
-    border:1px solid var(--border);
-
+    border:
+        1px solid var(--border);
 }}
 
 .profile-title {{
 
-    margin-bottom:7px;
+    margin-bottom: 7px;
 
-    font-size:13px;
+    font-size: 13px;
 
-    font-weight:850;
-
+    font-weight: 850;
 }}
 
 .profile-row {{
 
-    display:flex;
+    display: flex;
 
-    justify-content:space-between;
+    justify-content: space-between;
 
-    align-items:flex-start;
+    align-items: flex-start;
 
-    gap:15px;
+    gap: 15px;
 
-    padding:7px 0;
-
+    padding: 7px 0;
 }}
 
 .profile-label {{
 
-    color:var(--muted);
+    color: var(--muted);
 
-    font-size:12px;
-
+    font-size: 12px;
 }}
 
 .profile-value {{
 
-    color:var(--text);
+    color: var(--text);
 
-    font-size:12px;
+    font-size: 12px;
 
-    font-weight:800;
+    font-weight: 800;
 
-    text-align:right;
+    text-align: right;
 
-    word-break:break-word;
-
+    word-break: break-word;
 }}
 
 
@@ -1223,33 +1127,32 @@ body.light .time-line {{
 
 .id {{
 
-    margin-top:10px;
+    margin-top: 10px;
 
-    padding:14px 15px;
+    padding: 14px 15px;
 
-    border-radius:18px;
+    border-radius: 18px;
 
-    background:var(--card2);
+    background: var(--card2);
 
-    border:1px solid var(--border);
+    border:
+        1px solid var(--border);
 
-    color:var(--muted);
+    color: var(--muted);
 
-    font-size:12px;
-
+    font-size: 12px;
 }}
 
 .id code {{
 
-    color:var(--text);
+    color: var(--text);
 
-    font-weight:850;
-
+    font-weight: 850;
 }}
 
 
 /* ============================================================
-   SECTION TITLES
+   SECTION
 ============================================================ */
 
 .section-title {{
@@ -1257,10 +1160,9 @@ body.light .time-line {{
     margin:
         22px 2px 6px;
 
-    font-size:15px;
+    font-size: 15px;
 
-    font-weight:900;
-
+    font-weight: 900;
 }}
 
 .section-subtitle {{
@@ -1268,12 +1170,11 @@ body.light .time-line {{
     margin:
         0 2px 11px;
 
-    color:var(--muted);
+    color: var(--muted);
 
-    font-size:12px;
+    font-size: 12px;
 
-    line-height:1.5;
-
+    line-height: 1.5;
 }}
 
 
@@ -1283,60 +1184,52 @@ body.light .time-line {{
 
 .button {{
 
-    width:100%;
+    width: 100%;
 
-    min-height:56px;
+    min-height: 56px;
 
-    margin-top:10px;
+    margin-top: 10px;
 
     padding:
         0 17px;
 
-    border:0;
+    border: 0;
 
-    border-radius:18px;
+    border-radius: 18px;
 
-    display:flex;
+    display: flex;
 
-    align-items:center;
+    align-items: center;
 
-    justify-content:center;
+    justify-content: center;
 
-    gap:9px;
+    gap: 9px;
 
-    color:white;
+    color: white;
 
-    text-decoration:none;
+    text-decoration: none;
 
-    font-family:inherit;
+    font-family: inherit;
 
-    font-size:15px;
+    font-size: 15px;
 
-    font-weight:900;
+    font-weight: 900;
 
-    cursor:pointer;
+    cursor: pointer;
 
-    touch-action:manipulation;
+    touch-action: manipulation;
 
     transition:
         transform .12s ease,
-        opacity .12s ease,
-        filter .12s ease;
-
+        opacity .12s ease;
 }}
 
 .button:active {{
 
-    transform:scale(.97);
+    transform: scale(.97);
 
-    opacity:.86;
-
+    opacity: .86;
 }}
-
-
-/* ============================================================
-   HAPP
-============================================================ */
 
 .happ {{
 
@@ -1350,13 +1243,7 @@ body.light .time-line {{
     box-shadow:
         0 10px 28px
         rgba(255,37,184,.18);
-
 }}
-
-
-/* ============================================================
-   INCY
-============================================================ */
 
 .incy {{
 
@@ -1370,37 +1257,26 @@ body.light .time-line {{
     box-shadow:
         0 10px 28px
         rgba(70,100,255,.18);
-
 }}
-
-
-/* ============================================================
-   COPY
-============================================================ */
 
 .copy-secondary {{
 
-    background:var(--card2);
+    background: var(--card2);
 
-    color:var(--text);
+    color: var(--text);
 
-    border:1px solid var(--border);
-
+    border:
+        1px solid var(--border);
 }}
-
-
-/* ============================================================
-   REFRESH
-============================================================ */
 
 .refresh {{
 
-    background:transparent;
+    background: transparent;
 
-    color:var(--muted);
+    color: var(--muted);
 
-    border:1px solid var(--border);
-
+    border:
+        1px solid var(--border);
 }}
 
 
@@ -1408,222 +1284,53 @@ body.light .time-line {{
    SUBSCRIPTION LINK
 ============================================================ */
 
+.subscription-label {{
+
+    margin:
+        20px 2px 8px;
+
+    color: var(--muted);
+
+    font-size: 11px;
+
+    font-weight: 800;
+
+    letter-spacing: .2px;
+}}
+
 .subscription-box {{
 
-    margin-top:10px;
+    margin-top: 0;
 
-    padding:14px;
+    padding: 14px;
 
-    border-radius:18px;
+    border-radius: 18px;
 
     background:
         rgba(0,0,0,.18);
 
-    border:1px solid var(--border);
+    border:
+        1px solid var(--border);
 
-    color:var(--muted);
+    color: var(--muted);
 
-    font-size:11px;
+    font-size: 11px;
 
-    line-height:1.55;
+    line-height: 1.55;
 
-    word-break:break-all;
+    word-break: break-all;
 
-    user-select:text;
+    user-select: text;
 
-    -webkit-user-select:text;
+    -webkit-user-select: text;
 
-    cursor:pointer;
-
+    cursor: pointer;
 }}
 
 body.light .subscription-box {{
 
     background:
         rgba(0,0,0,.035);
-
-}}
-
-.subscription-label {{
-
-    margin:
-        20px 2px 8px;
-
-    color:var(--muted);
-
-    font-size:11px;
-
-    font-weight:800;
-
-    letter-spacing:.2px;
-
-}}
-
-
-/* ============================================================
-   INSTRUCTION CARDS
-============================================================ */
-
-.devices {{
-
-    display:grid;
-
-    grid-template-columns:
-        1fr 1fr;
-
-    gap:10px;
-
-}}
-
-.device {{
-
-    min-height:88px;
-
-    padding:15px;
-
-    border-radius:20px;
-
-    background:var(--card2);
-
-    border:1px solid var(--border);
-
-    cursor:pointer;
-
-    transition:
-        transform .12s ease,
-        background .2s ease;
-
-}}
-
-.device:active {{
-
-    transform:scale(.97);
-
-}}
-
-.device-icon {{
-
-    font-size:25px;
-
-    margin-bottom:8px;
-
-}}
-
-.device-name {{
-
-    font-size:13px;
-
-    font-weight:850;
-
-}}
-
-.device-hint {{
-
-    margin-top:3px;
-
-    color:var(--muted);
-
-    font-size:10px;
-
-}}
-
-
-/* ============================================================
-   ACTION CARDS
-============================================================ */
-
-.action {{
-
-    margin-top:10px;
-
-    padding:17px;
-
-    border-radius:20px;
-
-    background:var(--card2);
-
-    border:1px solid var(--border);
-
-    display:flex;
-
-    align-items:center;
-
-    gap:13px;
-
-    text-decoration:none;
-
-    color:var(--text);
-
-    transition:
-        transform .12s ease;
-
-}}
-
-.action:active {{
-
-    transform:scale(.98);
-
-}}
-
-.action-icon {{
-
-    width:44px;
-
-    height:44px;
-
-    border-radius:14px;
-
-    display:flex;
-
-    align-items:center;
-
-    justify-content:center;
-
-    flex-shrink:0;
-
-    background:
-        linear-gradient(
-            135deg,
-            rgba(255,37,189,.25),
-            rgba(119,60,255,.25)
-        );
-
-    font-size:21px;
-
-}}
-
-.action-content {{
-
-    flex:1;
-
-}}
-
-.action-title {{
-
-    font-size:14px;
-
-    font-weight:850;
-
-}}
-
-.action-description {{
-
-    margin-top:3px;
-
-    color:var(--muted);
-
-    font-size:11px;
-
-    line-height:1.4;
-
-}}
-
-.action-arrow {{
-
-    color:var(--muted);
-
-    font-size:18px;
-
 }}
 
 
@@ -1633,30 +1340,30 @@ body.light .subscription-box {{
 
 .telegram {{
 
-    margin-top:10px;
+    margin-top: 10px;
 
-    min-height:52px;
+    min-height: 52px;
 
-    display:flex;
+    display: flex;
 
-    align-items:center;
+    align-items: center;
 
-    justify-content:center;
+    justify-content: center;
 
-    text-decoration:none;
+    text-decoration: none;
 
-    color:var(--text);
+    color: var(--text);
 
-    font-size:13px;
+    font-size: 13px;
 
-    font-weight:800;
+    font-weight: 800;
 
-    border-radius:17px;
+    border-radius: 17px;
 
-    border:1px solid var(--border);
+    border:
+        1px solid var(--border);
 
-    background:var(--card2);
-
+    background: var(--card2);
 }}
 
 
@@ -1666,16 +1373,15 @@ body.light .subscription-box {{
 
 .footer {{
 
-    margin-top:18px;
+    margin-top: 18px;
 
-    text-align:center;
+    text-align: center;
 
-    color:var(--muted);
+    color: var(--muted);
 
-    opacity:.7;
+    opacity: .7;
 
-    font-size:11px;
-
+    font-size: 11px;
 }}
 
 
@@ -1685,9 +1391,9 @@ body.light .subscription-box {{
 
 .toast {{
 
-    position:fixed;
+    position: fixed;
 
-    left:50%;
+    left: 50%;
 
     bottom:
         max(22px, env(safe-area-inset-bottom));
@@ -1695,7 +1401,7 @@ body.light .subscription-box {{
     transform:
         translate(-50%,20px);
 
-    width:max-content;
+    width: max-content;
 
     max-width:
         calc(100% - 30px);
@@ -1703,7 +1409,7 @@ body.light .subscription-box {{
     padding:
         12px 17px;
 
-    border-radius:15px;
+    border-radius: 15px;
 
     background:
         rgba(25,25,34,.96);
@@ -1716,259 +1422,60 @@ body.light .subscription-box {{
         0 15px 45px
         rgba(0,0,0,.4);
 
-    color:white;
+    color: white;
 
-    font-size:13px;
+    font-size: 13px;
 
-    font-weight:800;
+    font-weight: 800;
 
-    opacity:0;
+    opacity: 0;
 
-    pointer-events:none;
+    pointer-events: none;
 
     transition:
         opacity .2s ease,
         transform .2s ease;
 
-    z-index:9999;
-
+    z-index: 9999;
 }}
 
 .toast.show {{
 
-    opacity:1;
+    opacity: 1;
 
     transform:
         translate(-50%,0);
-
 }}
 
 
 /* ============================================================
-   MODAL
+   SMALL SCREEN
 ============================================================ */
 
-.modal {{
-
-    position:fixed;
-
-    inset:0;
-
-    padding:20px;
-
-    display:flex;
-
-    align-items:flex-end;
-
-    justify-content:center;
-
-    background:
-        rgba(0,0,0,.55);
-
-    backdrop-filter:blur(8px);
-
-    -webkit-backdrop-filter:blur(8px);
-
-    opacity:0;
-
-    pointer-events:none;
-
-    transition:
-        opacity .2s ease;
-
-    z-index:5000;
-
-}}
-
-.modal.show {{
-
-    opacity:1;
-
-    pointer-events:auto;
-
-}}
-
-.modal-box {{
-
-    width:100%;
-
-    max-width:540px;
-
-    max-height:78vh;
-
-    overflow:auto;
-
-    padding:22px;
-
-    border-radius:
-        28px 28px 22px 22px;
-
-    background:
-        #15151d;
-
-    color:#fff;
-
-    border:
-        1px solid
-        rgba(255,255,255,.10);
-
-    box-shadow:
-        0 -15px 60px
-        rgba(0,0,0,.35);
-
-    transform:
-        translateY(20px);
-
-    transition:
-        transform .25s ease;
-
-}}
-
-.modal.show .modal-box {{
-
-    transform:
-        translateY(0);
-
-}}
-
-.modal-close {{
-
-    width:40px;
-
-    height:40px;
-
-    margin-left:auto;
-
-    display:flex;
-
-    align-items:center;
-
-    justify-content:center;
-
-    border:0;
-
-    border-radius:13px;
-
-    background:
-        rgba(255,255,255,.07);
-
-    color:#fff;
-
-    font-size:18px;
-
-    cursor:pointer;
-
-}}
-
-.modal h2 {{
-
-    margin:
-        13px 0 8px;
-
-    font-size:22px;
-
-}}
-
-.modal p {{
-
-    color:#a3a3af;
-
-    font-size:13px;
-
-    line-height:1.6;
-
-}}
-
-.steps {{
-
-    margin-top:16px;
-
-}}
-
-.step {{
-
-    display:flex;
-
-    gap:12px;
-
-    margin-bottom:13px;
-
-}}
-
-.step-number {{
-
-    width:28px;
-
-    height:28px;
-
-    border-radius:10px;
-
-    display:flex;
-
-    align-items:center;
-
-    justify-content:center;
-
-    flex-shrink:0;
-
-    background:
-        linear-gradient(
-            135deg,
-            #ff25bd,
-            #773cff
-        );
-
-    font-size:12px;
-
-    font-weight:900;
-
-}}
-
-.step-text {{
-
-    padding-top:4px;
-
-    color:#ddd;
-
-    font-size:13px;
-
-    line-height:1.5;
-
-}}
-
-
-/* ============================================================
-   SMALL SCREENS
-============================================================ */
-
-@media (max-width:380px) {{
+@media (max-width: 380px) {{
 
     body {{
-        padding-left:11px;
-        padding-right:11px;
+        padding-left: 11px;
+        padding-right: 11px;
     }}
 
     .card {{
-        padding:14px;
+        padding: 14px;
     }}
 
     h1 {{
-        font-size:27px;
+        font-size: 27px;
     }}
-
 }}
 
 </style>
 
 </head>
 
+
 <body>
 
 <div class="container">
-
-    <!-- =====================================================
-         TOP
-         ===================================================== -->
 
     <div class="topbar">
 
@@ -1984,10 +1491,6 @@ body.light .subscription-box {{
 
     </div>
 
-
-    <!-- =====================================================
-         HEADER
-         ===================================================== -->
 
     <div class="header">
 
@@ -2008,9 +1511,7 @@ body.light .subscription-box {{
 
     <div class="card">
 
-        <!-- =================================================
-             STATUS
-             ================================================= -->
+        <!-- STATUS -->
 
         <div class="status {status_class}">
 
@@ -2039,16 +1540,14 @@ body.light .subscription-box {{
         </div>
 
 
-        <!-- =================================================
-             INFO
-             ================================================= -->
+        <!-- INFO -->
 
         <div class="info-grid">
 
             <div class="info-box">
 
                 <div class="info-label">
-                    {tariff_label}
+                    {html.escape(tariff_label)}
                 </div>
 
                 <div class="info-value">
@@ -2086,9 +1585,7 @@ body.light .subscription-box {{
         </div>
 
 
-        <!-- =================================================
-             TIME
-             ================================================= -->
+        <!-- TIME -->
 
         <div class="time-card">
 
@@ -2113,9 +1610,7 @@ body.light .subscription-box {{
         </div>
 
 
-        <!-- =================================================
-             PROFILE
-             ================================================= -->
+        <!-- PROFILE -->
 
         <div class="profile">
 
@@ -2150,9 +1645,7 @@ body.light .subscription-box {{
         </div>
 
 
-        <!-- =================================================
-             ID
-             ================================================= -->
+        <!-- ID -->
 
         <div class="id">
 
@@ -2162,9 +1655,7 @@ body.light .subscription-box {{
         </div>
 
 
-        <!-- =================================================
-             CONNECTION
-             ================================================= -->
+        <!-- CONNECTION -->
 
         <div class="section-title">
             ⚡ Подключение
@@ -2175,10 +1666,6 @@ body.light .subscription-box {{
         </div>
 
 
-        <!-- =================================================
-             HAPP BUTTON
-             ================================================= -->
-
         <button
             type="button"
             class="button happ"
@@ -2187,10 +1674,6 @@ body.light .subscription-box {{
             📲 Добавить в Happ
         </button>
 
-
-        <!-- =================================================
-             INCY BUTTON
-             ================================================= -->
 
         <button
             type="button"
@@ -2201,10 +1684,6 @@ body.light .subscription-box {{
         </button>
 
 
-        <!-- =================================================
-             COPY
-             ================================================= -->
-
         <button
             type="button"
             class="button copy-secondary"
@@ -2213,10 +1692,6 @@ body.light .subscription-box {{
             📋 Скопировать ссылку
         </button>
 
-
-        <!-- =================================================
-             REFRESH
-             ================================================= -->
 
         <button
             type="button"
@@ -2227,9 +1702,7 @@ body.light .subscription-box {{
         </button>
 
 
-        <!-- =================================================
-             SUBSCRIPTION LINK
-             ================================================= -->
+        <!-- LINK -->
 
         <div class="subscription-label">
             🔗 ССЫЛКА ПОДПИСКИ
@@ -2243,13 +1716,11 @@ body.light .subscription-box {{
         </div>
 
 
-        <!-- =================================================
-             TELEGRAM
-             ================================================= -->
+        <!-- TELEGRAM -->
 
         <a
             class="telegram"
-            href="{js_telegram_url}"
+            href="https://t.me/"
         >
             ← Вернуться в Telegram
         </a>
@@ -2263,10 +1734,6 @@ body.light .subscription-box {{
 
 </div>
 
-
-<!-- =========================================================
-     TOAST
-========================================================= -->
 
 <div
     id="toast"
@@ -2316,7 +1783,6 @@ function applyTheme(theme) {{
             .textContent = "🌙";
 
     }}
-
 }}
 
 
@@ -2337,7 +1803,6 @@ function toggleTheme() {{
     );
 
     applyTheme(next);
-
 }}
 
 
@@ -2369,7 +1834,6 @@ function showToast(text) {{
         toast.classList.remove("show");
 
     }}, 2200);
-
 }}
 
 
@@ -2390,48 +1854,7 @@ function openApp(app) {{
             : "🚀 Открываем INCY..."
     );
 
-    try {{
-
-        window.location.href = url;
-
-    }} catch (e) {{
-
-        console.log(e);
-
-    }}
-
-    setTimeout(() => {{
-
-        try {{
-
-            const iframe =
-                document.createElement("iframe");
-
-            iframe.style.display = "none";
-
-            iframe.src = url;
-
-            document.body.appendChild(
-                iframe
-            );
-
-            setTimeout(() => {{
-
-                try {{
-
-                    iframe.remove();
-
-                }} catch (e) {{}}
-
-            }}, 1200);
-
-        }} catch (e) {{
-
-            console.log(e);
-
-        }}
-
-    }}, 100);
+    window.location.href = url;
 
     setTimeout(() => {{
 
@@ -2440,11 +1863,9 @@ function openApp(app) {{
             showToast(
                 "⚠️ Приложение не открылось. Скопируйте ссылку."
             );
-
         }}
 
-    }}, 1600);
-
+    }}, 1800);
 }}
 
 
@@ -2469,8 +1890,8 @@ async function copyLink() {{
     }} catch (e) {{
 
         console.log(e);
-
     }}
+
 
     try {{
 
@@ -2485,9 +1906,6 @@ async function copyLink() {{
 
         textarea.style.left =
             "-9999px";
-
-        textarea.style.top =
-            "0";
 
         document.body.appendChild(
             textarea
@@ -2513,7 +1931,6 @@ async function copyLink() {{
             throw new Error(
                 "Copy failed"
             );
-
         }}
 
     }} catch (e) {{
@@ -2522,9 +1939,7 @@ async function copyLink() {{
             "Скопируйте ссылку:",
             subscriptionLink
         );
-
     }}
-
 }}
 
 
@@ -2546,7 +1961,6 @@ function refreshPage() {{
             + Date.now();
 
     }}, 300);
-
 }}
 
 </script>
@@ -2560,14 +1974,14 @@ function refreshPage() {{
         html_page,
         status=200,
         mimetype="text/html",
-        headers={
+        headers={{
             "Cache-Control":
                 "no-cache, no-store, must-revalidate",
             "Pragma":
                 "no-cache",
             "Expires":
                 "0",
-        },
+        }},
     )
 
 
@@ -2583,9 +1997,7 @@ def subscription_content(token):
     if user_id is None:
         abort(404)
 
-    content = get_subscription_content(
-        user_id
-    )
+    content = get_subscription_content(user_id)
 
     if not content:
 
@@ -2600,14 +2012,14 @@ def subscription_content(token):
         content,
         status=200,
         mimetype="text/plain",
-        headers={
+        headers={{
             "Cache-Control":
                 "no-cache, no-store, must-revalidate",
             "Pragma":
                 "no-cache",
             "Expires":
                 "0",
-        },
+        }},
     )
 
 
@@ -2642,16 +2054,22 @@ def index():
 <style>
 
 * {
-    box-sizing:border-box;
+    box-sizing: border-box;
 }
 
 body {
-    margin:0;
-    min-height:100vh;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    padding:25px;
+
+    margin: 0;
+
+    min-height: 100vh;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    padding: 25px;
 
     background:
         radial-gradient(
@@ -2666,7 +2084,7 @@ body {
         ),
         #07070b;
 
-    color:white;
+    color: white;
 
     font-family:
         -apple-system,
@@ -2675,15 +2093,18 @@ body {
         Arial,
         sans-serif;
 
-    text-align:center;
+    text-align: center;
 }
 
 .box {
-    width:100%;
-    max-width:430px;
-    padding:38px 25px;
 
-    border-radius:30px;
+    width: 100%;
+
+    max-width: 430px;
+
+    padding: 38px 25px;
+
+    border-radius: 30px;
 
     background:
         rgba(18,18,27,.88);
@@ -2696,19 +2117,22 @@ body {
 }
 
 .logo {
-    width:80px;
-    height:80px;
 
-    margin:
-        0 auto 18px;
+    width: 80px;
 
-    display:flex;
-    align-items:center;
-    justify-content:center;
+    height: 80px;
 
-    border-radius:25px;
+    margin: 0 auto 18px;
 
-    font-size:42px;
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    border-radius: 25px;
+
+    font-size: 42px;
 
     background:
         linear-gradient(
@@ -2720,13 +2144,17 @@ body {
 }
 
 h1 {
-    margin:0;
-    font-size:30px;
+
+    margin: 0;
+
+    font-size: 30px;
 }
 
 p {
-    margin:10px 0 0;
-    color:#92929e;
+
+    margin: 10px 0 0;
+
+    color: #92929e;
 }
 
 </style>
@@ -2763,7 +2191,6 @@ p {
 
 @app.route("/health")
 def health():
-
     return "OK"
 
 
