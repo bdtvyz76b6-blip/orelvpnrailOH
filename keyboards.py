@@ -10,7 +10,7 @@ from aiogram.types import (
 # ГЛАВНОЕ МЕНЮ ПОЛЬЗОВАТЕЛЯ
 # ============================================================
 
-def main_menu(user_id: int):
+def main_menu(user_id: int = None):
 
     return ReplyKeyboardMarkup(
         keyboard=[
@@ -37,7 +37,8 @@ def main_menu(user_id: int):
         ],
         resize_keyboard=True,
         is_persistent=False,
-        input_field_placeholder="Выберите действие",
+        one_time_keyboard=False,
+        input_field_placeholder="Выберите раздел",
     )
 
 
@@ -52,13 +53,13 @@ def payment_method_keyboard():
             [
                 InlineKeyboardButton(
                     text="⭐ Telegram Stars",
-                    callback_data="pay_stars"
+                    callback_data="pay_stars",
                 )
             ],
             [
                 InlineKeyboardButton(
                     text="💳 СБП",
-                    callback_data="pay_sbp"
+                    callback_data="pay_sbp",
                 )
             ],
         ]
@@ -76,25 +77,25 @@ def stars_buy_keyboard():
             [
                 InlineKeyboardButton(
                     text="⭐ 1 месяц — 70 Stars",
-                    callback_data="stars_30"
+                    callback_data="stars_30",
                 )
             ],
             [
                 InlineKeyboardButton(
                     text="⭐ 3 месяца — 190 Stars",
-                    callback_data="stars_90"
+                    callback_data="stars_90",
                 )
             ],
             [
                 InlineKeyboardButton(
                     text="⭐ 6 месяцев — 350 Stars",
-                    callback_data="stars_180"
+                    callback_data="stars_180",
                 )
             ],
             [
                 InlineKeyboardButton(
                     text="⭐ 12 месяцев — 700 Stars",
-                    callback_data="stars_365"
+                    callback_data="stars_365",
                 )
             ],
         ]
@@ -112,25 +113,25 @@ def sbp_buy_keyboard():
             [
                 InlineKeyboardButton(
                     text="💳 1 месяц — 129₽",
-                    callback_data="sbp_30"
+                    callback_data="sbp_30",
                 )
             ],
             [
                 InlineKeyboardButton(
                     text="💳 3 месяца — 379₽",
-                    callback_data="sbp_90"
+                    callback_data="sbp_90",
                 )
             ],
             [
                 InlineKeyboardButton(
                     text="💳 6 месяцев — 659₽",
-                    callback_data="sbp_180"
+                    callback_data="sbp_180",
                 )
             ],
             [
                 InlineKeyboardButton(
                     text="💳 12 месяцев — 1089₽",
-                    callback_data="sbp_365"
+                    callback_data="sbp_365",
                 )
             ],
         ]
@@ -148,25 +149,25 @@ def cabinet_keyboard():
             [
                 InlineKeyboardButton(
                     text="⚡ Подключиться",
-                    callback_data="get_link"
+                    callback_data="get_link",
                 )
             ],
             [
                 InlineKeyboardButton(
                     text="🔄 Обновить серверы",
-                    callback_data="refresh_subscription"
+                    callback_data="refresh_subscription",
                 )
             ],
             [
                 InlineKeyboardButton(
                     text="🎟 Промокод",
-                    callback_data="enter_promo"
+                    callback_data="enter_promo",
                 )
             ],
             [
                 InlineKeyboardButton(
                     text="🎫 Продлить",
-                    callback_data="renew"
+                    callback_data="renew",
                 )
             ],
         ]
@@ -184,13 +185,13 @@ def accept_terms_keyboard():
             [
                 InlineKeyboardButton(
                     text="📄 Документы",
-                    url="https://bdt2010.github.io/managerorlvpnsite/"
+                    url="https://bdt2010.github.io/managerorlvpnsite/",
                 )
             ],
             [
                 InlineKeyboardButton(
                     text="✅ Принимаю",
-                    callback_data="accept_terms"
+                    callback_data="accept_terms",
                 )
             ],
         ]
