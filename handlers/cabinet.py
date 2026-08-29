@@ -4,8 +4,6 @@ from aiogram import Router, F
 from aiogram.types import (
     Message,
     CallbackQuery,
-    InlineKeyboardMarkup,
-    InlineKeyboardButton,
 )
 
 from aiogram.fsm.context import FSMContext
@@ -211,7 +209,8 @@ async def show_cabinet(
 ⚡ <b>Быстрое подключение</b>
 
 Нажмите <b>«Подключиться»</b>,
-чтобы открыть страницу вашей подписки.
+чтобы открыть вашу персональную
+страницу подключения.
 
 На сайте доступны:
 
@@ -220,92 +219,19 @@ async def show_cabinet(
 📋 Скопировать ссылку
 """
 
+    # ========================================================
+    # ВАЖНО:
+    # Передаём user_id в keyboard.
+    #
+    # Кнопка «Подключиться» находится ТОЛЬКО
+    # здесь — внутри личного кабинета.
+    # ========================================================
+
     await message.answer(
         text,
-        reply_markup=cabinet_keyboard(),
-        parse_mode="HTML",
-    )
-
-
-# ============================================================
-# ПОДКЛЮЧИТЬСЯ ИЗ ГЛАВНОГО МЕНЮ
-# ============================================================
-
-@router.message(
-    F.text == "🔗 Подключиться"
-)
-async def connect_from_menu(
-    message: Message
-):
-
-    user_id = message.from_user.id
-
-    # --------------------------------------------------------
-    # Проверяем подписку
-    # --------------------------------------------------------
-
-    if not check_user_subscription(
-        user_id
-    ):
-
-        await message.answer(
-            """
-❌ <b>Подписка не активна.</b>
-
-Сначала оформите подписку или
-активируйте пробный период.
-""",
-            parse_mode="HTML",
-        )
-
-        return
-
-    user = get_user(
-        user_id
-    )
-
-    if not user:
-
-        await message.answer(
-            "❌ Пользователь не найден."
-        )
-
-        return
-
-    # --------------------------------------------------------
-    # Получаем страницу
-    # --------------------------------------------------------
-
-    site_url = get_subscription_page_url(
-        user_id
-    )
-
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="🌐 Открыть сайт подключения",
-                    url=site_url,
-                )
-            ],
-        ]
-    )
-
-    await message.answer(
-        """
-🔗 <b>Подключение ixxy VPN</b>
-
-Откройте сайт подключения.
-
-Там вы сможете:
-
-⚡ Добавить VPN в Happ
-🚀 Добавить VPN в INCY
-📋 Скопировать ссылку подписки
-
-👇 Нажмите кнопку:
-""",
-        reply_markup=keyboard,
+        reply_markup=cabinet_keyboard(
+            user_id
+        ),
         parse_mode="HTML",
     )
 
@@ -322,6 +248,10 @@ async def refresh_subscription(
 ):
 
     user_id = callback.from_user.id
+
+    # --------------------------------------------------------
+    # Проверяем подписку
+    # --------------------------------------------------------
 
     if not check_user_subscription(
         user_id
@@ -409,88 +339,6 @@ async def refresh_subscription(
 
 
 # ============================================================
-# ПОДКЛЮЧИТЬСЯ ИЗ ЛИЧНОГО КАБИНЕТА
-# ============================================================
-
-@router.callback_query(
-    F.data == "get_link"
-)
-async def get_link(
-    callback: CallbackQuery
-):
-
-    user_id = callback.from_user.id
-
-    # --------------------------------------------------------
-    # Проверяем подписку
-    # --------------------------------------------------------
-
-    if not check_user_subscription(
-        user_id
-    ):
-
-        await callback.answer(
-            "❌ Подписка не активна",
-            show_alert=True,
-        )
-
-        return
-
-    user = get_user(
-        user_id
-    )
-
-    if not user:
-
-        await callback.answer(
-            "❌ Пользователь не найден",
-            show_alert=True,
-        )
-
-        return
-
-    # --------------------------------------------------------
-    # URL сайта
-    # --------------------------------------------------------
-
-    site_url = get_subscription_page_url(
-        user_id
-    )
-
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="🌐 Открыть сайт подключения",
-                    url=site_url,
-                )
-            ],
-        ]
-    )
-
-    await callback.message.answer(
-        """
-🔗 <b>Подключение ixxy VPN</b>
-
-Нажмите кнопку ниже — откроется
-обычный сайт подключения.
-
-На странице доступны:
-
-⚡ <b>Добавить в Happ</b>
-🚀 <b>Добавить в INCY</b>
-📋 <b>Скопировать ссылку</b>
-
-👇 <b>Открыть сайт:</b>
-""",
-        reply_markup=keyboard,
-        parse_mode="HTML",
-    )
-
-    await callback.answer()
-
-
-# ============================================================
 # ПРОМОКОД — НАЧАЛО
 # ============================================================
 
@@ -527,6 +375,14 @@ async def activate_promo(
 ):
 
     user_id = message.from_user.id
+
+    if not message.text:
+
+        await message.answer(
+            "❌ Введите промокод текстом."
+        )
+
+        return
 
     code = (
         message.text
@@ -667,7 +523,9 @@ async def activate_promo(
 
 🔄 Серверы обновлены.
 """,
-        reply_markup=cabinet_keyboard(),
+        reply_markup=cabinet_keyboard(
+            user_id
+        ),
         parse_mode="HTML",
     )
 
