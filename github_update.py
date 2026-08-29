@@ -14,8 +14,6 @@ from database import (
 # НАСТРОЙКИ
 # ============================================================
 
-# ВАЖНО:
-# Теперь сайт работает через Render, а НЕ Cloudflare.
 PUBLIC_SITE_URL = os.getenv(
     "PUBLIC_SITE_URL",
     "https://orelvpnrailoh-1.onrender.com",
@@ -65,6 +63,7 @@ NO_SERVERS_FILE = "no_servers.txt"
 # ============================================================
 
 def raw_url(filename):
+
     return (
         f"https://raw.githubusercontent.com/"
         f"{OWNER}/{REPO}/{BRANCH}/{filename}"
@@ -83,6 +82,7 @@ def load_github_file(filename):
     )
 
     if response.status_code != 200:
+
         raise Exception(
             f"Не удалось загрузить {filename}: "
             f"HTTP {response.status_code}"
@@ -91,6 +91,7 @@ def load_github_file(filename):
     content = response.text.strip()
 
     if not content:
+
         raise Exception(
             f"Файл {filename} пустой"
         )
@@ -103,16 +104,18 @@ def load_github_file(filename):
 # ============================================================
 
 def load_servers():
+
     return load_github_file(
         SERVERS_FILE
     )
 
 
 # ============================================================
-# СЕРВЕРА ДЛЯ ПРОСРОЧЕННОЙ ПОДПИСКИ
+# СЕРВЕРА ДЛЯ ОТКЛЮЧЁННОЙ / ИСТЁКШЕЙ ПОДПИСКИ
 # ============================================================
 
 def load_no_servers():
+
     return load_github_file(
         NO_SERVERS_FILE
     )
@@ -150,7 +153,7 @@ def get_subscription_content_url(user_id):
 
 def save_user_subscription(
     user_id,
-    content
+    content,
 ):
 
     link = get_subscription_link(
@@ -216,12 +219,13 @@ def create_user_subscription(user_id):
 
 def create_subscription(
     user_id,
-    days=30
+    days=30,
 ):
 
     days = int(days)
 
     if days <= 0:
+
         raise ValueError(
             "Количество дней должно быть больше 0"
         )
@@ -247,13 +251,13 @@ def create_subscription(
 
 def activate_subscription_file(
     user_id,
-    date
+    date,
 ):
 
     servers = load_servers()
 
     content = (
-        f"#profile-title: ☂️ ixxy vip\n\n"
+        f"#profile-title: ☂️ ixxy vpn\n\n"
         f"#profile-update-interval: 1\n\n"
         f"#announce: ‼️ Подписка активна "
         f"до {date} ‼️ __ 🆔 ID: {user_id}\n\n"
@@ -288,7 +292,7 @@ def activate_subscription_file(
 
 def activate_user_subscription(
     user_id,
-    days
+    days,
 ):
 
     return create_subscription(
@@ -303,7 +307,7 @@ def activate_user_subscription(
 
 def update_subscription_file(
     user_id,
-    date
+    date,
 ):
 
     try:
@@ -328,19 +332,24 @@ def update_subscription_file(
 
 
 # ============================================================
-# ПРОСРОЧЕННАЯ ПОДПИСКА
+# ОТКЛЮЧЕНИЕ / ИСТЕЧЕНИЕ ПОДПИСКИ
 # ============================================================
 
 def expire_subscription(user_id):
+
+    # --------------------------------------------------------
+    # ВАЖНО:
+    # ВСЕГДА берём именно no_servers.txt
+    # --------------------------------------------------------
 
     no_servers = load_no_servers()
 
     content = (
         f"#profile-title: ⛔ ixxy vpn\n\n"
         f"#profile-update-interval: 1\n\n"
-        f"#announce: ⛔ Подписка истекла. "
-        f"Продлите подписку в @orelvpntopbot\n"
-        f"🆔 Ваш ID: {user_id}\n\n"
+        f"#announce: ‼️ Ваша подписка истекла "
+        f"или была отключена администратором. "
+        f"Зайдите в @orelvpntopbot\n\n"
         f"{no_servers}"
     )
 
@@ -350,11 +359,21 @@ def expire_subscription(user_id):
     )
 
     print(
-        f"{user_id} — подписка истекла"
+        f"{user_id} — подписка отключена"
+    )
+
+    print(
+        "Использован файл: "
+        f"{NO_SERVERS_FILE}"
     )
 
     print(
         f"Страница: {link}"
+    )
+
+    print(
+        "Subscription URL: "
+        f"{get_subscription_content_url(user_id)}"
     )
 
     return link
@@ -390,18 +409,55 @@ def sync_all_active_users():
             subscription = user[3]
             subscription_until = user[4]
 
+            # =================================================
+            # УЧИТЫВАЕМ ТОЛЬКО АКТИВНЫЕ ТАРИФЫ
+            # =================================================
+
             if subscription not in (
                 "vip",
                 "trial",
             ):
 
-                skipped += 1
+                # ------------------------------------------------
+                # Если подписка не vip/trial — считаем её
+                # отключённой и ставим no_servers.
+                # ------------------------------------------------
+
+                expire_subscription(
+                    user_id
+                )
+
+                expired += 1
+
+                print(
+                    f"{user_id} — "
+                    f"отключён / нет активного тарифа"
+                )
+
                 continue
+
+            # =================================================
+            # НЕТ ДАТЫ
+            # =================================================
 
             if not subscription_until:
 
-                skipped += 1
+                expire_subscription(
+                    user_id
+                )
+
+                expired += 1
+
+                print(
+                    f"{user_id} — "
+                    f"нет даты подписки, установлен no_servers"
+                )
+
                 continue
+
+            # =================================================
+            # ПРОВЕРКА ДАТЫ
+            # =================================================
 
             try:
 
@@ -417,11 +473,16 @@ def sync_all_active_users():
                     f"{subscription_until}"
                 )
 
-                skipped += 1
+                expire_subscription(
+                    user_id
+                )
+
+                expired += 1
+
                 continue
 
             # =================================================
-            # ПРОСРОЧЕН
+            # ИСТЕКЛА
             # =================================================
 
             if expire_date < today:
@@ -429,10 +490,9 @@ def sync_all_active_users():
                 content = (
                     f"#profile-title: ⛔ ixxy vpn\n\n"
                     f"#profile-update-interval: 1\n\n"
-                    f"#announce: ⛔ Подписка истекла. "
-                    f"Продлите подписку в "
-                    f"@orelvpntopbot\n"
-                    f"🆔 Ваш ID: {user_id}\n\n"
+                    f"#announce: ‼️ Ваша подписка истекла "
+                    f"или была отключена администратором. "
+                    f"Зайдите в @orelvpntopbot\n\n"
                     f"{no_servers}"
                 )
 
@@ -444,8 +504,12 @@ def sync_all_active_users():
                 expired += 1
 
                 print(
+                    f"{user_id} — подписка истекла"
+                )
+
+                print(
                     f"{user_id} — "
-                    f"переведён на no_servers"
+                    f"использован {NO_SERVERS_FILE}"
                 )
 
                 continue
@@ -459,7 +523,7 @@ def sync_all_active_users():
             )
 
             content = (
-                f"#profile-title: ☂️ ixxy vip\n\n"
+                f"#profile-title: ☂️ ixxy vpn\n\n"
                 f"#profile-update-interval: 1\n\n"
                 f"#announce: ‼️ Подписка активна "
                 f"до {display_date} ‼️ __ 🆔 ID: {user_id}\n\n"
@@ -490,7 +554,7 @@ def sync_all_active_users():
     print("━━━━━━━━━━━━━━━━━━━━━━━━━━")
     print("Синхронизация завершена")
     print(f"Обновлено: {updated}")
-    print(f"Истекло: {expired}")
+    print(f"Истекло/отключено: {expired}")
     print(f"Пропущено: {skipped}")
     print(f"Ошибок: {errors}")
     print("━━━━━━━━━━━━━━━━━━━━━━━━━━")
