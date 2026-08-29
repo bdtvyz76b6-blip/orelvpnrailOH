@@ -10,7 +10,7 @@ from aiogram.types import (
 # ГЛАВНОЕ МЕНЮ ПОЛЬЗОВАТЕЛЯ
 # ============================================================
 
-def main_menu(user_id: int = None):
+def main_menu(user_id: int):
 
     return ReplyKeyboardMarkup(
         keyboard=[
@@ -36,8 +36,8 @@ def main_menu(user_id: int = None):
             ],
         ],
         resize_keyboard=True,
-        is_persistent=True,
-        input_field_placeholder="Выберите раздел 👇",
+        is_persistent=False,
+        input_field_placeholder="Выберите действие",
     )
 
 
