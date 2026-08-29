@@ -146,8 +146,14 @@ def cabinet_keyboard():
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="⚡ Подключиться",
+                    text="🔗 Получить ссылку",
                     callback_data="get_link"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⚡ Подключиться",
+                    callback_data="connect"
                 )
             ],
             [
@@ -180,6 +186,12 @@ def accept_terms_keyboard():
 
     return InlineKeyboardMarkup(
         inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="📄 Документы",
+                    url="https://bdt2010.github.io/managerorlvpnsite/"
+                )
+            ],
             [
                 InlineKeyboardButton(
                     text="✅ Принимаю",
