@@ -28,15 +28,11 @@ SUBSCRIPTION_PREFIX = os.getenv(
     "2ix847xy",
 ).strip()
 
-BOT_USERNAME = os.getenv(
-    "BOT_USERNAME",
-    "",
-).strip().lstrip("@")
+# ============================================================
+# TELEGRAM
+# ============================================================
 
-if BOT_USERNAME:
-    TELEGRAM_URL = f"https://t.me/{BOT_USERNAME}"
-else:
-    TELEGRAM_URL = "https://t.me/"
+TELEGRAM_URL = "https://t.me/orelvpntopbot"
 
 
 # ============================================================
@@ -962,6 +958,7 @@ h1 {{
 .remaining {{
 
     margin-top: 10px;
+
 }}
 
 .remaining-value {{
