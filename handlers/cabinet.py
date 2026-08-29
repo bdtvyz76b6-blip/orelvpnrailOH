@@ -4,6 +4,8 @@ from aiogram import Router, F
 from aiogram.types import (
     Message,
     CallbackQuery,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
 )
 
 from aiogram.fsm.context import FSMContext
@@ -97,9 +99,18 @@ async def show_cabinet(
     # Проверяем подписку
     # --------------------------------------------------------
 
-    check_user_subscription(
-        user_id
-    )
+    try:
+
+        check_user_subscription(
+            user_id
+        )
+
+    except Exception as e:
+
+        print(
+            f"❌ Ошибка проверки подписки "
+            f"{user_id}: {e}"
+        )
 
     user = get_user(
         user_id
@@ -113,8 +124,12 @@ async def show_cabinet(
 
         return
 
-    subscription = user[3]
-    until = user[4]
+    # --------------------------------------------------------
+    # Данные пользователя
+    # --------------------------------------------------------
+
+    subscription = user[3] or ""
+    until = user[4] or ""
 
     # ========================================================
     # ТАРИФ
@@ -165,21 +180,24 @@ async def show_cabinet(
 
                 days = max(
                     1,
-                    int(
-                        seconds // 86400
-                    )
+                    int(seconds // 86400)
                 )
 
             else:
 
                 status = "🔴 Истекла"
 
-        except Exception:
+        except Exception as e:
+
+            print(
+                f"❌ Ошибка даты "
+                f"{user_id}: {e}"
+            )
 
             status = "❌ Не активна"
 
     # ========================================================
-    # КАБИНЕТ
+    # ТЕКСТ КАБИНЕТА
     # ========================================================
 
     text = f"""
@@ -219,21 +237,110 @@ async def show_cabinet(
 📋 Скопировать ссылку
 """
 
-    # ========================================================
-    # ВАЖНО:
-    # Передаём user_id в keyboard.
-    #
-    # Кнопка «Подключиться» находится ТОЛЬКО
-    # здесь — внутри личного кабинета.
-    # ========================================================
-
     await message.answer(
         text,
-        reply_markup=cabinet_keyboard(
-            user_id
-        ),
+        reply_markup=cabinet_keyboard(),
         parse_mode="HTML",
     )
+
+
+# ============================================================
+# ПОДКЛЮЧИТЬСЯ
+# ============================================================
+
+@router.callback_query(
+    F.data == "get_link"
+)
+async def get_link(
+    callback: CallbackQuery
+):
+
+    user_id = callback.from_user.id
+
+    # --------------------------------------------------------
+    # Проверяем подписку
+    # --------------------------------------------------------
+
+    try:
+
+        is_active = check_user_subscription(
+            user_id
+        )
+
+    except Exception as e:
+
+        print(
+            f"❌ Ошибка проверки подписки "
+            f"{user_id}: {e}"
+        )
+
+        is_active = False
+
+    if not is_active:
+
+        await callback.answer(
+            "❌ Подписка не активна",
+            show_alert=True,
+        )
+
+        return
+
+    # --------------------------------------------------------
+    # Проверяем пользователя
+    # --------------------------------------------------------
+
+    user = get_user(
+        user_id
+    )
+
+    if not user:
+
+        await callback.answer(
+            "❌ Пользователь не найден",
+            show_alert=True,
+        )
+
+        return
+
+    # --------------------------------------------------------
+    # Получаем URL страницы
+    # --------------------------------------------------------
+
+    site_url = get_subscription_page_url(
+        user_id
+    )
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🌐 Открыть сайт подключения",
+                    url=site_url,
+                )
+            ]
+        ]
+    )
+
+    await callback.message.answer(
+        """
+🔗 <b>Подключение ixxy VPN</b>
+
+Нажмите кнопку ниже, чтобы открыть
+вашу персональную страницу подключения.
+
+На сайте доступны:
+
+⚡ <b>Добавить в Happ</b>
+🚀 <b>Добавить в INCY</b>
+📋 <b>Скопировать ссылку</b>
+
+👇 <b>Открыть сайт подключения:</b>
+""",
+        reply_markup=keyboard,
+        parse_mode="HTML",
+    )
+
+    await callback.answer()
 
 
 # ============================================================
@@ -249,13 +356,17 @@ async def refresh_subscription(
 
     user_id = callback.from_user.id
 
-    # --------------------------------------------------------
-    # Проверяем подписку
-    # --------------------------------------------------------
+    try:
 
-    if not check_user_subscription(
-        user_id
-    ):
+        is_active = check_user_subscription(
+            user_id
+        )
+
+    except Exception:
+
+        is_active = False
+
+    if not is_active:
 
         await callback.answer(
             "❌ Подписка не активна",
@@ -320,8 +431,11 @@ async def refresh_subscription(
         )
 
         await callback.message.answer(
-            "✅ <b>Серверы обновлены!</b>\n\n"
-            "🔗 Ссылка подключения осталась прежней.",
+            """
+✅ <b>Серверы обновлены!</b>
+
+🔗 Ссылка подключения осталась прежней.
+""",
             parse_mode="HTML",
         )
 
@@ -333,8 +447,11 @@ async def refresh_subscription(
         )
 
         await callback.message.answer(
-            "❌ Не удалось обновить серверы.\n"
-            "Попробуйте ещё раз."
+            """
+❌ Не удалось обновить серверы.
+
+Попробуйте ещё раз.
+"""
         )
 
 
@@ -407,17 +524,16 @@ async def activate_promo(
         await state.clear()
 
         await message.answer(
-            "❌ Произошла ошибка "
-            "при активации."
+            "❌ Произошла ошибка при активации."
         )
 
         return
 
-    # --------------------------------------------------------
+    # ========================================================
     # НЕ НАЙДЕН
-    # --------------------------------------------------------
+    # ========================================================
 
-    if result["reason"] == "not_found":
+    if result.get("reason") == "not_found":
 
         await state.clear()
 
@@ -427,26 +543,25 @@ async def activate_promo(
 
         return
 
-    # --------------------------------------------------------
+    # ========================================================
     # УЖЕ ИСПОЛЬЗОВАН
-    # --------------------------------------------------------
+    # ========================================================
 
-    if result["reason"] == "already_used":
+    if result.get("reason") == "already_used":
 
         await state.clear()
 
         await message.answer(
-            "❌ Вы уже использовали "
-            "этот промокод."
+            "❌ Вы уже использовали этот промокод."
         )
 
         return
 
-    # --------------------------------------------------------
+    # ========================================================
     # ПОЛЬЗОВАТЕЛЬ НЕ НАЙДЕН
-    # --------------------------------------------------------
+    # ========================================================
 
-    if result["reason"] == "user_not_found":
+    if result.get("reason") == "user_not_found":
 
         await state.clear()
 
@@ -456,28 +571,33 @@ async def activate_promo(
 
         return
 
-    # --------------------------------------------------------
+    # ========================================================
     # ОШИБКА
-    # --------------------------------------------------------
+    # ========================================================
 
     if not result.get("success"):
 
         await state.clear()
 
         await message.answer(
-            "❌ Не удалось активировать "
-            "промокод."
+            "❌ Не удалось активировать промокод."
         )
 
         return
 
-    # --------------------------------------------------------
+    # ========================================================
     # УСПЕШНО
-    # --------------------------------------------------------
+    # ========================================================
 
-    days = result["days"]
+    days = result.get(
+        "days",
+        0,
+    )
 
-    new_date = result["date"]
+    new_date = result.get(
+        "date",
+        "",
+    )
 
     try:
 
@@ -496,7 +616,7 @@ async def activate_promo(
     try:
 
         date_text = datetime.strptime(
-            new_date,
+            str(new_date),
             "%Y-%m-%d"
         ).strftime(
             "%d.%m.%Y"
@@ -523,9 +643,7 @@ async def activate_promo(
 
 🔄 Серверы обновлены.
 """,
-        reply_markup=cabinet_keyboard(
-            user_id
-        ),
+        reply_markup=cabinet_keyboard(),
         parse_mode="HTML",
     )
 
