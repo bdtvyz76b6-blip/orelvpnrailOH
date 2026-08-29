@@ -3,7 +3,6 @@ from aiogram.types import (
     KeyboardButton,
     InlineKeyboardMarkup,
     InlineKeyboardButton,
-    WebAppInfo,
 )
 
 
@@ -12,11 +11,6 @@ from aiogram.types import (
 # ============================================================
 
 def main_menu(user_id: int):
-
-    subscription_url = (
-        f"https://orelvpnrailoh-1.onrender.com/s/"
-        f"2ix847xy{user_id}"
-    )
 
     return ReplyKeyboardMarkup(
         keyboard=[
@@ -33,14 +27,6 @@ def main_menu(user_id: int):
             [
                 KeyboardButton(
                     text="👤 Личный кабинет"
-                )
-            ],
-            [
-                KeyboardButton(
-                    text="🌐 Моя подписка",
-                    web_app=WebAppInfo(
-                        url=subscription_url
-                    )
                 )
             ],
             [
