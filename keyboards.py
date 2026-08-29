@@ -1,58 +1,197 @@
 from aiogram.types import (
+    ReplyKeyboardMarkup,
+    KeyboardButton,
     InlineKeyboardMarkup,
     InlineKeyboardButton,
 )
 
 
 # ============================================================
-# НАЗАД
+# ГЛАВНОЕ МЕНЮ ПОЛЬЗОВАТЕЛЯ
 # ============================================================
 
-def back_keyboard():
+def main_menu(user_id: int = None):
+
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [
+                KeyboardButton(
+                    text="🎫 Купить подписку"
+                )
+            ],
+            [
+                KeyboardButton(
+                    text="🎁 Пробный период"
+                )
+            ],
+            [
+                KeyboardButton(
+                    text="👤 Личный кабинет"
+                )
+            ],
+            [
+                KeyboardButton(
+                    text="💬 Поддержка"
+                )
+            ],
+        ],
+        resize_keyboard=True,
+        is_persistent=True,
+        input_field_placeholder="Выберите раздел 👇",
+    )
+
+
+# ============================================================
+# СПОСОБ ОПЛАТЫ
+# ============================================================
+
+def payment_method_keyboard():
 
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="◀️ Назад",
-                    callback_data="back"
+                    text="⭐ Telegram Stars",
+                    callback_data="pay_stars"
                 )
-            ]
+            ],
+            [
+                InlineKeyboardButton(
+                    text="💳 СБП",
+                    callback_data="pay_sbp"
+                )
+            ],
         ]
     )
 
 
 # ============================================================
-# ОТМЕНА
+# TELEGRAM STARS
 # ============================================================
 
-def cancel_keyboard():
+def stars_buy_keyboard():
 
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="❌ Отмена",
-                    callback_data="cancel"
+                    text="⭐ 1 месяц — 70 Stars",
+                    callback_data="stars_30"
                 )
-            ]
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⭐ 3 месяца — 190 Stars",
+                    callback_data="stars_90"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⭐ 6 месяцев — 350 Stars",
+                    callback_data="stars_180"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⭐ 12 месяцев — 700 Stars",
+                    callback_data="stars_365"
+                )
+            ],
         ]
     )
 
 
 # ============================================================
-# НАЗАД В МЕНЮ
+# СБП
 # ============================================================
 
-def menu_keyboard():
+def sbp_buy_keyboard():
 
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="🏠 Главное меню",
-                    callback_data="main_menu"
+                    text="💳 1 месяц — 129₽",
+                    callback_data="sbp_30"
                 )
-            ]
+            ],
+            [
+                InlineKeyboardButton(
+                    text="💳 3 месяца — 379₽",
+                    callback_data="sbp_90"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="💳 6 месяцев — 659₽",
+                    callback_data="sbp_180"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="💳 12 месяцев — 1089₽",
+                    callback_data="sbp_365"
+                )
+            ],
+        ]
+    )
+
+
+# ============================================================
+# ЛИЧНЫЙ КАБИНЕТ
+# ============================================================
+
+def cabinet_keyboard():
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="⚡ Подключиться",
+                    callback_data="get_link"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🔄 Обновить серверы",
+                    callback_data="refresh_subscription"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🎟 Промокод",
+                    callback_data="enter_promo"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🎫 Продлить",
+                    callback_data="renew"
+                )
+            ],
+        ]
+    )
+
+
+# ============================================================
+# ПРИНЯТИЕ УСЛОВИЙ
+# ============================================================
+
+def accept_terms_keyboard():
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="📄 Документы",
+                    url="https://bdt2010.github.io/managerorlvpnsite/"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="✅ Принимаю",
+                    callback_data="accept_terms"
+                )
+            ],
         ]
     )
