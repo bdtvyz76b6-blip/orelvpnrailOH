@@ -146,12 +146,6 @@ def cabinet_keyboard():
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="🔗 Получить ссылку",
-                    callback_data="get_link"
-                )
-            ],
-            [
-                InlineKeyboardButton(
                     text="⚡ Подключиться",
                     callback_data="connect"
                 )
