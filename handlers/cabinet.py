@@ -1,4 +1,5 @@
 import os
+import html
 
 from aiogram import Router, F
 from aiogram.types import (
@@ -41,6 +42,7 @@ PUBLIC_SITE_URL = os.getenv(
     "https://orelvpnrailoh-1.onrender.com",
 ).rstrip("/")
 
+
 SUBSCRIPTION_PREFIX = os.getenv(
     "SUBSCRIPTION_PREFIX",
     "2ix847xy",
@@ -48,14 +50,59 @@ SUBSCRIPTION_PREFIX = os.getenv(
 
 
 # ============================================================
-# ПЕРСОНАЛЬНАЯ СТРАНИЦА ПОДПИСКИ
+# ПЕРСОНАЛЬНЫЕ URL
 # ============================================================
+
+def get_subscription_token(user_id: int) -> str:
+
+    return (
+        f"{SUBSCRIPTION_PREFIX}"
+        f"{user_id}"
+    )
+
 
 def get_subscription_page_url(user_id: int) -> str:
 
-    token = f"{SUBSCRIPTION_PREFIX}{user_id}"
+    token = get_subscription_token(user_id)
 
-    return f"{PUBLIC_SITE_URL}/s/{token}"
+    return (
+        f"{PUBLIC_SITE_URL}"
+        f"/s/{token}"
+    )
+
+
+def get_subscription_url(user_id: int) -> str:
+
+    token = get_subscription_token(user_id)
+
+    return (
+        f"{PUBLIC_SITE_URL}"
+        f"/sub/{token}"
+    )
+
+
+def get_happ_url(user_id: int) -> str:
+
+    subscription_url = get_subscription_url(
+        user_id
+    )
+
+    return (
+        "happ://add/"
+        + subscription_url
+    )
+
+
+def get_incy_url(user_id: int) -> str:
+
+    subscription_url = get_subscription_url(
+        user_id
+    )
+
+    return (
+        "incy://add/"
+        + subscription_url
+    )
 
 
 # ============================================================
@@ -88,12 +135,14 @@ async def show_cabinet(message: Message):
     user_id = message.from_user.id
 
     # --------------------------------------------------------
-    # Обновляем состояние подписки
+    # Проверяем состояние подписки
     # --------------------------------------------------------
 
     try:
 
-        check_user_subscription(user_id)
+        check_user_subscription(
+            user_id
+        )
 
     except Exception as e:
 
@@ -106,7 +155,20 @@ async def show_cabinet(message: Message):
     # Получаем пользователя
     # --------------------------------------------------------
 
-    user = get_user(user_id)
+    try:
+
+        user = get_user(
+            user_id
+        )
+
+    except Exception as e:
+
+        print(
+            f"❌ Ошибка получения пользователя "
+            f"{user_id}: {e}"
+        )
+
+        user = None
 
     if not user:
 
@@ -117,16 +179,13 @@ async def show_cabinet(message: Message):
         return
 
     # --------------------------------------------------------
-    # Данные подписки
+    # Дата окончания
     # --------------------------------------------------------
 
     until = user[4] or ""
 
-    # --------------------------------------------------------
-    # Дата окончания
-    # --------------------------------------------------------
-
     until_text = "—"
+
     days = 0
 
     if until:
@@ -146,7 +205,9 @@ async def show_cabinet(message: Message):
 
             days = max(
                 0,
-                (expire_date - today).days
+                (
+                    expire_date - today
+                ).days
             )
 
         except Exception as e:
@@ -157,21 +218,25 @@ async def show_cabinet(message: Message):
             )
 
     # ========================================================
-    # КОРОТКИЙ ДЕЛОВОЙ КАБИНЕТ
+    # КАБИНЕТ
     # ========================================================
 
     text = f"""
 ☂️ <b>ixxy VPN</b>
 
-👥 <b>Личный кабинет</b>
+👤 <b>Личный кабинет</b>
 
-🎫 Подписка
-📅 До: <b>{until_text}</b>
-⏳ Осталось: <b>{days} дн.</b>
+🎫 <b>Подписка</b>
+
+📅 Активна до:
+<b>{until_text}</b>
+
+⏳ Осталось:
+<b>{days} дн.</b>
 """
 
     # ========================================================
-    # КНОПКИ КАБИНЕТА
+    # ОТПРАВЛЯЕМ КАБИНЕТ
     # ========================================================
 
     await message.answer(
@@ -195,7 +260,7 @@ async def get_link(
     user_id = callback.from_user.id
 
     # --------------------------------------------------------
-    # Проверка подписки
+    # Проверяем подписку
     # --------------------------------------------------------
 
     try:
@@ -226,7 +291,20 @@ async def get_link(
     # Проверяем пользователя
     # --------------------------------------------------------
 
-    user = get_user(user_id)
+    try:
+
+        user = get_user(
+            user_id
+        )
+
+    except Exception as e:
+
+        print(
+            f"❌ Ошибка получения пользователя "
+            f"{user_id}: {e}"
+        )
+
+        user = None
 
     if not user:
 
@@ -237,36 +315,96 @@ async def get_link(
 
         return
 
-    # --------------------------------------------------------
-    # Персональная страница
-    # --------------------------------------------------------
+    # ========================================================
+    # ПЕРСОНАЛЬНЫЕ ССЫЛКИ
+    # ========================================================
 
-    site_url = get_subscription_page_url(
-        user_id
+    subscription_url = (
+        get_subscription_url(
+            user_id
+        )
     )
+
+    site_url = (
+        get_subscription_page_url(
+            user_id
+        )
+    )
+
+    happ_url = (
+        get_happ_url(
+            user_id
+        )
+    )
+
+    incy_url = (
+        get_incy_url(
+            user_id
+        )
+    )
+
+    # ========================================================
+    # ЭКРАН ПОДКЛЮЧЕНИЯ
+    # ========================================================
+
+    text = f"""
+⚡ <b>Подключение ixxy VPN</b>
+
+Ваша персональная ссылка:
+
+<code>{html.escape(subscription_url)}</code>
+
+━━━━━━━━━━━━━━━━━━
+
+📲 <b>Как подключиться:</b>
+
+1️⃣ Скопируйте ссылку выше.
+
+2️⃣ Добавьте её в приложение
+<b>Happ</b> или <b>INCY</b>.
+
+3️⃣ Либо откройте страницу
+подключения через сайт ixxy VPN.
+
+🔐 Ссылка персональная — не передавайте её другим людям.
+"""
+
+    # ========================================================
+    # КНОПКИ
+    # ========================================================
 
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="🌐 Открыть страницу",
+                    text="📲 Открыть Happ",
+                    url=happ_url,
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🚀 Открыть INCY",
+                    url=incy_url,
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🌐 Подключиться через сайт",
                     url=site_url,
-                )
-            ]
+                ),
+            ],
         ]
     )
 
+    # ========================================================
+    # ОТПРАВЛЯЕМ
+    # ========================================================
+
     await callback.message.answer(
-        """
-⚡ <b>Подключение ixxy VPN</b>
-
-Откройте вашу персональную
-страницу подключения.
-
-👇 Нажмите кнопку ниже.
-""",
+        text,
         reply_markup=keyboard,
         parse_mode="HTML",
+        disable_web_page_preview=True,
     )
 
     await callback.answer()
@@ -317,7 +455,20 @@ async def refresh_subscription(
     # Получаем пользователя
     # --------------------------------------------------------
 
-    user = get_user(user_id)
+    try:
+
+        user = get_user(
+            user_id
+        )
+
+    except Exception as e:
+
+        print(
+            f"❌ Ошибка получения пользователя "
+            f"{user_id}: {e}"
+        )
+
+        user = None
 
     if not user:
 
@@ -491,7 +642,9 @@ async def activate_promo(
     # Не найден
     # --------------------------------------------------------
 
-    if result.get("reason") == "not_found":
+    if result.get(
+        "reason"
+    ) == "not_found":
 
         await state.clear()
 
@@ -505,7 +658,9 @@ async def activate_promo(
     # Уже использован
     # --------------------------------------------------------
 
-    if result.get("reason") == "already_used":
+    if result.get(
+        "reason"
+    ) == "already_used":
 
         await state.clear()
 
@@ -519,7 +674,9 @@ async def activate_promo(
     # Пользователь не найден
     # --------------------------------------------------------
 
-    if result.get("reason") == "user_not_found":
+    if result.get(
+        "reason"
+    ) == "user_not_found":
 
         await state.clear()
 
@@ -533,7 +690,9 @@ async def activate_promo(
     # Общая ошибка
     # --------------------------------------------------------
 
-    if not result.get("success"):
+    if not result.get(
+        "success"
+    ):
 
         await state.clear()
 
@@ -590,7 +749,9 @@ async def activate_promo(
 
     except Exception:
 
-        date_text = str(new_date)
+        date_text = str(
+            new_date
+        )
 
     await state.clear()
 
@@ -602,11 +763,14 @@ async def activate_promo(
         f"""
 🎉 <b>Промокод активирован</b>
 
-🎟 Код: <code>{code}</code>
+🎟 Код:
+<code>{html.escape(code)}</code>
 
-➕ Начислено: <b>{days} дней</b>
+➕ Начислено:
+<b>{days} дней</b>
 
-📅 Подписка до: <b>{date_text}</b>
+📅 Подписка до:
+<b>{html.escape(date_text)}</b>
 
 🔄 Серверы обновлены.
 """,
