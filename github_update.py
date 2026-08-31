@@ -1,4 +1,6 @@
 import os
+import time
+import threading
 import requests
 
 from datetime import datetime, timedelta
@@ -23,6 +25,23 @@ SUBSCRIPTION_PREFIX = os.getenv(
     "SUBSCRIPTION_PREFIX",
     "2ix847xy",
 ).strip()
+
+
+# ============================================================
+# АВТОМАТИЧЕСКАЯ ПРОВЕРКА ПОДПИСОК
+# ============================================================
+
+AUTO_SYNC_ENABLED = os.getenv(
+    "AUTO_SYNC_ENABLED",
+    "1",
+).strip() == "1"
+
+AUTO_SYNC_INTERVAL = int(
+    os.getenv(
+        "AUTO_SYNC_INTERVAL",
+        "600",  # 10 минут
+    )
+)
 
 
 # ============================================================
@@ -180,7 +199,7 @@ def save_user_subscription(
 NEW_USER_TEMPLATE = """
 #profile-title: ☂️ ixxy vpn
 #profile-update-interval: 1
-#announce: Активируйте подписку через @orelvpntopbot
+#announce: 🔒 Подписка не активна • Оформите подписку через @orelvpntopbot
 
 vless://00000000-0000-0000-0000-000000000000@expired.invalid:443?type=tcp&security=reality&sni=expired.invalid&fp=chrome&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&sid=&flow=xtls-rprx-vision#⛔ Активируйте подписку
 """.strip()
@@ -256,11 +275,20 @@ def activate_subscription_file(
 
     servers = load_servers()
 
+    # ВАЖНО:
+    # announce находится в одну строку.
+    # Никаких переносов внутри announce.
+
+    announce = (
+        f"🟢 Подписка активна • "
+        f"до {date} • "
+        f"🆔 ID: {user_id}"
+    )
+
     content = (
-        f"#profile-title: ☂️ ixxy vpn\n\n"
-        f"#profile-update-interval: 1\n\n"
-        f"#announce: ‼️ Подписка активна "
-        f"до {date} ‼️ __ 🆔 ID: {user_id}\n\n"
+        f"#profile-title: ☂️ ixxy vpn\n"
+        f"#profile-update-interval: 1\n"
+        f"#announce: {announce}\n\n"
         f"{servers}"
     )
 
@@ -337,19 +365,19 @@ def update_subscription_file(
 
 def expire_subscription(user_id):
 
-    # --------------------------------------------------------
-    # ВАЖНО:
-    # ВСЕГДА берём именно no_servers.txt
-    # --------------------------------------------------------
+    # ВСЕГДА используем no_servers.txt
 
     no_servers = load_no_servers()
 
+    announce = (
+        "🔴 Подписка истекла • "
+        "Продлите подписку через @orelvpntopbot"
+    )
+
     content = (
-        f"#profile-title: ⛔ ixxy vpn\n\n"
-        f"#profile-update-interval: 1\n\n"
-        f"#announce: ‼️ Ваша подписка истекла "
-        f"или была отключена администратором. "
-        f"Зайдите в @orelvpntopbot\n\n"
+        f"#profile-title: ⛔ ixxy vpn\n"
+        f"#profile-update-interval: 1\n"
+        f"#announce: {announce}\n\n"
         f"{no_servers}"
     )
 
@@ -380,18 +408,46 @@ def expire_subscription(user_id):
 
 
 # ============================================================
+# АКТИВНЫЕ ТАРИФЫ
+# ============================================================
+
+ACTIVE_SUBSCRIPTIONS = {
+    "vip",
+    "trial",
+
+    # Совместимость с названиями тарифов
+    "👑 Орёл VPN",
+    "🎁 Пробный период",
+}
+
+
+# ============================================================
 # СИНХРОНИЗАЦИЯ
 # ============================================================
 
 def sync_all_active_users():
 
     print("━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    print("Начинаю синхронизацию...")
+    print("🔄 Начинаю синхронизацию...")
     print("━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
-    servers = load_servers()
-    no_servers = load_no_servers()
-    users = get_all_users()
+    try:
+        servers = load_servers()
+        no_servers = load_no_servers()
+        users = get_all_users()
+
+    except Exception as e:
+
+        print(
+            f"❌ Не удалось загрузить данные: {e}"
+        )
+
+        return {
+            "updated": 0,
+            "skipped": 0,
+            "expired": 0,
+            "errors": 1,
+        }
 
     updated = 0
     skipped = 0
@@ -410,18 +466,10 @@ def sync_all_active_users():
             subscription_until = user[4]
 
             # =================================================
-            # УЧИТЫВАЕМ ТОЛЬКО АКТИВНЫЕ ТАРИФЫ
+            # НЕАКТИВНЫЙ ТАРИФ
             # =================================================
 
-            if subscription not in (
-                "vip",
-                "trial",
-            ):
-
-                # ------------------------------------------------
-                # Если подписка не vip/trial — считаем её
-                # отключённой и ставим no_servers.
-                # ------------------------------------------------
+            if subscription not in ACTIVE_SUBSCRIPTIONS:
 
                 expire_subscription(
                     user_id
@@ -431,7 +479,7 @@ def sync_all_active_users():
 
                 print(
                     f"{user_id} — "
-                    f"отключён / нет активного тарифа"
+                    f"нет активной подписки"
                 )
 
                 continue
@@ -450,7 +498,7 @@ def sync_all_active_users():
 
                 print(
                     f"{user_id} — "
-                    f"нет даты подписки, установлен no_servers"
+                    f"нет даты подписки"
                 )
 
                 continue
@@ -469,7 +517,7 @@ def sync_all_active_users():
             except Exception:
 
                 print(
-                    f"Неверная дата у {user_id}: "
+                    f"❌ Неверная дата у {user_id}: "
                     f"{subscription_until}"
                 )
 
@@ -488,11 +536,10 @@ def sync_all_active_users():
             if expire_date < today:
 
                 content = (
-                    f"#profile-title: ⛔ ixxy vpn\n\n"
-                    f"#profile-update-interval: 1\n\n"
-                    f"#announce: ‼️ Ваша подписка истекла "
-                    f"или была отключена администратором. "
-                    f"Зайдите в @orelvpntopbot\n\n"
+                    f"#profile-title: ⛔ ixxy vpn\n"
+                    f"#profile-update-interval: 1\n"
+                    f"#announce: 🔴 Подписка истекла • "
+                    f"Продлите подписку через @orelvpntopbot\n\n"
                     f"{no_servers}"
                 )
 
@@ -504,7 +551,7 @@ def sync_all_active_users():
                 expired += 1
 
                 print(
-                    f"{user_id} — подписка истекла"
+                    f"{user_id} — 🔴 подписка истекла"
                 )
 
                 print(
@@ -522,11 +569,16 @@ def sync_all_active_users():
                 "%d.%m.%Y"
             )
 
+            announce = (
+                f"🟢 Подписка активна • "
+                f"до {display_date} • "
+                f"🆔 ID: {user_id}"
+            )
+
             content = (
-                f"#profile-title: ☂️ ixxy vpn\n\n"
-                f"#profile-update-interval: 1\n\n"
-                f"#announce: ‼️ Подписка активна "
-                f"до {display_date} ‼️ __ 🆔 ID: {user_id}\n\n"
+                f"#profile-title: ☂️ ixxy vpn\n"
+                f"#profile-update-interval: 1\n"
+                f"#announce: {announce}\n\n"
                 f"{servers}"
             )
 
@@ -539,7 +591,7 @@ def sync_all_active_users():
 
             print(
                 f"{user_id} — "
-                f"обновлён до {display_date}"
+                f"🟢 активна до {display_date}"
             )
 
         except Exception as e:
@@ -547,16 +599,16 @@ def sync_all_active_users():
             errors += 1
 
             print(
-                f"Ошибка пользователя "
+                f"❌ Ошибка пользователя "
                 f"{user_id}: {e}"
             )
 
     print("━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    print("Синхронизация завершена")
-    print(f"Обновлено: {updated}")
-    print(f"Истекло/отключено: {expired}")
-    print(f"Пропущено: {skipped}")
-    print(f"Ошибок: {errors}")
+    print("✅ Синхронизация завершена")
+    print(f"🟢 Обновлено: {updated}")
+    print(f"🔴 Истекло/отключено: {expired}")
+    print(f"⚪ Пропущено: {skipped}")
+    print(f"❌ Ошибок: {errors}")
     print("━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
     return {
@@ -574,8 +626,59 @@ def sync_all_active_users():
 def sync_servers_update():
 
     print(
-        "Запущено обновление серверов "
+        "🔄 Запущено обновление серверов "
         "из админ-панели"
     )
 
     return sync_all_active_users()
+
+
+# ============================================================
+# АВТОМАТИЧЕСКИЙ СИНХРОНИЗАТОР
+# ============================================================
+
+def _auto_sync_worker():
+
+    print("━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    print("🤖 Автоматическая проверка подписок запущена")
+    print(
+        f"⏱ Интервал: "
+        f"{AUTO_SYNC_INTERVAL} секунд"
+    )
+    print("━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+    # Небольшая задержка после запуска приложения,
+    # чтобы база и остальные модули успели загрузиться.
+
+    time.sleep(15)
+
+    while True:
+
+        try:
+
+            sync_all_active_users()
+
+        except Exception as e:
+
+            print(
+                f"❌ Ошибка автоматической синхронизации: {e}"
+            )
+
+        time.sleep(
+            AUTO_SYNC_INTERVAL
+        )
+
+
+# ============================================================
+# ЗАПУСК АВТОМАТИЧЕСКОГО СИНХРОНИЗАТОРА
+# ============================================================
+
+if AUTO_SYNC_ENABLED:
+
+    sync_thread = threading.Thread(
+        target=_auto_sync_worker,
+        daemon=True,
+        name="ixxy-vpn-auto-sync",
+    )
+
+    sync_thread.start()
