@@ -1,5 +1,4 @@
 import os
-import html
 
 from aiogram import Router, F
 from aiogram.types import (
@@ -50,7 +49,14 @@ SUBSCRIPTION_PREFIX = os.getenv(
 
 
 # ============================================================
-# ПЕРСОНАЛЬНЫЕ URL
+# TELEGRAM
+# ============================================================
+
+TELEGRAM_URL = "https://t.me/orelvpntopbot"
+
+
+# ============================================================
+# ПЕРСОНАЛЬНЫЙ ТОКЕН
 # ============================================================
 
 def get_subscription_token(user_id: int) -> str:
@@ -61,9 +67,17 @@ def get_subscription_token(user_id: int) -> str:
     )
 
 
-def get_subscription_page_url(user_id: int) -> str:
+# ============================================================
+# ССЫЛКА СТРАНИЦЫ
+# ============================================================
 
-    token = get_subscription_token(user_id)
+def get_subscription_page_url(
+    user_id: int
+) -> str:
+
+    token = get_subscription_token(
+        user_id
+    )
 
     return (
         f"{PUBLIC_SITE_URL}"
@@ -71,37 +85,21 @@ def get_subscription_page_url(user_id: int) -> str:
     )
 
 
-def get_subscription_url(user_id: int) -> str:
+# ============================================================
+# ПРЯМАЯ ССЫЛКА ПОДПИСКИ
+# ============================================================
 
-    token = get_subscription_token(user_id)
+def get_subscription_url(
+    user_id: int
+) -> str:
+
+    token = get_subscription_token(
+        user_id
+    )
 
     return (
         f"{PUBLIC_SITE_URL}"
         f"/sub/{token}"
-    )
-
-
-def get_happ_url(user_id: int) -> str:
-
-    subscription_url = get_subscription_url(
-        user_id
-    )
-
-    return (
-        "happ://add/"
-        + subscription_url
-    )
-
-
-def get_incy_url(user_id: int) -> str:
-
-    subscription_url = get_subscription_url(
-        user_id
-    )
-
-    return (
-        "incy://add/"
-        + subscription_url
     )
 
 
@@ -121,21 +119,27 @@ class PromoState(StatesGroup):
 @router.message(
     F.text == "👤 Личный кабинет"
 )
-async def cabinet(message: Message):
+async def cabinet(
+    message: Message
+):
 
-    await show_cabinet(message)
+    await show_cabinet(
+        message
+    )
 
 
 # ============================================================
 # ПОКАЗ КАБИНЕТА
 # ============================================================
 
-async def show_cabinet(message: Message):
+async def show_cabinet(
+    message: Message
+):
 
     user_id = message.from_user.id
 
     # --------------------------------------------------------
-    # Проверяем состояние подписки
+    # Проверяем подписку
     # --------------------------------------------------------
 
     try:
@@ -206,7 +210,8 @@ async def show_cabinet(message: Message):
             days = max(
                 0,
                 (
-                    expire_date - today
+                    expire_date
+                    - today
                 ).days
             )
 
@@ -226,6 +231,8 @@ async def show_cabinet(message: Message):
 
 👤 <b>Личный кабинет</b>
 
+━━━━━━━━━━━━━━━━━━
+
 🎫 <b>Подписка</b>
 
 📅 Активна до:
@@ -233,10 +240,14 @@ async def show_cabinet(message: Message):
 
 ⏳ Осталось:
 <b>{days} дн.</b>
+
+━━━━━━━━━━━━━━━━━━
+
+Выберите действие ниже 👇
 """
 
     # ========================================================
-    # ОТПРАВЛЯЕМ КАБИНЕТ
+    # КНОПКИ
     # ========================================================
 
     await message.answer(
@@ -260,7 +271,7 @@ async def get_link(
     user_id = callback.from_user.id
 
     # --------------------------------------------------------
-    # Проверяем подписку
+    # Проверка подписки
     # --------------------------------------------------------
 
     try:
@@ -288,7 +299,7 @@ async def get_link(
         return
 
     # --------------------------------------------------------
-    # Проверяем пользователя
+    # Пользователь
     # --------------------------------------------------------
 
     try:
@@ -316,58 +327,16 @@ async def get_link(
         return
 
     # ========================================================
-    # ПЕРСОНАЛЬНЫЕ ССЫЛКИ
+    # ССЫЛКИ
     # ========================================================
 
-    subscription_url = (
-        get_subscription_url(
-            user_id
-        )
+    site_url = get_subscription_page_url(
+        user_id
     )
 
-    site_url = (
-        get_subscription_page_url(
-            user_id
-        )
+    subscription_url = get_subscription_url(
+        user_id
     )
-
-    happ_url = (
-        get_happ_url(
-            user_id
-        )
-    )
-
-    incy_url = (
-        get_incy_url(
-            user_id
-        )
-    )
-
-    # ========================================================
-    # ЭКРАН ПОДКЛЮЧЕНИЯ
-    # ========================================================
-
-    text = f"""
-⚡ <b>Подключение ixxy VPN</b>
-
-Ваша персональная ссылка:
-
-<code>{html.escape(subscription_url)}</code>
-
-━━━━━━━━━━━━━━━━━━
-
-📲 <b>Как подключиться:</b>
-
-1️⃣ Скопируйте ссылку выше.
-
-2️⃣ Добавьте её в приложение
-<b>Happ</b> или <b>INCY</b>.
-
-3️⃣ Либо откройте страницу
-подключения через сайт ixxy VPN.
-
-🔐 Ссылка персональная — не передавайте её другим людям.
-"""
 
     # ========================================================
     # КНОПКИ
@@ -375,39 +344,140 @@ async def get_link(
 
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="📲 Открыть Happ",
-                    url=happ_url,
-                ),
-            ],
-            [
-                InlineKeyboardButton(
-                    text="🚀 Открыть INCY",
-                    url=incy_url,
-                ),
-            ],
+
             [
                 InlineKeyboardButton(
                     text="🌐 Подключиться через сайт",
                     url=site_url,
-                ),
+                )
             ],
+
+            [
+                InlineKeyboardButton(
+                    text="📋 Скопировать ссылку",
+                    callback_data="copy_subscription_link",
+                )
+            ],
+
         ]
     )
 
     # ========================================================
-    # ОТПРАВЛЯЕМ
+    # СООБЩЕНИЕ
     # ========================================================
+
+    text = f"""
+⚡ <b>Подключение ixxy VPN</b>
+
+Ваша персональная ссылка:
+
+<code>{subscription_url}</code>
+
+━━━━━━━━━━━━━━━━━━
+
+📲 <b>Вариант 1 — Happ</b>
+
+1. Скопируйте ссылку выше.
+2. Откройте приложение <b>Happ</b>.
+3. Добавьте эту ссылку как подписку.
+
+🚀 <b>Вариант 2 — INCY</b>
+
+1. Скопируйте ссылку выше.
+2. Откройте приложение <b>INCY</b>.
+3. Добавьте эту ссылку как подписку.
+
+🌐 <b>Вариант 3 — через сайт</b>
+
+Откройте персональную страницу —
+там можно подключиться через приложение
+и скопировать ссылку.
+
+👇 Выберите способ:
+"""
 
     await callback.message.answer(
         text,
         reply_markup=keyboard,
         parse_mode="HTML",
-        disable_web_page_preview=True,
     )
 
     await callback.answer()
+
+
+# ============================================================
+# КОПИРОВАНИЕ ССЫЛКИ
+# ============================================================
+
+@router.callback_query(
+    F.data == "copy_subscription_link"
+)
+async def copy_subscription_link(
+    callback: CallbackQuery
+):
+
+    user_id = callback.from_user.id
+
+    # --------------------------------------------------------
+    # Проверка
+    # --------------------------------------------------------
+
+    try:
+
+        is_active = check_user_subscription(
+            user_id
+        )
+
+    except Exception as e:
+
+        print(
+            f"❌ Ошибка проверки подписки "
+            f"{user_id}: {e}"
+        )
+
+        is_active = False
+
+    if not is_active:
+
+        await callback.answer(
+            "❌ Подписка не активна",
+            show_alert=True,
+        )
+
+        return
+
+    # --------------------------------------------------------
+    # Ссылка
+    # --------------------------------------------------------
+
+    subscription_url = get_subscription_url(
+        user_id
+    )
+
+    # --------------------------------------------------------
+    # Отправляем ссылку отдельным сообщением
+    #
+    # Telegram сам позволит пользователю
+    # нажать/скопировать текст.
+    # --------------------------------------------------------
+
+    await callback.message.answer(
+        f"""
+📋 <b>Ваша ссылка подписки</b>
+
+<code>{subscription_url}</code>
+
+Нажмите и удерживайте ссылку,
+чтобы скопировать её.
+
+📲 Затем добавьте её в <b>Happ</b> или <b>INCY</b>.
+""",
+        parse_mode="HTML",
+    )
+
+    await callback.answer(
+        "📋 Ссылка отправлена"
+    )
 
 
 # ============================================================
@@ -424,7 +494,7 @@ async def refresh_subscription(
     user_id = callback.from_user.id
 
     # --------------------------------------------------------
-    # Проверяем подписку
+    # Проверка подписки
     # --------------------------------------------------------
 
     try:
@@ -452,7 +522,7 @@ async def refresh_subscription(
         return
 
     # --------------------------------------------------------
-    # Получаем пользователя
+    # Пользователь
     # --------------------------------------------------------
 
     try:
@@ -479,6 +549,10 @@ async def refresh_subscription(
 
         return
 
+    # --------------------------------------------------------
+    # Дата
+    # --------------------------------------------------------
+
     until = user[4] or ""
 
     if not until:
@@ -491,7 +565,7 @@ async def refresh_subscription(
         return
 
     # --------------------------------------------------------
-    # Дата
+    # Парсим дату
     # --------------------------------------------------------
 
     try:
@@ -520,7 +594,7 @@ async def refresh_subscription(
         return
 
     # --------------------------------------------------------
-    # Обновляем
+    # Обновление
     # --------------------------------------------------------
 
     await callback.answer(
@@ -606,6 +680,10 @@ async def activate_promo(
 
         return
 
+    # --------------------------------------------------------
+    # Код
+    # --------------------------------------------------------
+
     code = (
         message.text
         .strip()
@@ -613,7 +691,7 @@ async def activate_promo(
     )
 
     # --------------------------------------------------------
-    # Активируем промокод
+    # Активируем
     # --------------------------------------------------------
 
     try:
@@ -671,7 +749,7 @@ async def activate_promo(
         return
 
     # --------------------------------------------------------
-    # Пользователь не найден
+    # Пользователь
     # --------------------------------------------------------
 
     if result.get(
@@ -687,7 +765,7 @@ async def activate_promo(
         return
 
     # --------------------------------------------------------
-    # Общая ошибка
+    # Ошибка
     # --------------------------------------------------------
 
     if not result.get(
@@ -703,7 +781,7 @@ async def activate_promo(
         return
 
     # --------------------------------------------------------
-    # Успешно
+    # Данные
     # --------------------------------------------------------
 
     days = result.get(
@@ -717,7 +795,7 @@ async def activate_promo(
     )
 
     # --------------------------------------------------------
-    # Обновляем серверы
+    # Обновляем сервер
     # --------------------------------------------------------
 
     try:
@@ -764,13 +842,13 @@ async def activate_promo(
 🎉 <b>Промокод активирован</b>
 
 🎟 Код:
-<code>{html.escape(code)}</code>
+<code>{code}</code>
 
 ➕ Начислено:
 <b>{days} дней</b>
 
 📅 Подписка до:
-<b>{html.escape(date_text)}</b>
+<b>{date_text}</b>
 
 🔄 Серверы обновлены.
 """,
