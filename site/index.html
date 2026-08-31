@@ -2,136 +2,593 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
+
     <meta
         name="viewport"
         content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     >
+
     <meta
         name="theme-color"
-        content="#08090d"
+        content="#050507"
     >
+
     <meta
         name="description"
-        content="ixxy VPN — быстрое подключение к VPN"
+        content="ixxy VPN — персональный VPN"
     >
+
     <title>ixxy VPN</title>
+
     <link
         rel="stylesheet"
         href="/style.css"
     >
 </head>
+
 <body>
+
+    <!-- =====================================================
+         BACKGROUND
+    ====================================================== -->
+
     <div class="background">
-        <div class="glow glow-one"></div>
-        <div class="glow glow-two"></div>
+
+        <div class="noise"></div>
+
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+        <div class="orb orb-3"></div>
+
+        <div class="grid"></div>
+
     </div>
-    <main class="page">
-        <section class="card">
-            <div class="logo">
-                <span>☂️</span>
+
+
+    <!-- =====================================================
+         APP
+    ====================================================== -->
+
+    <main class="app">
+
+        <!-- TOP -->
+
+        <header class="topbar">
+
+            <div class="brand-mini">
+
+                <div class="brand-mini-icon">
+                    ☂️
+                </div>
+
+                <div>
+                    <strong>ixxy</strong>
+                    <span>VPN</span>
+                </div>
+
             </div>
-            <div class="brand">
-                <h1>ixxy VPN</h1>
-                <p>Безопасное подключение в один тап</p>
+
+            <div class="online-badge">
+
+                <span class="online-dot"></span>
+
+                <span>ONLINE</span>
+
             </div>
-            <div class="status">
-                <span class="status-dot"></span>
-                <span>Подписка готова</span>
+
+        </header>
+
+
+        <!-- HERO -->
+
+        <section class="hero">
+
+            <div class="hero-icon-wrap">
+
+                <div class="hero-ring ring-1"></div>
+                <div class="hero-ring ring-2"></div>
+
+                <div class="hero-icon">
+                    ☂️
+                </div>
+
             </div>
-            <div class="divider"></div>
-            <h2>Добавьте VPN</h2>
-            <p class="subtitle">
-                Выберите приложение, в которое хотите
-                добавить подписку.
+
+
+            <div class="hero-label">
+                PERSONAL VPN
+            </div>
+
+            <h1>
+                Твой интернет.
+                <br>
+                <span>Твои правила.</span>
+            </h1>
+
+            <p>
+                Безопасное подключение к ixxy VPN
+                в одно касание.
             </p>
-            <div class="buttons">
+
+        </section>
+
+
+        <!-- MAIN CARD -->
+
+        <section class="main-card">
+
+            <!-- STATUS -->
+
+            <div class="status-row">
+
+                <div class="status-main">
+
+                    <div class="status-icon active">
+                        ✓
+                    </div>
+
+                    <div>
+
+                        <span class="status-caption">
+                            СТАТУС
+                        </span>
+
+                        <strong>
+                            Подписка готова
+                        </strong>
+
+                    </div>
+
+                </div>
+
+                <div class="status-arrow">
+                    ●
+                </div>
+
+            </div>
+
+
+            <!-- DIVIDER -->
+
+            <div class="line"></div>
+
+
+            <!-- CONNECTION -->
+
+            <div class="section-head">
+
+                <div>
+
+                    <span class="eyebrow">
+                        QUICK CONNECT
+                    </span>
+
+                    <h2>
+                        Подключить VPN
+                    </h2>
+
+                </div>
+
+                <div class="bolt">
+                    ⚡
+                </div>
+
+            </div>
+
+            <p class="section-description">
+                Выберите приложение, которое используете
+                для подключения к вашей подписке.
+            </p>
+
+
+            <!-- APPS -->
+
+            <div class="app-list">
+
+
+                <!-- HAPP -->
+
                 <button
-                    class="app-button happ"
+                    class="vpn-app happ"
                     id="happButton"
                     type="button"
                 >
-                    <span class="button-icon">🚀</span>
-                    <span class="button-text">
-                        <strong>Добавить в Happ</strong>
-                        <small>Открыть приложение</small>
-                    </span>
-                    <span class="arrow">›</span>
+
+                    <div class="app-logo">
+                        🚀
+                    </div>
+
+                    <div class="app-info">
+
+                        <strong>
+                            Happ
+                        </strong>
+
+                        <span>
+                            Быстрое подключение
+                        </span>
+
+                    </div>
+
+                    <div class="app-action">
+
+                        <span>
+                            ОТКРЫТЬ
+                        </span>
+
+                        <b>
+                            →
+                        </b>
+
+                    </div>
+
                 </button>
+
+
+                <!-- INCY -->
+
                 <button
-                    class="app-button incy"
+                    class="vpn-app incy"
                     id="incyButton"
                     type="button"
                 >
-                    <span class="button-icon">⚡</span>
-                    <span class="button-text">
-                        <strong>Добавить в INCY</strong>
-                        <small>Открыть приложение</small>
-                    </span>
-                    <span class="arrow">›</span>
+
+                    <div class="app-logo">
+                        ⚡
+                    </div>
+
+                    <div class="app-info">
+
+                        <strong>
+                            INCY
+                        </strong>
+
+                        <span>
+                            Быстрое подключение
+                        </span>
+
+                    </div>
+
+                    <div class="app-action">
+
+                        <span>
+                            ОТКРЫТЬ
+                        </span>
+
+                        <b>
+                            →
+                        </b>
+
+                    </div>
+
                 </button>
+
             </div>
-            <div class="copy-section">
-                <div class="copy-title">
-                    <span>🔗</span>
-                    <span>Ссылка подписки</span>
+
+
+            <!-- SUBSCRIPTION -->
+
+            <div class="subscription">
+
+                <div class="subscription-head">
+
+                    <div>
+
+                        <span class="eyebrow">
+                            YOUR SUBSCRIPTION
+                        </span>
+
+                        <h3>
+                            Ссылка подписки
+                        </h3>
+
+                    </div>
+
+                    <div class="link-icon">
+                        🔗
+                    </div>
+
                 </div>
-                <div class="link-box">
-                    <span id="subscriptionLink">
+
+
+                <div
+                    class="link-container"
+                    id="linkContainer"
+                >
+
+                    <div class="link-status">
+                        <span></span>
+                    </div>
+
+                    <div
+                        class="link-text"
+                        id="subscriptionLink"
+                    >
                         Подготовка ссылки...
-                    </span>
+                    </div>
+
+                    <button
+                        class="link-copy-mini"
+                        id="copyMiniButton"
+                        type="button"
+                        aria-label="Скопировать"
+                    >
+                        ⧉
+                    </button>
+
                 </div>
+
+
                 <button
                     class="copy-button"
                     id="copyButton"
                     type="button"
                 >
-                    📋 Скопировать ссылку
+
+                    <span class="copy-symbol">
+                        ⧉
+                    </span>
+
+                    <span>
+                        Скопировать ссылку
+                    </span>
+
+                    <span class="copy-arrow">
+                        →
+                    </span>
+
                 </button>
+
             </div>
-            <div class="instruction">
-                <div class="instruction-title">
-                    <span>💡</span>
-                    <span>Как подключить</span>
+
+
+            <!-- FEATURES -->
+
+            <div class="features">
+
+                <div class="feature">
+
+                    <div class="feature-icon">
+                        🛡
+                    </div>
+
+                    <div>
+                        <strong>
+                            Защищено
+                        </strong>
+
+                        <span>
+                            Шифрование соединения
+                        </span>
+                    </div>
+
                 </div>
+
+
+                <div class="feature">
+
+                    <div class="feature-icon">
+                        ⚡
+                    </div>
+
+                    <div>
+                        <strong>
+                            Быстро
+                        </strong>
+
+                        <span>
+                            Оптимальное соединение
+                        </span>
+                    </div>
+
+                </div>
+
+
+                <div class="feature">
+
+                    <div class="feature-icon">
+                        🔒
+                    </div>
+
+                    <div>
+                        <strong>
+                            Приватно
+                        </strong>
+
+                        <span>
+                            Ваши данные защищены
+                        </span>
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <!-- INSTRUCTIONS -->
+
+            <div class="instructions">
+
+                <div class="instructions-head">
+
+                    <div class="instructions-number">
+                        ?
+                    </div>
+
+                    <div>
+
+                        <span class="eyebrow">
+                            GUIDE
+                        </span>
+
+                        <h3>
+                            Как подключиться
+                        </h3>
+
+                    </div>
+
+                </div>
+
+
                 <div class="steps">
+
                     <div class="step">
-                        <span class="step-number">1</span>
-                        <div>
-                            <strong>Выберите приложение</strong>
-                            <p>Happ или INCY</p>
+
+                        <div class="step-number">
+                            01
                         </div>
+
+                        <div class="step-content">
+
+                            <strong>
+                                Выберите приложение
+                            </strong>
+
+                            <span>
+                                Happ или INCY
+                            </span>
+
+                        </div>
+
+                        <div class="step-check">
+                            ✓
+                        </div>
+
                     </div>
+
+
                     <div class="step">
-                        <span class="step-number">2</span>
-                        <div>
-                            <strong>Добавьте подписку</strong>
-                            <p>Нажмите кнопку выше</p>
+
+                        <div class="step-number">
+                            02
                         </div>
+
+                        <div class="step-content">
+
+                            <strong>
+                                Добавьте подписку
+                            </strong>
+
+                            <span>
+                                Нажмите кнопку подключения
+                            </span>
+
+                        </div>
+
+                        <div class="step-check">
+                            ✓
+                        </div>
+
                     </div>
+
+
                     <div class="step">
-                        <span class="step-number">3</span>
-                        <div>
-                            <strong>Подключитесь</strong>
-                            <p>Откройте приложение и включите VPN</p>
+
+                        <div class="step-number">
+                            03
                         </div>
+
+                        <div class="step-content">
+
+                            <strong>
+                                Включите VPN
+                            </strong>
+
+                            <span>
+                                Готово — можно пользоваться
+                            </span>
+
+                        </div>
+
+                        <div class="step-check">
+                            ✓
+                        </div>
+
                     </div>
+
                 </div>
+
             </div>
-            <footer>
-                <span>☂️</span>
-                <span>ixxy VPN</span>
-                <span>•</span>
-                <span>Secure connection</span>
-            </footer>
+
+
+            <!-- TELEGRAM -->
+
+            <a
+                class="telegram-button"
+                href="https://t.me/orelvpntopbot"
+            >
+
+                <span class="telegram-icon">
+                    ✈
+                </span>
+
+                <span>
+                    Открыть Telegram-бот
+                </span>
+
+                <span>
+                    →
+                </span>
+
+            </a>
+
         </section>
+
+
+        <!-- FOOTER -->
+
+        <footer>
+
+            <div class="footer-logo">
+                ☂️
+            </div>
+
+            <span>
+                ixxy VPN
+            </span>
+
+            <i>•</i>
+
+            <span>
+                Secure connection
+            </span>
+
+            <span class="footer-version">
+                v2.0
+            </span>
+
+        </footer>
+
     </main>
+
+
+    <!-- TOAST -->
+
     <div
         class="toast"
         id="toast"
     >
-        <span>✓</span>
-        <span id="toastText">Ссылка скопирована</span>
+
+        <div class="toast-icon">
+            ✓
+        </div>
+
+        <div>
+
+            <strong id="toastTitle">
+                Готово
+            </strong>
+
+            <span id="toastText">
+                Ссылка скопирована
+            </span>
+
+        </div>
+
     </div>
+
+
     <script src="/script.js"></script>
+
 </body>
 </html>
