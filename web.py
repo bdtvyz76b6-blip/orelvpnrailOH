@@ -454,7 +454,6 @@ def subscription_page(token):
 
     until = ""
 
-
     if user:
 
         try:
@@ -466,7 +465,6 @@ def subscription_page(token):
         except Exception:
             username = "нет"
 
-
         try:
             first_name = (
                 str(user[2])
@@ -476,7 +474,6 @@ def subscription_page(token):
         except Exception:
             first_name = "Пользователь"
 
-
         try:
             subscription = (
                 str(user[3])
@@ -485,7 +482,6 @@ def subscription_page(token):
             )
         except Exception:
             subscription = "none"
-
 
         try:
             until = (
@@ -509,7 +505,6 @@ def subscription_page(token):
     until_text = "—"
 
     days_left = 0
-
 
     # ========================================================
     # TARIFF
@@ -585,7 +580,6 @@ def subscription_page(token):
         incy_url,
     ) = get_urls(user_id)
 
-
     # ========================================================
     # SAFE HTML
     # ========================================================
@@ -614,7 +608,6 @@ def subscription_page(token):
         subscription_url
     )
 
-
     # ========================================================
     # SAFE JS
     # ========================================================
@@ -638,7 +631,6 @@ def subscription_page(token):
     js_telegram_url = js_escape(
         TELEGRAM_URL
     )
-
 
     # ========================================================
     # HTML
@@ -685,7 +677,6 @@ def subscription_page(token):
 
 <title>☂️ ixxy VPN — Моя подписка</title>
 
-
 <style>
 
 /* ============================================================
@@ -700,14 +691,12 @@ def subscription_page(token):
         transparent;
 }}
 
-
 html {{
 
     min-height: 100%;
 
     scroll-behavior: smooth;
 }}
-
 
 body {{
 
@@ -759,7 +748,6 @@ body {{
     overscroll-behavior-x: none;
 }}
 
-
 /* ============================================================
    VARIABLES
 ============================================================ */
@@ -789,7 +777,6 @@ body {{
     --red: #ff4d61;
 }}
 
-
 body.light {{
 
     --bg: #f3f4f8;
@@ -811,7 +798,6 @@ body.light {{
         rgba(0,0,0,.12);
 }}
 
-
 /* ============================================================
    CONTAINER
 ============================================================ */
@@ -824,7 +810,6 @@ body.light {{
 
     margin: 0 auto;
 }}
-
 
 /* ============================================================
    TOPBAR
@@ -842,7 +827,6 @@ body.light {{
 
     margin-bottom: 3px;
 }}
-
 
 .theme-toggle {{
 
@@ -877,12 +861,10 @@ body.light {{
         background .3s ease;
 }}
 
-
 .theme-toggle:active {{
 
     transform: scale(.91);
 }}
-
 
 /* ============================================================
    HEADER
@@ -894,7 +876,6 @@ body.light {{
 
     margin-bottom: 22px;
 }}
-
 
 .logo {{
 
@@ -930,7 +911,6 @@ body.light {{
         logoFloat 4s ease-in-out infinite;
 }}
 
-
 @keyframes logoFloat {{
 
     0%,100% {{
@@ -941,7 +921,6 @@ body.light {{
         transform: translateY(-4px);
     }}
 }}
-
 
 h1 {{
 
@@ -956,7 +935,6 @@ h1 {{
     letter-spacing: -.7px;
 }}
 
-
 .subtitle {{
 
     margin: 8px 0 0;
@@ -965,7 +943,6 @@ h1 {{
 
     font-size: 14px;
 }}
-
 
 /* ============================================================
    CARD
@@ -992,7 +969,6 @@ h1 {{
         cardIn .45s ease;
 }}
 
-
 @keyframes cardIn {{
 
     from {{
@@ -1005,7 +981,6 @@ h1 {{
         transform: translateY(0);
     }}
 }}
-
 
 /* ============================================================
    STATUS
@@ -1026,7 +1001,6 @@ h1 {{
     border: 1px solid var(--border);
 }}
 
-
 .status.active {{
 
     background:
@@ -1037,13 +1011,11 @@ h1 {{
         );
 }}
 
-
 .status.inactive {{
 
     background:
         rgba(255,60,80,.07);
 }}
-
 
 .status-left {{
 
@@ -1053,7 +1025,6 @@ h1 {{
 
     gap: 12px;
 }}
-
 
 .dot {{
 
@@ -1066,7 +1037,6 @@ h1 {{
     flex-shrink: 0;
 }}
 
-
 .active .dot {{
 
     background: var(--green);
@@ -1075,7 +1045,6 @@ h1 {{
         0 0 18px
         rgba(0,245,155,.9);
 }}
-
 
 .inactive .dot {{
 
@@ -1086,14 +1055,12 @@ h1 {{
         rgba(255,77,97,.65);
 }}
 
-
 .status-title {{
 
     font-size: 15px;
 
     font-weight: 900;
 }}
-
 
 .status-info {{
 
@@ -1104,12 +1071,10 @@ h1 {{
     font-size: 12px;
 }}
 
-
 .status-icon {{
 
     font-size: 21px;
 }}
-
 
 /* ============================================================
    INFO
@@ -1127,7 +1092,6 @@ h1 {{
     margin-top: 11px;
 }}
 
-
 .info-box {{
 
     padding: 16px;
@@ -1138,7 +1102,6 @@ h1 {{
 
     border: 1px solid var(--border);
 }}
-
 
 .info-label {{
 
@@ -1151,7 +1114,6 @@ h1 {{
     font-weight: 700;
 }}
 
-
 .info-value {{
 
     color: var(--text);
@@ -1163,18 +1125,15 @@ h1 {{
     word-break: break-word;
 }}
 
-
 .remaining {{
 
     margin-top: 10px;
 }}
 
-
 .remaining-value {{
 
     font-size: 18px;
 }}
-
 
 /* ============================================================
    TIME
@@ -1198,7 +1157,6 @@ h1 {{
     border: 1px solid var(--border);
 }}
 
-
 .time-top {{
 
     display: flex;
@@ -1210,14 +1168,12 @@ h1 {{
     gap: 12px;
 }}
 
-
 .time-title {{
 
     font-size: 12px;
 
     color: var(--muted);
 }}
-
 
 .time-days {{
 
@@ -1227,7 +1183,6 @@ h1 {{
 
     color: var(--text);
 }}
-
 
 .time-line {{
 
@@ -1242,7 +1197,6 @@ h1 {{
     background:
         rgba(255,255,255,.08);
 }}
-
 
 .time-line-inner {{
 
@@ -1261,13 +1215,11 @@ h1 {{
         );
 }}
 
-
 body.light .time-line {{
 
     background:
         rgba(0,0,0,.08);
 }}
-
 
 /* ============================================================
    PROFILE
@@ -1286,7 +1238,6 @@ body.light .time-line {{
     border: 1px solid var(--border);
 }}
 
-
 .profile-title {{
 
     margin-bottom: 7px;
@@ -1295,7 +1246,6 @@ body.light .time-line {{
 
     font-weight: 850;
 }}
-
 
 .profile-row {{
 
@@ -1310,14 +1260,12 @@ body.light .time-line {{
     padding: 7px 0;
 }}
 
-
 .profile-label {{
 
     color: var(--muted);
 
     font-size: 12px;
 }}
-
 
 .profile-value {{
 
@@ -1331,7 +1279,6 @@ body.light .time-line {{
 
     word-break: break-word;
 }}
-
 
 /* ============================================================
    ID
@@ -1354,14 +1301,12 @@ body.light .time-line {{
     font-size: 12px;
 }}
 
-
 .id code {{
 
     color: var(--text);
 
     font-weight: 850;
 }}
-
 
 /* ============================================================
    SECTION
@@ -1377,7 +1322,6 @@ body.light .time-line {{
     font-weight: 900;
 }}
 
-
 .section-subtitle {{
 
     margin:
@@ -1389,7 +1333,6 @@ body.light .time-line {{
 
     line-height: 1.5;
 }}
-
 
 /* ============================================================
    BUTTON
@@ -1437,14 +1380,12 @@ body.light .time-line {{
         opacity .12s ease;
 }}
 
-
 .button:active {{
 
     transform: scale(.97);
 
     opacity: .86;
 }}
-
 
 /* ============================================================
    HAPP
@@ -1464,7 +1405,6 @@ body.light .time-line {{
         rgba(255,37,184,.18);
 }}
 
-
 /* ============================================================
    INCY
 ============================================================ */
@@ -1483,7 +1423,6 @@ body.light .time-line {{
         rgba(70,100,255,.18);
 }}
 
-
 /* ============================================================
    COPY
 ============================================================ */
@@ -1498,7 +1437,6 @@ body.light .time-line {{
         1px solid var(--border);
 }}
 
-
 /* ============================================================
    REFRESH
 ============================================================ */
@@ -1512,7 +1450,6 @@ body.light .time-line {{
     border:
         1px solid var(--border);
 }}
-
 
 /* ============================================================
    SUBSCRIPTION LINK
@@ -1531,7 +1468,6 @@ body.light .time-line {{
 
     letter-spacing: .2px;
 }}
-
 
 .subscription-box {{
 
@@ -1562,13 +1498,11 @@ body.light .time-line {{
     cursor: pointer;
 }}
 
-
 body.light .subscription-box {{
 
     background:
         rgba(0,0,0,.035);
 }}
-
 
 /* ============================================================
    TELEGRAM
@@ -1602,7 +1536,6 @@ body.light .subscription-box {{
     background: var(--card2);
 }}
 
-
 /* ============================================================
    FOOTER
 ============================================================ */
@@ -1619,7 +1552,6 @@ body.light .subscription-box {{
 
     font-size: 11px;
 }}
-
 
 /* ============================================================
    TOAST
@@ -1675,7 +1607,6 @@ body.light .subscription-box {{
     z-index: 9999;
 }}
 
-
 .toast.show {{
 
     opacity: 1;
@@ -1683,7 +1614,6 @@ body.light .subscription-box {{
     transform:
         translate(-50%,0);
 }}
-
 
 /* ============================================================
    SMALL SCREEN
@@ -1709,16 +1639,11 @@ body.light .subscription-box {{
 
 </head>
 
-
 <body>
-
 
 <div class="container">
 
-
-    <!-- ======================================================
-         TOPBAR
-    ======================================================= -->
+    <!-- TOPBAR -->
 
     <div class="topbar">
 
@@ -1734,10 +1659,7 @@ body.light .subscription-box {{
 
     </div>
 
-
-    <!-- ======================================================
-         HEADER
-    ======================================================= -->
+    <!-- HEADER -->
 
     <div class="header">
 
@@ -1755,13 +1677,9 @@ body.light .subscription-box {{
 
     </div>
 
-
-    <!-- ======================================================
-         MAIN CARD
-    ======================================================= -->
+    <!-- MAIN CARD -->
 
     <div class="card">
-
 
         <!-- STATUS -->
 
@@ -1791,11 +1709,9 @@ body.light .subscription-box {{
 
         </div>
 
-
         <!-- INFO -->
 
         <div class="info-grid">
-
 
             <div class="info-box">
 
@@ -1809,7 +1725,6 @@ body.light .subscription-box {{
 
             </div>
 
-
             <div class="info-box">
 
                 <div class="info-label">
@@ -1822,9 +1737,7 @@ body.light .subscription-box {{
 
             </div>
 
-
         </div>
-
 
         <!-- DAYS -->
 
@@ -1839,7 +1752,6 @@ body.light .subscription-box {{
             </div>
 
         </div>
-
 
         <!-- TIME -->
 
@@ -1857,7 +1769,6 @@ body.light .subscription-box {{
 
             </div>
 
-
             <div class="time-line">
 
                 <div class="time-line-inner"></div>
@@ -1866,7 +1777,6 @@ body.light .subscription-box {{
 
         </div>
 
-
         <!-- PROFILE -->
 
         <div class="profile">
@@ -1874,7 +1784,6 @@ body.light .subscription-box {{
             <div class="profile-title">
                 👤 Профиль
             </div>
-
 
             <div class="profile-row">
 
@@ -1887,7 +1796,6 @@ body.light .subscription-box {{
                 </div>
 
             </div>
-
 
             <div class="profile-row">
 
@@ -1903,7 +1811,6 @@ body.light .subscription-box {{
 
         </div>
 
-
         <!-- ID -->
 
         <div class="id">
@@ -1913,10 +1820,7 @@ body.light .subscription-box {{
 
         </div>
 
-
-        <!-- ==================================================
-             CONNECTION
-        =================================================== -->
+        <!-- CONNECTION -->
 
         <div class="section-title">
             ⚡ Подключение
@@ -1926,7 +1830,6 @@ body.light .subscription-box {{
             Добавьте персональную подписку прямо
             в приложение.
         </div>
-
 
         <!-- HAPP -->
 
@@ -1938,7 +1841,6 @@ body.light .subscription-box {{
             📲 Добавить в Happ
         </button>
 
-
         <!-- INCY -->
 
         <button
@@ -1948,7 +1850,6 @@ body.light .subscription-box {{
         >
             🚀 Добавить в INCY
         </button>
-
 
         <!-- COPY -->
 
@@ -1960,7 +1861,6 @@ body.light .subscription-box {{
             📋 Скопировать ссылку
         </button>
 
-
         <!-- REFRESH -->
 
         <button
@@ -1971,15 +1871,11 @@ body.light .subscription-box {{
             🔄 Обновить подписку
         </button>
 
-
-        <!-- ==================================================
-             SUBSCRIPTION URL
-        =================================================== -->
+        <!-- SUBSCRIPTION URL -->
 
         <div class="subscription-label">
             🔗 ССЫЛКА ПОДПИСКИ
         </div>
-
 
         <div
             class="subscription-box"
@@ -1987,7 +1883,6 @@ body.light .subscription-box {{
         >
             {safe_subscription_url}
         </div>
-
 
         <!-- TELEGRAM -->
 
@@ -1998,9 +1893,7 @@ body.light .subscription-box {{
             ← Вернуться в Telegram
         </a>
 
-
     </div>
-
 
     <!-- FOOTER -->
 
@@ -2008,19 +1901,14 @@ body.light .subscription-box {{
         ☂️ ixxy VPN • Ваш персональный VPN
     </div>
 
-
 </div>
 
-
-<!-- ==========================================================
-     TOAST
-=========================================================== -->
+<!-- TOAST -->
 
 <div
     id="toast"
     class="toast"
 ></div>
-
 
 <script>
 
@@ -2052,7 +1940,6 @@ function applyTheme(theme) {{
             "themeButton"
         );
 
-
     if (theme === "light") {{
 
         document.body.classList.add(
@@ -2083,18 +1970,15 @@ function toggleTheme() {{
             "ixxy_theme"
         ) || "dark";
 
-
     const next =
         current === "dark"
             ? "light"
             : "dark";
 
-
     localStorage.setItem(
         "ixxy_theme",
         next
     );
-
 
     applyTheme(next);
 }}
@@ -2121,11 +2005,9 @@ function showToast(text) {{
             "toast"
         );
 
-
     if (!toast) {{
         return;
     }}
-
 
     toast.textContent = text;
 
@@ -2133,11 +2015,9 @@ function showToast(text) {{
         "show"
     );
 
-
     clearTimeout(
         toastTimer
     );
-
 
     toastTimer =
         setTimeout(() => {{
@@ -2161,12 +2041,10 @@ function openApp(appName) {{
             ? happUrl
             : incyUrl;
 
-
     const name =
         appName === "happ"
             ? "Happ"
             : "INCY";
-
 
     showToast(
         "📲 Открываем "
@@ -2174,10 +2052,8 @@ function openApp(appName) {{
         + "..."
     );
 
-
     const startTime =
         Date.now();
-
 
     try {{
 
@@ -2189,7 +2065,6 @@ function openApp(appName) {{
         console.log(e);
 
     }}
-
 
     setTimeout(() => {{
 
@@ -2220,11 +2095,9 @@ async function copyLink() {{
             subscriptionLink
         );
 
-
         showToast(
             "✅ Ссылка скопирована!"
         );
-
 
         return;
 
@@ -2234,7 +2107,6 @@ async function copyLink() {{
 
     }}
 
-
     try {{
 
         const textarea =
@@ -2242,41 +2114,32 @@ async function copyLink() {{
                 "textarea"
             );
 
-
         textarea.value =
             subscriptionLink;
-
 
         textarea.style.position =
             "fixed";
 
-
         textarea.style.left =
             "-9999px";
 
-
         textarea.style.top =
             "0";
-
 
         document.body.appendChild(
             textarea
         );
 
-
         textarea.focus();
 
         textarea.select();
-
 
         const success =
             document.execCommand(
                 "copy"
             );
 
-
         textarea.remove();
-
 
         if (success) {{
 
@@ -2311,7 +2174,6 @@ function refreshPage() {{
         "🔄 Обновляем подписку..."
     );
 
-
     setTimeout(() => {{
 
         window.location.href =
@@ -2323,7 +2185,6 @@ function refreshPage() {{
 }}
 
 </script>
-
 
 </body>
 
@@ -2376,7 +2237,6 @@ def subscription_content(token):
     if user_id is None:
         abort(404)
 
-
     # --------------------------------------------------------
     # CONTENT
     # --------------------------------------------------------
@@ -2390,7 +2250,6 @@ def subscription_content(token):
     except Exception:
 
         content = ""
-
 
     if not content:
 
@@ -2416,16 +2275,13 @@ def subscription_content(token):
             },
         )
 
-
     # ========================================================
-    # IMPORTANT
+    # HAPP / INCY
     # ========================================================
     #
-    # Happ получает именно этот текст.
+    # Приложения получают именно этот текст.
     #
-    # Никакой VPN-панели здесь нет.
-    #
-    # Render просто отдаёт персональный файл.
+    # Render только отдаёт персональную подписку.
     #
     # ========================================================
 
@@ -2482,7 +2338,6 @@ def index():
 />
 
 <title>☂️ ixxy VPN</title>
-
 
 <style>
 
@@ -2616,9 +2471,7 @@ p {
 
 </head>
 
-
 <body>
-
 
 <div class="box">
 
@@ -2635,7 +2488,6 @@ p {
     </p>
 
 </div>
-
 
 </body>
 
@@ -2673,7 +2525,6 @@ if __name__ == "__main__":
             "10000"
         )
     )
-
 
     app.run(
 
