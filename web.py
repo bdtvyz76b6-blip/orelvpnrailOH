@@ -3,13 +3,17 @@ import html
 from datetime import datetime
 from urllib.parse import quote
 
-from flask import Flask, Response, abort
+from flask import Flask, Response, abort, redirect
 
 from database import (
     get_subscription_content,
     get_user,
 )
 
+
+# ============================================================
+# APP
+# ============================================================
 
 app = Flask(__name__)
 
@@ -28,7 +32,61 @@ SUBSCRIPTION_PREFIX = os.getenv(
     "2ix847xy",
 ).strip()
 
+
+# ============================================================
+# GITHUB
+#
+# GitHub используется как публичное хранилище персональных
+# подписок. Это позволяет Happ получать подписку независимо
+# от Render.
+# ============================================================
+
+GITHUB_OWNER = os.getenv(
+    "GITHUB_OWNER",
+    "bdtvyz76b6-blip",
+).strip()
+
+GITHUB_REPO = os.getenv(
+    "GITHUB_REPO",
+    "vpn-sub",
+).strip()
+
+GITHUB_BRANCH = os.getenv(
+    "GITHUB_BRANCH",
+    "main",
+).strip()
+
+GITHUB_SUBSCRIPTION_FOLDER = os.getenv(
+    "GITHUB_SUBSCRIPTION_FOLDER",
+    "users",
+).strip().strip("/")
+
+
+# ============================================================
+# TELEGRAM
+# ============================================================
+
 TELEGRAM_URL = "https://t.me/orelvpntopbot"
+
+
+# ============================================================
+# GITHUB RAW URL
+# ============================================================
+
+def get_github_subscription_url(user_id):
+
+    filename = (
+        f"{GITHUB_SUBSCRIPTION_FOLDER}/"
+        f"{SUBSCRIPTION_PREFIX}{user_id}.txt"
+    )
+
+    return (
+        "https://raw.githubusercontent.com/"
+        f"{GITHUB_OWNER}/"
+        f"{GITHUB_REPO}/"
+        f"{GITHUB_BRANCH}/"
+        f"{filename}"
+    )
 
 
 # ============================================================
@@ -36,10 +94,18 @@ TELEGRAM_URL = "https://t.me/orelvpntopbot"
 # ============================================================
 
 def get_user_id_from_token(token):
-    if not token.startswith(SUBSCRIPTION_PREFIX):
+
+    if not token:
         return None
 
-    user_id = token[len(SUBSCRIPTION_PREFIX):]
+    if not token.startswith(
+        SUBSCRIPTION_PREFIX
+    ):
+        return None
+
+    user_id = token[
+        len(SUBSCRIPTION_PREFIX):
+    ]
 
     if not user_id.isdigit():
         return None
@@ -48,7 +114,11 @@ def get_user_id_from_token(token):
 
 
 def get_token(user_id):
-    return f"{SUBSCRIPTION_PREFIX}{user_id}"
+
+    return (
+        f"{SUBSCRIPTION_PREFIX}"
+        f"{user_id}"
+    )
 
 
 # ============================================================
@@ -59,33 +129,47 @@ def get_urls(user_id):
 
     token = get_token(user_id)
 
+    # Красивая персональная страница
     page_url = (
         f"{PUBLIC_SITE_URL}/s/{token}"
     )
 
-    subscription_url = (
+    # Старый URL Render.
+    # Оставляем его для совместимости.
+    render_subscription_url = (
         f"{PUBLIC_SITE_URL}/sub/{token}"
     )
 
+    # Новый публичный URL GitHub.
+    # Именно его будем использовать в Happ.
+    github_subscription_url = (
+        get_github_subscription_url(
+            user_id
+        )
+    )
+
+    # Happ
     happ_url = (
         "happ://add/"
         + quote(
-            subscription_url,
+            github_subscription_url,
             safe=""
         )
     )
 
+    # INCY
     incy_url = (
         "incy://add/"
         + quote(
-            subscription_url,
+            github_subscription_url,
             safe=""
         )
     )
 
     return (
         page_url,
-        subscription_url,
+        render_subscription_url,
+        github_subscription_url,
         happ_url,
         incy_url,
     )
@@ -109,7 +193,7 @@ def js_escape(value):
 
 
 # ============================================================
-# ДНИ
+# DAYS
 # ============================================================
 
 def days_word(days):
@@ -128,246 +212,6 @@ def days_word(days):
         return "дня"
 
     return "дней"
-
-
-# ============================================================
-# ПОЛЬЗОВАТЕЛЬ
-# ============================================================
-
-def get_user_data(user_id):
-
-    user = get_user(user_id)
-
-    data = {
-        "username": "нет",
-        "first_name": "Пользователь",
-        "subscription": "none",
-        "until": "",
-        "user_id": user_id,
-    }
-
-    if not user:
-        return data
-
-    data["username"] = (
-        str(user[1])
-        if len(user) > 1 and user[1]
-        else "нет"
-    )
-
-    data["first_name"] = (
-        str(user[2])
-        if len(user) > 2 and user[2]
-        else "Пользователь"
-    )
-
-    data["subscription"] = (
-        str(user[3])
-        if len(user) > 3 and user[3]
-        else "none"
-    )
-
-    data["until"] = (
-        str(user[4])
-        if len(user) > 4 and user[4]
-        else ""
-    )
-
-    return data
-
-
-# ============================================================
-# ТАРИФ
-# ============================================================
-
-def get_tariff(subscription):
-
-    if subscription == "vip":
-        return "👑 ixxy VIP"
-
-    if subscription == "trial":
-        return "🎁 Пробный период"
-
-    if subscription in (
-        "active",
-        "premium",
-        "standard",
-    ):
-        return "☂️ ixxy VPN"
-
-    return "Нет подписки"
-
-
-# ============================================================
-# СОСТОЯНИЕ ПОДПИСКИ
-# ============================================================
-
-def get_subscription_status(until):
-
-    if not until:
-
-        return {
-            "active": False,
-            "status": "🔴 Подписка неактивна",
-            "status_class": "inactive",
-            "until": "—",
-            "days": 0,
-        }
-
-    try:
-
-        expire_date = datetime.strptime(
-            str(until),
-            "%Y-%m-%d"
-        ).date()
-
-    except Exception:
-
-        return {
-            "active": False,
-            "status": "🔴 Подписка неактивна",
-            "status_class": "inactive",
-            "until": "—",
-            "days": 0,
-        }
-
-    today = datetime.now().date()
-
-    days_left = (
-        expire_date - today
-    ).days
-
-    if days_left >= 0:
-
-        return {
-            "active": True,
-            "status": "🟢 Подписка активна",
-            "status_class": "active",
-            "until": expire_date.strftime(
-                "%d.%m.%Y"
-            ),
-            "days": days_left,
-        }
-
-    return {
-        "active": False,
-        "status": "🔴 Подписка истекла",
-        "status_class": "inactive",
-        "until": expire_date.strftime(
-            "%d.%m.%Y"
-        ),
-        "days": 0,
-    }
-
-
-# ============================================================
-# ANNOUNCE ДЛЯ HAPP
-# ============================================================
-
-def build_announce(
-    user_id,
-    username,
-    first_name,
-    subscription,
-    until,
-):
-
-    tariff = get_tariff(
-        subscription
-    )
-
-    status = get_subscription_status(
-        until
-    )
-
-    if status["active"]:
-
-        status_text = "🟢 АКТИВНА"
-
-        days_text = (
-            f'{status["days"]} '
-            f'{days_word(status["days"])}'
-        )
-
-        until_text = status["until"]
-
-    else:
-
-        status_text = "🔴 НЕАКТИВНА"
-
-        days_text = "0 дней"
-
-        until_text = (
-            status["until"]
-            if status["until"] != "—"
-            else "—"
-        )
-
-    username_text = (
-        f"@{username}"
-        if username and username != "нет"
-        else "нет"
-    )
-
-    announce = f"""☂️ IXXY VPN
-
-━━━━━━━━━━━━━━━━━━
-
-{status_text}
-
-🎫 Тариф:
-{tariff}
-
-👤 Пользователь:
-{first_name}
-
-📱 Telegram:
-{username_text}
-
-🆔 Telegram ID:
-{user_id}
-
-━━━━━━━━━━━━━━━━━━
-
-📅 Действует до:
-{until_text}
-
-⏳ Осталось:
-{days_text}
-
-📶 Трафик:
-♾️ Безлимитный
-
-📱 Устройства:
-Доступ разрешён
-
-━━━━━━━━━━━━━━━━━━
-
-🌍 ДОСТУПНЫЕ СЕРВЕРЫ
-
-🇩🇪 Germany
-🇳🇱 Netherlands
-🇫🇮 Finland
-📱 Mobile Internet LTE
-
-━━━━━━━━━━━━━━━━━━
-
-🔄 Автообновление:
-каждый час
-
-⚡ Быстрое подключение
-🔐 Защищённое соединение
-
-━━━━━━━━━━━━━━━━━━
-
-☂️ ixxy vpn
-Спасибо, что пользуетесь нашим VPN.
-
-Поддержка:
-@orelvpntopbot
-"""
-
-    return announce
 
 
 # ============================================================
@@ -405,10 +249,13 @@ def no_subscription_page():
 
 body {
     margin: 0;
+
     min-height: 100vh;
 
     display: flex;
+
     align-items: center;
+
     justify-content: center;
 
     padding: 24px;
@@ -426,7 +273,7 @@ body {
         ),
         #07070b;
 
-    color: white;
+    color: #fff;
 
     font-family:
         -apple-system,
@@ -478,6 +325,10 @@ body {
             #773cff,
             #00c9ff
         );
+
+    box-shadow:
+        0 18px 45px
+        rgba(115,60,255,.30);
 }
 
 h1 {
@@ -524,7 +375,7 @@ p {
 
 
 # ============================================================
-# ПЕРСОНАЛЬНАЯ СТРАНИЦА
+# SUBSCRIPTION PAGE
 # ============================================================
 
 @app.route("/s/<token>")
@@ -549,31 +400,134 @@ def subscription_page(token):
             mimetype="text/html",
         )
 
-    data = get_user_data(
-        user_id
-    )
+    # ========================================================
+    # USER DATA
+    # ========================================================
 
-    username = data["username"]
-    first_name = data["first_name"]
-    subscription = data["subscription"]
-    until = data["until"]
+    username = "нет"
+    first_name = "Пользователь"
+    subscription = "none"
+    until = ""
 
-    status = get_subscription_status(
-        until
-    )
+    if user:
 
-    tariff = get_tariff(
-        subscription
-    )
+        username = (
+            str(user[1])
+            if user[1]
+            else "нет"
+        )
+
+        first_name = (
+            str(user[2])
+            if user[2]
+            else "Пользователь"
+        )
+
+        subscription = (
+            str(user[3])
+            if user[3]
+            else "none"
+        )
+
+        until = (
+            str(user[4])
+            if user[4]
+            else ""
+        )
+
+    # ========================================================
+    # STATUS
+    # ========================================================
+
+    status = "🔴 Подписка неактивна"
+    status_class = "inactive"
+
+    tariff = "Нет подписки"
+
+    until_text = "—"
+
+    days_left = 0
+
+    # ========================================================
+    # TARIFF
+    # ========================================================
+
+    if subscription == "vip":
+
+        tariff = "👑 ixxy VIP"
+
+    elif subscription == "trial":
+
+        tariff = "🎁 Пробный период"
+
+    elif subscription in (
+        "active",
+        "premium",
+        "standard",
+    ):
+
+        tariff = "☂️ ixxy VPN"
+
+    # ========================================================
+    # EXPIRATION
+    # ========================================================
+
+    if until:
+
+        try:
+
+            expire_date = datetime.strptime(
+                str(until),
+                "%Y-%m-%d"
+            ).date()
+
+            today = datetime.now().date()
+
+            until_text = (
+                expire_date.strftime(
+                    "%d.%m.%Y"
+                )
+            )
+
+            days_left = (
+                expire_date - today
+            ).days
+
+            if days_left >= 0:
+
+                status = (
+                    "🟢 Подписка активна"
+                )
+
+                status_class = "active"
+
+            else:
+
+                status = (
+                    "🔴 Подписка истекла"
+                )
+
+                status_class = "inactive"
+
+                days_left = 0
+
+        except Exception:
+
+            pass
 
     days_text = (
-        f'{status["days"]} '
-        f'{days_word(status["days"])}'
+        f"{days_left} "
+        f"{days_word(days_left)}"
     )
+
+    # ========================================================
+    # URLS
+    # ========================================================
 
     (
         page_url,
-        subscription_url,
+        render_subscription_url,
+        github_subscription_url,
         happ_url,
         incy_url,
     ) = get_urls(user_id)
@@ -595,23 +549,23 @@ def subscription_page(token):
     )
 
     safe_until = html.escape(
-        status["until"]
+        until_text
     )
 
     safe_days = html.escape(
         days_text
     )
 
-    safe_subscription_url = html.escape(
-        subscription_url
+    safe_github_url = html.escape(
+        github_subscription_url
     )
 
     # ========================================================
     # SAFE JS
     # ========================================================
 
-    js_subscription_url = js_escape(
-        subscription_url
+    js_github_url = js_escape(
+        github_subscription_url
     )
 
     js_happ_url = js_escape(
@@ -708,48 +662,80 @@ body {{
         sans-serif;
 
     background:
+
         radial-gradient(
             circle at 0% 0%,
             rgba(255,0,190,.23),
             transparent 31%
         ),
+
         radial-gradient(
             circle at 100% 4%,
             rgba(0,190,255,.21),
             transparent 31%
         ),
+
         radial-gradient(
             circle at 50% 100%,
             rgba(115,50,255,.20),
             transparent 42%
         ),
+
         var(--bg);
 
     transition:
         background .3s ease,
         color .3s ease;
+
+    overscroll-behavior-x: none;
 }}
 
 :root {{
+
     --bg: #07070b;
-    --card: rgba(18,18,27,.86);
-    --card2: rgba(255,255,255,.045);
+
+    --card:
+        rgba(18,18,27,.86);
+
+    --card2:
+        rgba(255,255,255,.045);
+
     --text: #ffffff;
+
     --muted: #91919d;
-    --border: rgba(255,255,255,.09);
-    --shadow: rgba(0,0,0,.48);
+
+    --border:
+        rgba(255,255,255,.09);
+
+    --shadow:
+        rgba(0,0,0,.48);
+
     --green: #00f59b;
+
     --red: #ff4d61;
+
 }}
 
 body.light {{
+
     --bg: #f3f4f8;
-    --card: rgba(255,255,255,.88);
-    --card2: rgba(0,0,0,.045);
+
+    --card:
+        rgba(255,255,255,.88);
+
+    --card2:
+        rgba(0,0,0,.045);
+
     --text: #111118;
+
     --muted: #696974;
-    --border: rgba(0,0,0,.08);
-    --shadow: rgba(0,0,0,.12);
+
+    --border:
+        rgba(0,0,0,.08);
+
+    --shadow:
+        rgba(0,0,0,.12);
+
 }}
 
 .container {{
@@ -762,7 +748,9 @@ body.light {{
     height: 48px;
 
     display: flex;
+
     justify-content: flex-end;
+
     align-items: center;
 
     margin-bottom: 3px;
@@ -773,23 +761,31 @@ body.light {{
     height: 46px;
 
     border: 1px solid var(--border);
+
     border-radius: 15px;
 
     background: var(--card2);
+
     color: var(--text);
 
     font-size: 19px;
 
     display: flex;
+
     align-items: center;
+
     justify-content: center;
 
     cursor: pointer;
 
     backdrop-filter: blur(18px);
-    -webkit-backdrop-filter: blur(18px);
 
-    transition: transform .15s ease;
+    -webkit-backdrop-filter:
+        blur(18px);
+
+    transition:
+        transform .15s ease,
+        background .3s ease;
 }}
 
 .theme-toggle:active {{
@@ -808,6 +804,7 @@ body.light {{
     margin: 2px auto 17px;
 
     display: flex;
+
     align-items: center;
     justify-content: center;
 
@@ -828,10 +825,13 @@ body.light {{
         rgba(115,60,255,.40);
 
     animation:
-        logoFloat 4s ease-in-out infinite;
+        logoFloat 4s
+        ease-in-out
+        infinite;
 }}
 
 @keyframes logoFloat {{
+
     0%,100% {{
         transform: translateY(0);
     }}
@@ -845,7 +845,9 @@ h1 {{
     margin: 0;
 
     font-size: 30px;
+
     line-height: 1.1;
+
     font-weight: 900;
 
     letter-spacing: -.7px;
@@ -855,6 +857,7 @@ h1 {{
     margin: 8px 0 0;
 
     color: var(--muted);
+
     font-size: 14px;
 }}
 
@@ -865,20 +868,22 @@ h1 {{
 
     background: var(--card);
 
-    border:
-        1px solid var(--border);
+    border: 1px solid var(--border);
 
     box-shadow:
         0 25px 80px var(--shadow);
 
     backdrop-filter: blur(28px);
-    -webkit-backdrop-filter: blur(28px);
+
+    -webkit-backdrop-filter:
+        blur(28px);
 
     animation:
         cardIn .45s ease;
 }}
 
 @keyframes cardIn {{
+
     from {{
         opacity: 0;
         transform: translateY(12px);
@@ -896,14 +901,16 @@ h1 {{
     border-radius: 22px;
 
     display: flex;
+
     align-items: center;
+
     justify-content: space-between;
 
-    border:
-        1px solid var(--border);
+    border: 1px solid var(--border);
 }}
 
 .status.active {{
+
     background:
         linear-gradient(
             135deg,
@@ -957,6 +964,7 @@ h1 {{
     margin-top: 4px;
 
     color: var(--muted);
+
     font-size: 12px;
 }}
 
@@ -982,8 +990,7 @@ h1 {{
 
     background: var(--card2);
 
-    border:
-        1px solid var(--border);
+    border: 1px solid var(--border);
 }}
 
 .info-label {{
@@ -1014,6 +1021,91 @@ h1 {{
     font-size: 18px;
 }}
 
+.time-card {{
+    margin-top: 10px;
+
+    padding: 16px;
+
+    border-radius: 20px;
+
+    background:
+        linear-gradient(
+            135deg,
+            rgba(120,60,255,.10),
+            rgba(0,200,255,.06)
+        );
+
+    border: 1px solid var(--border);
+}}
+
+.time-top {{
+    display: flex;
+
+    justify-content: space-between;
+
+    align-items: center;
+
+    gap: 12px;
+}}
+
+.time-title {{
+    font-size: 12px;
+    color: var(--muted);
+}}
+
+.time-days {{
+    font-size: 13px;
+    font-weight: 850;
+    color: var(--text);
+}}
+
+.time-line {{
+    margin-top: 11px;
+
+    height: 8px;
+
+    border-radius: 20px;
+
+    overflow: hidden;
+
+    background:
+        rgba(255,255,255,.08);
+}}
+
+.time-line-inner {{
+    width: 100%;
+    height: 100%;
+
+    border-radius: 20px;
+
+    background:
+        linear-gradient(
+            90deg,
+            #ff25bd,
+            #773cff,
+            #00c9ff
+        );
+
+    animation:
+        progressIn .8s ease;
+}}
+
+@keyframes progressIn {{
+
+    from {{
+        width: 0;
+    }}
+
+    to {{
+        width: 100%;
+    }}
+}}
+
+body.light .time-line {{
+    background:
+        rgba(0,0,0,.08);
+}}
+
 .profile {{
     margin-top: 10px;
 
@@ -1023,14 +1115,14 @@ h1 {{
 
     background: var(--card2);
 
-    border:
-        1px solid var(--border);
+    border: 1px solid var(--border);
 }}
 
 .profile-title {{
     margin-bottom: 7px;
 
     font-size: 13px;
+
     font-weight: 850;
 }}
 
@@ -1038,6 +1130,7 @@ h1 {{
     display: flex;
 
     justify-content: space-between;
+
     align-items: flex-start;
 
     gap: 15px;
@@ -1047,6 +1140,7 @@ h1 {{
 
 .profile-label {{
     color: var(--muted);
+
     font-size: 12px;
 }}
 
@@ -1054,6 +1148,7 @@ h1 {{
     color: var(--text);
 
     font-size: 12px;
+
     font-weight: 800;
 
     text-align: right;
@@ -1070,8 +1165,7 @@ h1 {{
 
     background: var(--card2);
 
-    border:
-        1px solid var(--border);
+    border: 1px solid var(--border);
 
     color: var(--muted);
 
@@ -1088,6 +1182,7 @@ h1 {{
         22px 2px 6px;
 
     font-size: 15px;
+
     font-weight: 900;
 }}
 
@@ -1098,6 +1193,7 @@ h1 {{
     color: var(--muted);
 
     font-size: 12px;
+
     line-height: 1.5;
 }}
 
@@ -1115,7 +1211,9 @@ h1 {{
     border-radius: 18px;
 
     display: flex;
+
     align-items: center;
+
     justify-content: center;
 
     gap: 9px;
@@ -1127,6 +1225,7 @@ h1 {{
     font-family: inherit;
 
     font-size: 15px;
+
     font-weight: 900;
 
     cursor: pointer;
@@ -1194,6 +1293,7 @@ h1 {{
     color: var(--muted);
 
     font-size: 11px;
+
     font-weight: 800;
 
     letter-spacing: .2px;
@@ -1214,13 +1314,14 @@ h1 {{
 
     color: var(--muted);
 
-    font-size: 11px;
+    font-size: 10px;
 
     line-height: 1.55;
 
     word-break: break-all;
 
     user-select: text;
+
     -webkit-user-select: text;
 
     cursor: pointer;
@@ -1239,6 +1340,7 @@ body.light .subscription-box {{
     display: flex;
 
     align-items: center;
+
     justify-content: center;
 
     text-decoration: none;
@@ -1246,14 +1348,15 @@ body.light .subscription-box {{
     color: var(--text);
 
     font-size: 13px;
-    font-weight: 800;
 
-    border-radius: 17px;
+    font-weight: 800;
 
     border:
         1px solid var(--border);
 
     background: var(--card2);
+
+    border-radius: 17px;
 }}
 
 .footer {{
@@ -1303,6 +1406,7 @@ body.light .subscription-box {{
     color: white;
 
     font-size: 13px;
+
     font-weight: 800;
 
     opacity: 0;
@@ -1381,10 +1485,7 @@ body.light .subscription-box {{
 
     <div class="card">
 
-
-        <!-- STATUS -->
-
-        <div class="status {status["status_class"]}">
+        <div class="status {status_class}">
 
             <div class="status-left">
 
@@ -1393,7 +1494,7 @@ body.light .subscription-box {{
                 <div>
 
                     <div class="status-title">
-                        {html.escape(status["status"])}
+                        {status}
                     </div>
 
                     <div class="status-info">
@@ -1410,8 +1511,6 @@ body.light .subscription-box {{
 
         </div>
 
-
-        <!-- INFO -->
 
         <div class="info-grid">
 
@@ -1443,8 +1542,6 @@ body.light .subscription-box {{
         </div>
 
 
-        <!-- DAYS -->
-
         <div class="info-box remaining">
 
             <div class="info-label">
@@ -1458,7 +1555,28 @@ body.light .subscription-box {{
         </div>
 
 
-        <!-- PROFILE -->
+        <div class="time-card">
+
+            <div class="time-top">
+
+                <div class="time-title">
+                    ⏱ Состояние подписки
+                </div>
+
+                <div class="time-days">
+                    {safe_days}
+                </div>
+
+            </div>
+
+            <div class="time-line">
+
+                <div class="time-line-inner"></div>
+
+            </div>
+
+        </div>
+
 
         <div class="profile">
 
@@ -1493,8 +1611,6 @@ body.light .subscription-box {{
         </div>
 
 
-        <!-- ID -->
-
         <div class="id">
 
             🆔 Telegram ID:
@@ -1503,14 +1619,14 @@ body.light .subscription-box {{
         </div>
 
 
-        <!-- CONNECTION -->
-
         <div class="section-title">
             ⚡ Подключение
         </div>
 
         <div class="section-subtitle">
             Добавьте свою подписку прямо в приложение.
+            Ссылка подписки размещена на публичном GitHub
+            и не зависит от Render.
         </div>
 
 
@@ -1551,14 +1667,14 @@ body.light .subscription-box {{
 
 
         <div class="subscription-label">
-            🔗 ССЫЛКА ПОДПИСКИ
+            🔗 ПУБЛИЧНАЯ ССЫЛКА ПОДПИСКИ
         </div>
 
         <div
             class="subscription-box"
             onclick="copyLink()"
         >
-            {safe_subscription_url}
+            {safe_github_url}
         </div>
 
 
@@ -1588,7 +1704,7 @@ body.light .subscription-box {{
 <script>
 
 const subscriptionLink =
-    '{js_subscription_url}';
+    '{js_github_url}';
 
 const happUrl =
     '{js_happ_url}';
@@ -1600,32 +1716,47 @@ const pageUrl =
     '{js_page_url}';
 
 
+/* ============================================================
+   THEME
+============================================================ */
+
 function applyTheme(theme) {{
 
     if (theme === "light") {{
 
-        document.body.classList.add("light");
+        document.body.classList.add(
+            "light"
+        );
 
         document
-            .getElementById("themeButton")
+            .getElementById(
+                "themeButton"
+            )
             .textContent = "☀️";
 
     }} else {{
 
-        document.body.classList.remove("light");
+        document.body.classList.remove(
+            "light"
+        );
 
         document
-            .getElementById("themeButton")
+            .getElementById(
+                "themeButton"
+            )
             .textContent = "🌙";
+
     }}
+
 }}
 
 
 function toggleTheme() {{
 
     const current =
-        localStorage.getItem("ixxy_theme")
-        || "dark";
+        localStorage.getItem(
+            "ixxy_theme"
+        ) || "dark";
 
     const next =
         current === "dark"
@@ -1638,14 +1769,20 @@ function toggleTheme() {{
     );
 
     applyTheme(next);
+
 }}
 
 
 applyTheme(
-    localStorage.getItem("ixxy_theme")
-    || "dark"
+    localStorage.getItem(
+        "ixxy_theme"
+    ) || "dark"
 );
 
+
+/* ============================================================
+   TOAST
+============================================================ */
 
 let toastTimer = null;
 
@@ -1653,7 +1790,9 @@ let toastTimer = null;
 function showToast(text) {{
 
     const toast =
-        document.getElementById("toast");
+        document.getElementById(
+            "toast"
+        );
 
     toast.textContent = text;
 
@@ -1663,11 +1802,18 @@ function showToast(text) {{
 
     toastTimer = setTimeout(() => {{
 
-        toast.classList.remove("show");
+        toast.classList.remove(
+            "show"
+        );
 
     }}, 2200);
+
 }}
 
+
+/* ============================================================
+   OPEN APP
+============================================================ */
 
 function openApp(appName) {{
 
@@ -1682,8 +1828,13 @@ function openApp(appName) {{
             : "INCY";
 
     showToast(
-        "📲 Открываем " + name + "..."
+        "📲 Открываем " +
+        name +
+        "..."
     );
+
+    const startTime =
+        Date.now();
 
     try {{
 
@@ -1692,20 +1843,31 @@ function openApp(appName) {{
     }} catch (e) {{
 
         console.log(e);
+
     }}
 
     setTimeout(() => {{
 
-        if (!document.hidden) {{
+        if (
+            !document.hidden &&
+            Date.now() - startTime < 2500
+        ) {{
 
             showToast(
-                "⚠️ Приложение не открылось. Скопируйте ссылку."
+                "⚠️ Приложение не открылось. "
+                + "Скопируйте ссылку."
             );
+
         }}
 
     }}, 1800);
+
 }}
 
+
+/* ============================================================
+   COPY
+============================================================ */
 
 async function copyLink() {{
 
@@ -1724,12 +1886,15 @@ async function copyLink() {{
     }} catch (e) {{
 
         console.log(e);
+
     }}
 
     try {{
 
         const textarea =
-            document.createElement("textarea");
+            document.createElement(
+                "textarea"
+            );
 
         textarea.value =
             subscriptionLink;
@@ -1748,10 +1913,13 @@ async function copyLink() {{
         );
 
         textarea.focus();
+
         textarea.select();
 
         const success =
-            document.execCommand("copy");
+            document.execCommand(
+                "copy"
+            );
 
         textarea.remove();
 
@@ -1766,6 +1934,7 @@ async function copyLink() {{
             throw new Error(
                 "Copy failed"
             );
+
         }}
 
     }} catch (e) {{
@@ -1774,9 +1943,15 @@ async function copyLink() {{
             "Скопируйте ссылку:",
             subscriptionLink
         );
+
     }}
+
 }}
 
+
+/* ============================================================
+   REFRESH
+============================================================ */
 
 function refreshPage() {{
 
@@ -1792,6 +1967,7 @@ function refreshPage() {{
             + Date.now();
 
     }}, 300);
+
 }}
 
 </script>
@@ -1808,10 +1984,8 @@ function refreshPage() {{
         headers={
             "Cache-Control":
                 "no-cache, no-store, must-revalidate",
-
             "Pragma":
                 "no-cache",
-
             "Expires":
                 "0",
         },
@@ -1819,134 +1993,34 @@ function refreshPage() {{
 
 
 # ============================================================
-# RAW SUBSCRIPTION ДЛЯ HAPP
+# OLD RENDER SUBSCRIPTION URL
+#
+# Оставляем для совместимости.
 # ============================================================
 
 @app.route("/sub/<token>")
 def subscription_content(token):
 
-    user_id = get_user_id_from_token(
-        token
-    )
+    user_id = get_user_id_from_token(token)
 
     if user_id is None:
         abort(404)
 
-    content = get_subscription_content(
+    # Если GitHub-файл уже создан, перенаправляем туда.
+    # Happ сможет получать подписку непосредственно
+    # с GitHub, а не с Render.
+    github_url = get_github_subscription_url(
         user_id
     )
 
-    if not content:
-
-        return Response(
-            "#profile-title: ⛔ ixxy VPN\n\n"
-            "#announce: Подписка не найдена",
-            status=404,
-            mimetype="text/plain",
-        )
-
-    # ========================================================
-    # ДАННЫЕ ПОЛЬЗОВАТЕЛЯ
-    # ========================================================
-
-    data = get_user_data(
-        user_id
-    )
-
-    username = data["username"]
-    first_name = data["first_name"]
-    subscription = data["subscription"]
-    until = data["until"]
-
-    # ========================================================
-    # НОВЫЙ ANNOUNCE
-    # ========================================================
-
-    announce = build_announce(
-        user_id=user_id,
-        username=username,
-        first_name=first_name,
-        subscription=subscription,
-        until=until,
-    )
-
-    # ========================================================
-    # ЗАМЕНЯЕМ СТАРЫЙ ANNOUNCE
-    # ========================================================
-
-    lines = content.splitlines()
-
-    result = []
-
-    announce_added = False
-
-    for line in lines:
-
-        if line.startswith(
-            "#announce:"
-        ):
-
-            if not announce_added:
-
-                announce_lines = (
-                    announce.splitlines()
-                )
-
-                result.append(
-                    "#announce: "
-                    + announce_lines[0]
-                )
-
-                for announce_line in announce_lines[1:]:
-
-                    result.append(
-                        announce_line
-                    )
-
-                announce_added = True
-
-            continue
-
-        result.append(line)
-
-    # ========================================================
-    # ЕСЛИ ANNOUNCE НЕ БЫЛО
-    # ========================================================
-
-    if not announce_added:
-
-        result.insert(
-            2,
-            "#announce: "
-            + announce.replace(
-                "\n",
-                "\\n"
-            )
-        )
-
-    final_content = "\n".join(
-        result
-    )
-
-    return Response(
-        final_content,
-        status=200,
-        mimetype="text/plain",
-        headers={
-            "Cache-Control":
-                "no-cache, no-store, must-revalidate",
-
-            "Pragma":
-                "no-cache",
-
-            "Expires":
-                "0",
-        },
+    return redirect(
+        github_url,
+        code=302,
     )
 
 
 # ============================================================
-# MAIN
+# MAIN PAGE
 # ============================================================
 
 @app.route("/")
@@ -1987,6 +2061,7 @@ body {
     display: flex;
 
     align-items: center;
+
     justify-content: center;
 
     padding: 25px;
@@ -2037,7 +2112,6 @@ body {
 
 .logo {
     width: 80px;
-
     height: 80px;
 
     margin:
@@ -2046,6 +2120,7 @@ body {
     display: flex;
 
     align-items: center;
+
     justify-content: center;
 
     border-radius: 25px;
@@ -2063,13 +2138,11 @@ body {
 
 h1 {
     margin: 0;
-
     font-size: 30px;
 }
 
 p {
     margin: 10px 0 0;
-
     color: #92929e;
 }
 
@@ -2102,7 +2175,7 @@ p {
 
 
 # ============================================================
-# HEALTH
+# HEALTH CHECK
 # ============================================================
 
 @app.route("/health")
