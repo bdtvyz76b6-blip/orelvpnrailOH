@@ -2,6 +2,7 @@ import os
 import html
 import shutil
 import subprocess
+import platform
 from datetime import datetime
 from urllib.parse import quote
 
@@ -20,7 +21,7 @@ app = Flask(__name__)
 # CONFIG
 # ============================================================
 
-APP_VERSION = "ixxy-2026.09.01"
+APP_VERSION = "ixxy-2026.09.01-happ-fix"
 
 PUBLIC_SITE_URL = os.getenv(
     "PUBLIC_SITE_URL",
@@ -37,9 +38,10 @@ TELEGRAM_URL = os.getenv(
     "https://t.me/orelvpntopbot"
 )
 
+# Render build command создаёт именно этот файл
 HPWNR_PATH = os.getenv(
     "HPWNR_PATH",
-    "bin/hpwnr"
+    "/opt/render/project/src/bin/hpwnr"
 )
 
 
@@ -48,14 +50,9 @@ HPWNR_PATH = os.getenv(
 # ============================================================
 
 NO_CACHE_HEADERS = {
-    "Cache-Control":
-        "no-store, no-cache, must-revalidate, max-age=0",
-
-    "Pragma":
-        "no-cache",
-
-    "Expires":
-        "0",
+    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+    "Pragma": "no-cache",
+    "Expires": "0",
 }
 
 
@@ -64,51 +61,34 @@ NO_CACHE_HEADERS = {
 # ============================================================
 
 def esc(value):
-
-    return html.escape(
-        str(value or "")
-    )
+    return html.escape(str(value or ""))
 
 
 # ============================================================
 # DATABASE
 # ============================================================
 
-def user_value(
-    user,
-    index,
-    default=""
-):
-
+def user_value(user, index, default=""):
     try:
-
         if user and len(user) > index:
-
             value = user[index]
 
             if value is not None:
-
                 return value
 
     except Exception:
-
         pass
 
     return default
 
 
 def get_real_user(user_id):
-
     try:
-
-        return get_user(
-            user_id
-        )
+        return get_user(user_id)
 
     except Exception as e:
-
         print(
-            "[WEB] Ошибка PostgreSQL get_user:",
+            "[WEB] PostgreSQL get_user error:",
             repr(e),
             flush=True
         )
@@ -117,20 +97,15 @@ def get_real_user(user_id):
 
 
 def get_real_subscription(user_id):
-
     try:
-
         return (
-            get_subscription_content(
-                user_id
-            )
+            get_subscription_content(user_id)
             or ""
         )
 
     except Exception as e:
-
         print(
-            "[WEB] Ошибка PostgreSQL subscription_content:",
+            "[WEB] PostgreSQL subscription_content error:",
             repr(e),
             flush=True
         )
@@ -143,44 +118,28 @@ def get_real_subscription(user_id):
 # ============================================================
 
 def get_token(user_id):
-
-    return (
-        f"{SUBSCRIPTION_PREFIX}{user_id}"
-    )
+    return f"{SUBSCRIPTION_PREFIX}{user_id}"
 
 
 def get_user_id_from_token(token):
 
     if not token:
-
         return None
 
-    token = str(
-        token
-    ).strip()
+    token = str(token).strip()
 
-    if not token.startswith(
-        SUBSCRIPTION_PREFIX
-    ):
-
+    if not token.startswith(SUBSCRIPTION_PREFIX):
         return None
 
-    user_id = token[
-        len(SUBSCRIPTION_PREFIX):
-    ]
+    user_id = token[len(SUBSCRIPTION_PREFIX):]
 
     if not user_id.isdigit():
-
         return None
 
     try:
-
-        return int(
-            user_id
-        )
+        return int(user_id)
 
     except Exception:
-
         return None
 
 
@@ -191,16 +150,7 @@ def get_user_id_from_token(token):
 def find_hpwnr():
 
     candidates = [
-
         HPWNR_PATH,
-
-        "./bin/hpwnr",
-
-        "bin/hpwnr",
-
-        "./hpwnr",
-
-        "hpwnr",
 
         "/opt/render/project/src/bin/hpwnr",
 
@@ -210,78 +160,90 @@ def find_hpwnr():
 
         "/usr/bin/hpwnr",
 
-        "/opt/hpwnr",
+        os.path.abspath("./bin/hpwnr"),
 
-        "/opt/bin/hpwnr",
+        os.path.abspath("./hpwnr"),
+
+        "hpwnr",
     ]
 
     print(
-        "[HAPP] Поиск hpwnr...",
+        "[HAPP] Searching hpwnr...",
         flush=True
     )
+
+    checked = set()
 
     for candidate in candidates:
 
         if not candidate:
-
             continue
 
+        # Не проверяем одно и то же дважды
+        try:
+            normalized = os.path.abspath(candidate)
+
+        except Exception:
+            normalized = candidate
+
+        if normalized in checked:
+            continue
+
+        checked.add(normalized)
+
         # ----------------------------------------------------
-        # Проверка как файла
+        # FILE
         # ----------------------------------------------------
 
         try:
 
-            if os.path.isfile(
-                candidate
-            ):
+            if os.path.isfile(normalized):
 
                 executable = os.access(
-                    candidate,
+                    normalized,
                     os.X_OK
                 )
 
+                size = os.path.getsize(
+                    normalized
+                )
+
                 print(
-                    "[HAPP] Проверка:",
-                    candidate,
-                    "exists=True",
-                    f"executable={executable}",
+                    "[HAPP] file:",
+                    normalized,
+                    "size=",
+                    size,
+                    "executable=",
+                    executable,
                     flush=True
                 )
 
                 if executable:
 
-                    print(
-                        "[HAPP] ✅ Найден:",
-                        candidate,
-                        flush=True
-                    )
-
-                    return candidate
+                    return normalized
 
         except Exception as e:
 
             print(
-                "[HAPP] Ошибка проверки:",
-                candidate,
+                "[HAPP] file check error:",
                 repr(e),
                 flush=True
             )
 
         # ----------------------------------------------------
-        # Проверка через PATH
+        # PATH
         # ----------------------------------------------------
 
         try:
 
-            found = shutil.which(
-                candidate
-            )
+            found = shutil.which(candidate)
 
             if found:
 
+                found = os.path.abspath(found)
+
                 print(
-                    "[HAPP] ✅ Найден через PATH:",
+                    "[HAPP] PATH:",
                     found,
                     flush=True
                 )
@@ -291,13 +253,13 @@ def find_hpwnr():
         except Exception as e:
 
             print(
-                "[HAPP] shutil.which error:",
+                "[HAPP] PATH check error:",
                 repr(e),
                 flush=True
             )
 
     print(
-        "[HAPP] ❌ hpwnr НЕ найден",
+        "[HAPP] hpwnr NOT FOUND",
         flush=True
     )
 
@@ -305,19 +267,12 @@ def find_hpwnr():
 
 
 # ============================================================
-# HPWNR DIAGNOSTIC
+# HPWNR EXECUTION
 # ============================================================
 
-def run_hpwnr(
-    subscription_url
-):
+def run_hpwnr(subscription_url):
 
     if not subscription_url:
-
-        print(
-            "[HAPP] ❌ Пустой subscription URL",
-            flush=True
-        )
 
         return {
             "success": False,
@@ -328,22 +283,6 @@ def run_hpwnr(
             "happ_url": "",
             "error": "empty_subscription_url",
         }
-
-    print(
-        "[HAPP] =================================",
-        flush=True
-    )
-
-    print(
-        "[HAPP] Запуск hpwnr",
-        flush=True
-    )
-
-    # В логи полный персональный URL НЕ выводим.
-    print(
-        "[HAPP] Subscription URL: получен",
-        flush=True
-    )
 
     hpwnr = find_hpwnr()
 
@@ -360,241 +299,211 @@ def run_hpwnr(
         }
 
     print(
-        "[HAPP] hpwnr path:",
+        "[HAPP] hpwnr:",
         hpwnr,
         flush=True
     )
 
-    # ========================================================
-    # Официальный формат:
+    # --------------------------------------------------------
+    # Сначала пробуем официальный вариант:
     #
-    # hpwnr <URL> crypt5
+    # hpwnr URL crypt5
     #
-    # Дополнительно пробуем просто URL.
-    # ========================================================
+    # Именно такой формат указан в официальной документации.
+    # --------------------------------------------------------
 
-    commands = [
-
-        [
-            hpwnr,
-            subscription_url,
-            "crypt5",
-        ],
-
-        [
-            hpwnr,
-            subscription_url,
-        ],
+    command = [
+        hpwnr,
+        subscription_url,
+        "crypt5",
     ]
 
-    last_returncode = None
-    last_stdout = ""
-    last_stderr = ""
+    try:
 
-    for number, command in enumerate(
-        commands,
-        start=1
-    ):
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+            cwd=os.path.dirname(hpwnr) or None,
+        )
+
+    except FileNotFoundError as e:
 
         print(
-            f"[HAPP] Попытка #{number}",
+            "[HAPP] EXEC FileNotFoundError:",
+            repr(e),
             flush=True
         )
 
-        # Никогда не печатаем персональный URL.
+        return {
+            "success": False,
+            "hpwnr": hpwnr,
+            "returncode": None,
+            "stdout": "",
+            "stderr": repr(e),
+            "happ_url": "",
+            "error": "executable_cannot_start",
+        }
+
+    except PermissionError as e:
+
         print(
-            "[HAPP] Аргументы: URL + режим",
+            "[HAPP] EXEC PermissionError:",
+            repr(e),
             flush=True
         )
 
-        try:
+        return {
+            "success": False,
+            "hpwnr": hpwnr,
+            "returncode": None,
+            "stdout": "",
+            "stderr": repr(e),
+            "happ_url": "",
+            "error": "permission_denied",
+        }
 
-            result = subprocess.run(
-                command,
-                capture_output=True,
-                text=True,
-                timeout=20,
-                check=False,
-            )
+    except subprocess.TimeoutExpired:
 
-        except subprocess.TimeoutExpired:
+        return {
+            "success": False,
+            "hpwnr": hpwnr,
+            "returncode": None,
+            "stdout": "",
+            "stderr": "hpwnr timeout after 30 seconds",
+            "happ_url": "",
+            "error": "timeout",
+        }
+
+    except Exception as e:
+
+        print(
+            "[HAPP] EXEC error:",
+            repr(e),
+            flush=True
+        )
+
+        return {
+            "success": False,
+            "hpwnr": hpwnr,
+            "returncode": None,
+            "stdout": "",
+            "stderr": repr(e),
+            "happ_url": "",
+            "error": "execution_error",
+        }
+
+    stdout = (result.stdout or "").strip()
+    stderr = (result.stderr or "").strip()
+
+    print(
+        "[HAPP] returncode:",
+        result.returncode,
+        flush=True
+    )
+
+    print(
+        "[HAPP] stdout length:",
+        len(stdout),
+        flush=True
+    )
+
+    print(
+        "[HAPP] stderr length:",
+        len(stderr),
+        flush=True
+    )
+
+    if stderr:
+        print(
+            "[HAPP] stderr:",
+            stderr[:1000],
+            flush=True
+        )
+
+    # --------------------------------------------------------
+    # SEARCH CRYPT5
+    # --------------------------------------------------------
+
+    marker = "happ://crypt5/"
+
+    position = stdout.find(marker)
+
+    if position >= 0:
+
+        happ_url = (
+            stdout[position:]
+            .splitlines()[0]
+            .strip()
+            .strip("\"'")
+        )
+
+        if happ_url.startswith(marker):
 
             print(
-                f"[HAPP] ❌ Попытка #{number}: timeout",
+                "[HAPP] CRYPT5 SUCCESS",
                 flush=True
             )
 
-            last_returncode = None
+            return {
+                "success": True,
+                "hpwnr": hpwnr,
+                "returncode": result.returncode,
+                "stdout": stdout,
+                "stderr": stderr,
+                "happ_url": happ_url,
+                "error": "",
+            }
 
-            last_stdout = ""
+    # Иногда инструмент может вернуть crypt5 с дополнительным
+    # текстом — ищем любой happ://crypt5/ в stdout.
+    for line in stdout.splitlines():
 
-            last_stderr = (
-                "Process timed out after 20 seconds"
+        line = line.strip()
+
+        if "happ://crypt5/" in line:
+
+            position = line.find(
+                "happ://crypt5/"
             )
 
-            continue
+            happ_url = line[position:].strip()
 
-        except Exception as e:
-
-            print(
-                f"[HAPP] ❌ Попытка #{number}:",
-                repr(e),
-                flush=True
-            )
-
-            last_returncode = None
-
-            last_stdout = ""
-
-            last_stderr = repr(e)
-
-            continue
-
-        stdout = (
-            result.stdout or ""
-        ).strip()
-
-        stderr = (
-            result.stderr or ""
-        ).strip()
-
-        last_returncode = (
-            result.returncode
-        )
-
-        last_stdout = stdout
-
-        last_stderr = stderr
-
-        print(
-            "[HAPP] returncode:",
-            result.returncode,
-            flush=True
-        )
-
-        print(
-            "[HAPP] stdout length:",
-            len(stdout),
-            flush=True
-        )
-
-        print(
-            "[HAPP] stderr length:",
-            len(stderr),
-            flush=True
-        )
-
-        if stdout:
-
-            print(
-                "[HAPP] stdout:",
-                stdout[:3000],
-                flush=True
-            )
-
-        if stderr:
-
-            print(
-                "[HAPP] stderr:",
-                stderr[:3000],
-                flush=True
-            )
-
-        # ====================================================
-        # ИЩЕМ CRYPT5
-        # ====================================================
-
-        marker = (
-            "happ://crypt5/"
-        )
-
-        position = stdout.find(
-            marker
-        )
-
-        if position >= 0:
-
-            happ_url = (
-                stdout[position:]
-                .splitlines()[0]
-                .strip()
-                .strip("\"'")
-            )
-
-            if happ_url.startswith(
-                marker
-            ):
-
-                print(
-                    "[HAPP] ✅ CRYPT5 УСПЕШНО СОЗДАН",
-                    flush=True
-                )
-
-                print(
-                    "[HAPP] =================================",
-                    flush=True
-                )
-
+            if happ_url:
                 return {
                     "success": True,
                     "hpwnr": hpwnr,
-                    "returncode":
-                        result.returncode,
+                    "returncode": result.returncode,
                     "stdout": stdout,
                     "stderr": stderr,
                     "happ_url": happ_url,
                     "error": "",
                 }
 
-        if result.returncode == 0:
-
-            print(
-                "[HAPP] ⚠️ returncode=0, "
-                "но happ://crypt5 не найден",
-                flush=True
-            )
-
-    print(
-        "[HAPP] ❌ Crypt5 создать не удалось",
-        flush=True
-    )
-
-    print(
-        "[HAPP] =================================",
-        flush=True
-    )
-
     return {
         "success": False,
         "hpwnr": hpwnr,
-        "returncode":
-            last_returncode,
-        "stdout":
-            last_stdout,
-        "stderr":
-            last_stderr,
+        "returncode": result.returncode,
+        "stdout": stdout,
+        "stderr": stderr,
         "happ_url": "",
-        "error":
-            "crypt5_not_found",
+        "error": "crypt5_not_found",
     }
 
 
 # ============================================================
-# HAPP CRYPT5
+# CRYPT5
 # ============================================================
 
-def generate_happ_crypt5(
-    subscription_url
-):
+def generate_happ_crypt5(subscription_url):
 
     result = run_hpwnr(
         subscription_url
     )
 
-    if result.get(
-        "success"
-    ):
-
+    if result.get("success"):
         return result.get(
             "happ_url",
             ""
@@ -607,22 +516,16 @@ def generate_happ_crypt5(
 # URLS
 # ============================================================
 
-def build_happ_url(
-    subscription_url
-):
+def build_happ_url(subscription_url):
 
     crypt5 = generate_happ_crypt5(
         subscription_url
     )
 
     if crypt5:
-
         return crypt5
 
-    # ========================================================
-    # FALLBACK
-    # ========================================================
-
+    # Безопасный fallback
     return (
         "happ://add/"
         + quote(
@@ -632,9 +535,7 @@ def build_happ_url(
     )
 
 
-def build_incy_url(
-    subscription_url
-):
+def build_incy_url(subscription_url):
 
     return (
         "incy://add/"
@@ -645,36 +546,6 @@ def build_incy_url(
     )
 
 
-def get_urls(user_id):
-
-    token = get_token(
-        user_id
-    )
-
-    page_url = (
-        f"{PUBLIC_SITE_URL}/s/{token}"
-    )
-
-    subscription_url = (
-        f"{PUBLIC_SITE_URL}/sub/{token}"
-    )
-
-    happ_url = build_happ_url(
-        subscription_url
-    )
-
-    incy_url = build_incy_url(
-        subscription_url
-    )
-
-    return (
-        page_url,
-        subscription_url,
-        happ_url,
-        incy_url,
-    )
-
-
 # ============================================================
 # DATE
 # ============================================================
@@ -682,70 +553,48 @@ def get_urls(user_id):
 def parse_date(value):
 
     if not value:
-
         return None
 
-    value = str(
-        value
-    ).strip()
+    value = str(value).strip()
 
     formats = [
-
         "%Y-%m-%d",
-
         "%Y-%m-%d %H:%M",
-
         "%Y-%m-%d %H:%M:%S",
-
         "%d.%m.%Y",
-
         "%d.%m.%Y %H:%M",
-
         "%d.%m.%Y %H:%M:%S",
     ]
 
     for fmt in formats:
 
         try:
-
             return datetime.strptime(
                 value,
                 fmt
             )
 
         except Exception:
-
             pass
 
     try:
-
         return datetime.fromisoformat(
-            value.replace(
-                "Z",
-                ""
-            )
+            value.replace("Z", "")
         )
 
     except Exception:
-
         return None
 
 
 def format_date(value):
 
     if not value:
-
         return "Не указана"
 
-    date = parse_date(
-        value
-    )
+    date = parse_date(value)
 
     if not date:
-
-        return str(
-            value
-        )
+        return str(value)
 
     return date.strftime(
         "%d.%m.%Y"
@@ -754,12 +603,9 @@ def format_date(value):
 
 def days_left(value):
 
-    date = parse_date(
-        value
-    )
+    date = parse_date(value)
 
     if not date:
-
         return 0
 
     return max(
@@ -774,28 +620,20 @@ def days_left(value):
 def subscription_status(value):
 
     if not value:
-
         return (
             "Неактивна",
             "expired"
         )
 
-    date = parse_date(
-        value
-    )
+    date = parse_date(value)
 
     if not date:
-
         return (
             "Активна",
             "active"
         )
 
-    if (
-        date.date()
-        >= datetime.now().date()
-    ):
-
+    if date.date() >= datetime.now().date():
         return (
             "Активна",
             "active"
@@ -813,16 +651,9 @@ def subscription_status(value):
 
 def render_page(user_id):
 
-    # ========================================================
-    # REAL USER
-    # ========================================================
-
-    user = get_real_user(
-        user_id
-    )
+    user = get_real_user(user_id)
 
     if not user:
-
         abort(404)
 
     real_user_id = user_value(
@@ -855,57 +686,27 @@ def render_page(user_id):
         ""
     )
 
-    subscription_link = user_value(
-        user,
-        5,
-        ""
-    )
-
-    # ========================================================
-    # NAME
-    # ========================================================
-
     display_name = (
         first_name
         or username
         or f"ID {real_user_id}"
     )
 
-    # ========================================================
-    # TARIFF
-    # ========================================================
-
     if subscription == "vip":
 
-        tariff_name = (
-            "👑 ixxy VPN"
-        )
+        tariff_name = "👑 ixxy VPN"
 
     elif subscription == "trial":
 
-        tariff_name = (
-            "🎁 Пробный период"
-        )
+        tariff_name = "🎁 Пробный период"
 
-    elif subscription in (
-        "",
-        "none",
-        None,
-    ):
+    elif subscription in ("", "none", None):
 
-        tariff_name = (
-            "Нет подписки"
-        )
+        tariff_name = "Нет подписки"
 
     else:
 
-        tariff_name = str(
-            subscription
-        )
-
-    # ========================================================
-    # STATUS
-    # ========================================================
+        tariff_name = str(subscription)
 
     status_text, status_class = (
         subscription_status(
@@ -917,57 +718,29 @@ def render_page(user_id):
         subscription_until
     )
 
-    # ========================================================
-    # REAL SUBSCRIPTION
-    #
-    # Серверные настройки НЕ выводятся.
-    # ========================================================
-
-    real_content = (
-        get_real_subscription(
-            real_user_id
-        )
+    real_content = get_real_subscription(
+        real_user_id
     )
 
     subscription_ready = bool(
         real_content.strip()
     )
 
-    # ========================================================
-    # PERSONAL URL
-    # ========================================================
-
     token = get_token(
         real_user_id
-    )
-
-    page_url = (
-        f"{PUBLIC_SITE_URL}/s/{token}"
     )
 
     real_subscription_url = (
         f"{PUBLIC_SITE_URL}/sub/{token}"
     )
 
-    # ========================================================
-    # HAPP
-    # ========================================================
-
     happ_url = build_happ_url(
         real_subscription_url
     )
 
-    # ========================================================
-    # INCY
-    # ========================================================
-
     incy_url = build_incy_url(
         real_subscription_url
     )
-
-    # ========================================================
-    # PROGRESS
-    # ========================================================
 
     if remaining_days <= 0:
 
@@ -980,20 +753,11 @@ def render_page(user_id):
     else:
 
         progress = round(
-            (
-                remaining_days
-                / 30
-            )
-            * 100
+            remaining_days / 30 * 100
         )
-
-    # ========================================================
-    # HTML
-    # ========================================================
 
     page = f"""
 <!DOCTYPE html>
-
 <html lang="ru">
 
 <head>
@@ -1035,7 +799,6 @@ html {{
 body {{
     margin: 0;
     min-height: 100vh;
-
     color: #fff;
 
     background:
@@ -1071,27 +834,20 @@ button {{
 .page {{
     width: 100%;
     max-width: 760px;
-
     margin: auto;
-
-    padding:
-        22px
-        18px
-        50px;
+    padding: 22px 18px 50px;
 }}
 
 .top {{
     display: flex;
     align-items: center;
     justify-content: space-between;
-
     margin-bottom: 18px;
 }}
 
 .brand {{
     display: flex;
     align-items: center;
-
     gap: 11px;
 }}
 
@@ -1127,27 +883,18 @@ button {{
 
 .brand-sub {{
     margin-top: 2px;
-
-    color:
-        rgba(255,255,255,.4);
-
+    color: rgba(255,255,255,.4);
     font-size: 10px;
-
-    text-transform:
-        uppercase;
-
-    letter-spacing:
-        1px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
 }}
 
 .status {{
     display: flex;
     align-items: center;
-
     gap: 7px;
 
-    padding:
-        9px 12px;
+    padding: 9px 12px;
 
     border-radius: 999px;
 
@@ -1165,26 +912,19 @@ button {{
 .dot {{
     width: 7px;
     height: 7px;
-
     border-radius: 50%;
-
-    background:
-        #ff4d65;
+    background: #ff4d65;
 }}
 
 .active .dot {{
-    background:
-        #5cffaa;
-
+    background: #5cffaa;
     box-shadow:
         0 0 13px
         rgba(92,255,170,.8);
 }}
 
 .hero {{
-    padding:
-        30px 23px 24px;
-
+    padding: 30px 23px 24px;
     border-radius: 30px;
 
     border:
@@ -1202,24 +942,18 @@ button {{
         0 30px 100px
         rgba(0,0,0,.35);
 
-    backdrop-filter:
-        blur(25px);
+    backdrop-filter: blur(25px);
 }}
 
 .eyebrow {{
-    color:
-        #ae8bff;
-
+    color: #ae8bff;
     font-size: 10px;
     font-weight: 950;
-
-    letter-spacing:
-        2px;
+    letter-spacing: 2px;
 }}
 
 h1 {{
-    margin:
-        12px 0 0;
+    margin: 12px 0 0;
 
     font-size:
         clamp(
@@ -1229,30 +963,21 @@ h1 {{
         );
 
     line-height: .94;
-
-    letter-spacing:
-        -3px;
+    letter-spacing: -3px;
 }}
 
 .desc {{
     margin-top: 16px;
-
-    color:
-        rgba(255,255,255,.52);
-
+    color: rgba(255,255,255,.52);
     font-size: 13px;
-
     line-height: 1.55;
 }}
 
 .user {{
     display: flex;
     align-items: center;
-
     gap: 10px;
-
     margin-top: 22px;
-
     font-size: 13px;
 }}
 
@@ -1279,11 +1004,9 @@ h1 {{
 .connect-main {{
     width: 100%;
     min-height: 68px;
-
     margin-top: 24px;
 
     border: 0;
-
     border-radius: 20px;
 
     color: white;
@@ -1305,35 +1028,25 @@ h1 {{
 
 .connect-main strong {{
     display: block;
-
     font-size: 16px;
 }}
 
 .connect-main small {{
     display: block;
-
     margin-top: 4px;
-
-    color:
-        rgba(255,255,255,.65);
-
+    color: rgba(255,255,255,.65);
     font-size: 10px;
 }}
 
 .cards {{
     display: grid;
-
-    grid-template-columns:
-        repeat(2, 1fr);
-
+    grid-template-columns: repeat(2, 1fr);
     gap: 11px;
-
     margin-top: 12px;
 }}
 
 .card {{
     padding: 19px;
-
     min-height: 115px;
 
     border-radius: 21px;
@@ -1348,36 +1061,26 @@ h1 {{
 
 .icon {{
     margin-bottom: 14px;
-
     font-size: 19px;
 }}
 
 .label {{
-    color:
-        rgba(255,255,255,.38);
-
+    color: rgba(255,255,255,.38);
     font-size: 9px;
     font-weight: 800;
-
     letter-spacing: 1px;
-
-    text-transform:
-        uppercase;
+    text-transform: uppercase;
 }}
 
 .value {{
     margin-top: 6px;
-
     font-size: 15px;
     font-weight: 950;
-
-    word-break:
-        break-word;
+    word-break: break-word;
 }}
 
 .progress-card {{
     margin-top: 12px;
-
     padding: 20px;
 
     border-radius: 21px;
@@ -1392,10 +1095,7 @@ h1 {{
 
 .progress-top {{
     display: flex;
-
-    justify-content:
-        space-between;
-
+    justify-content: space-between;
     margin-bottom: 12px;
 }}
 
@@ -1405,29 +1105,21 @@ h1 {{
 }}
 
 .progress-days {{
-    color:
-        #ad89ff;
-
+    color: #ad89ff;
     font-size: 11px;
     font-weight: 900;
 }}
 
 .progress {{
     height: 8px;
-
     overflow: hidden;
-
     border-radius: 999px;
-
-    background:
-        rgba(255,255,255,.07);
+    background: rgba(255,255,255,.07);
 }}
 
 .bar {{
     width: {progress}%;
-
     height: 100%;
-
     border-radius: inherit;
 
     background:
@@ -1444,7 +1136,6 @@ h1 {{
 
 .section-title {{
     margin-bottom: 11px;
-
     font-size: 17px;
     font-weight: 950;
 }}
@@ -1452,13 +1143,10 @@ h1 {{
 .option {{
     display: flex;
     align-items: center;
-
     gap: 14px;
 
     min-height: 72px;
-
     margin-bottom: 10px;
-
     padding: 14px;
 
     border-radius: 20px;
@@ -1484,9 +1172,7 @@ h1 {{
     justify-content: center;
 
     border-radius: 14px;
-
-    background:
-        rgba(255,255,255,.07);
+    background: rgba(255,255,255,.07);
 
     font-size: 20px;
 }}
@@ -1502,17 +1188,12 @@ h1 {{
 
 .option-desc {{
     margin-top: 4px;
-
-    color:
-        rgba(255,255,255,.4);
-
+    color: rgba(255,255,255,.4);
     font-size: 10px;
 }}
 
 .arrow {{
-    color:
-        rgba(255,255,255,.3);
-
+    color: rgba(255,255,255,.3);
     font-size: 21px;
 }}
 
@@ -1534,25 +1215,17 @@ h1 {{
 }}
 
 .subscription-label {{
-    color:
-        rgba(255,255,255,.38);
-
+    color: rgba(255,255,255,.38);
     font-size: 9px;
-
     letter-spacing: 1px;
-
     font-weight: 900;
-
-    text-transform:
-        uppercase;
+    text-transform: uppercase;
 }}
 
 .url {{
     display: flex;
     align-items: center;
-
     gap: 8px;
-
     margin-top: 10px;
 }}
 
@@ -1564,21 +1237,15 @@ h1 {{
 
     border-radius: 13px;
 
-    background:
-        rgba(0,0,0,.25);
+    background: rgba(0,0,0,.25);
 
-    color:
-        rgba(255,255,255,.67);
+    color: rgba(255,255,255,.67);
 
     font-size: 10px;
 
     overflow: hidden;
-
-    white-space:
-        nowrap;
-
-    text-overflow:
-        ellipsis;
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }}
 
 .copy {{
@@ -1586,7 +1253,6 @@ h1 {{
     height: 48px;
 
     border: 0;
-
     border-radius: 14px;
 
     background:
@@ -1595,17 +1261,14 @@ h1 {{
     color: white;
 
     cursor: pointer;
-
     font-size: 17px;
 }}
 
 .security {{
     margin-top: 18px;
-
     padding: 16px;
 
     display: flex;
-
     gap: 12px;
 
     border-radius: 19px;
@@ -1629,12 +1292,8 @@ h1 {{
 
 .security-text {{
     margin-top: 4px;
-
-    color:
-        rgba(255,255,255,.36);
-
+    color: rgba(255,255,255,.36);
     font-size: 9px;
-
     line-height: 1.5;
 }}
 
@@ -1644,7 +1303,6 @@ h1 {{
     justify-content: center;
 
     min-height: 57px;
-
     margin-top: 12px;
 
     border-radius: 19px;
@@ -1662,14 +1320,11 @@ h1 {{
 
 .footer {{
     margin-top: 25px;
-
     text-align: center;
 
-    color:
-        rgba(255,255,255,.2);
+    color: rgba(255,255,255,.2);
 
     font-size: 9px;
-
     line-height: 1.7;
 }}
 
@@ -1682,8 +1337,7 @@ h1 {{
     transform:
         translate(-50%, 20px);
 
-    padding:
-        12px 17px;
+    padding: 12px 17px;
 
     border-radius: 999px;
 
@@ -1700,9 +1354,7 @@ h1 {{
     font-weight: 900;
 
     opacity: 0;
-
-    pointer-events:
-        none;
+    pointer-events: none;
 
     transition: .25s;
 }}
@@ -2273,15 +1925,10 @@ async function copySubscription() {{
 </html>
 """
 
-    response = make_response(
-        page
-    )
+    response = make_response(page)
 
     for key, value in NO_CACHE_HEADERS.items():
-
-        response.headers[
-            key
-        ] = value
+        response.headers[key] = value
 
     response.headers[
         "X-Content-Type-Options"
@@ -2291,70 +1938,41 @@ async function copySubscription() {{
 
 
 # ============================================================
-# /s/<TOKEN>
+# SUBSCRIPTION PAGE
 # ============================================================
 
-@app.route(
-    "/s/<token>"
-)
+@app.route("/s/<token>")
 def subscription_page(token):
 
-    user_id = get_user_id_from_token(
-        token
-    )
+    user_id = get_user_id_from_token(token)
 
     if not user_id:
-
         abort(404)
 
-    user = get_real_user(
-        user_id
-    )
-
-    if not user:
-
+    if not get_real_user(user_id):
         abort(404)
 
-    return render_page(
-        user_id
-    )
+    return render_page(user_id)
 
 
 # ============================================================
-# /sub/<TOKEN>
-#
-# РЕАЛЬНАЯ ПОДПИСКА ИЗ POSTGRESQL
-#
-# Содержимое серверов не выводится на веб-страницу.
+# REAL SUBSCRIPTION
 # ============================================================
 
-@app.route(
-    "/sub/<token>"
-)
+@app.route("/sub/<token>")
 def subscription_endpoint(token):
 
-    user_id = get_user_id_from_token(
-        token
-    )
+    user_id = get_user_id_from_token(token)
 
     if not user_id:
-
         abort(404)
 
-    user = get_real_user(
-        user_id
-    )
-
-    if not user:
-
+    if not get_real_user(user_id):
         abort(404)
 
-    content = get_real_subscription(
-        user_id
-    )
+    content = get_real_subscription(user_id)
 
     if not content:
-
         return Response(
             "Subscription unavailable",
             status=404,
@@ -2369,10 +1987,7 @@ def subscription_endpoint(token):
     )
 
     for key, value in NO_CACHE_HEADERS.items():
-
-        response.headers[
-            key
-        ] = value
+        response.headers[key] = value
 
     response.headers[
         "X-Content-Type-Options"
@@ -2383,29 +1998,17 @@ def subscription_endpoint(token):
 
 # ============================================================
 # HAPP TEST
-#
-# ДИАГНОСТИКА HPWNR / CRYPT5
 # ============================================================
 
-@app.route(
-    "/happ-test/<token>"
-)
+@app.route("/happ-test/<token>")
 def happ_test(token):
 
-    user_id = get_user_id_from_token(
-        token
-    )
+    user_id = get_user_id_from_token(token)
 
     if not user_id:
-
         abort(404)
 
-    user = get_real_user(
-        user_id
-    )
-
-    if not user:
-
+    if not get_real_user(user_id):
         abort(404)
 
     subscription_url = (
@@ -2416,9 +2019,7 @@ def happ_test(token):
         subscription_url
     )
 
-    hpwnr = result.get(
-        "hpwnr"
-    )
+    hpwnr = result.get("hpwnr")
 
     happ_url = result.get(
         "happ_url",
@@ -2444,25 +2045,61 @@ def happ_test(token):
         False
     )
 
-    # ========================================================
-    # ДИАГНОСТИКА
-    #
-    # Важное:
-    # subscription URL намеренно не показываем.
-    # ========================================================
+    try:
+        exists = bool(
+            hpwnr and os.path.isfile(hpwnr)
+        )
+
+        executable = bool(
+            hpwnr and os.access(hpwnr, os.X_OK)
+        )
+
+        size = (
+            os.path.getsize(hpwnr)
+            if hpwnr and exists
+            else 0
+        )
+
+    except Exception:
+        exists = False
+        executable = False
+        size = 0
 
     result_text = f"""
 IXXY HAPP DIAGNOSTICS
 
-status: {"OK" if success else "ERROR"}
+status:
+{"OK" if success else "ERROR"}
 
-hpwnr_found: {"YES" if hpwnr else "NO"}
+platform:
+{platform.platform()}
+
+machine:
+{platform.machine()}
+
+python:
+{platform.python_version()}
+
+hpwnr_found:
+{"YES" if hpwnr else "NO"}
 
 hpwnr_path:
 {hpwnr or "NOT FOUND"}
 
+file_exists:
+{"YES" if exists else "NO"}
+
+executable:
+{"YES" if executable else "NO"}
+
+size:
+{size} bytes
+
 returncode:
 {returncode}
+
+error:
+{result.get("error", "")}
 
 stdout_length:
 {len(stdout)}
@@ -2481,7 +2118,6 @@ stderr:
 """
 
     if happ_url:
-
         result_text += (
             "\n\nHAPP URL:\n"
             + happ_url
@@ -2494,40 +2130,129 @@ stderr:
     )
 
     for key, value in NO_CACHE_HEADERS.items():
-
-        response.headers[
-            key
-        ] = value
+        response.headers[key] = value
 
     return response
+
+
+# ============================================================
+# HPWNR BASIC TEST
+# ============================================================
+
+@app.route("/hpwnr-test")
+def hpwnr_test():
+
+    hpwnr = find_hpwnr()
+
+    result = {
+        "platform": platform.platform(),
+        "machine": platform.machine(),
+        "python": platform.python_version(),
+        "hpwnr": hpwnr,
+        "exists": False,
+        "executable": False,
+        "size": 0,
+        "returncode": None,
+        "stdout": "",
+        "stderr": "",
+        "exception": "",
+    }
+
+    if not hpwnr:
+        return Response(
+            "\n".join(
+                f"{k}: {v}"
+                for k, v in result.items()
+            ),
+            status=500,
+            mimetype="text/plain",
+            headers=NO_CACHE_HEADERS,
+        )
+
+    try:
+
+        result["exists"] = os.path.isfile(
+            hpwnr
+        )
+
+        result["executable"] = os.access(
+            hpwnr,
+            os.X_OK
+        )
+
+        result["size"] = os.path.getsize(
+            hpwnr
+        )
+
+    except Exception as e:
+
+        result["exception"] = repr(e)
+
+    # Проверяем именно запуск бинарника.
+    try:
+
+        test = subprocess.run(
+            [
+                hpwnr,
+                "h",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+            cwd=os.path.dirname(hpwnr) or None,
+        )
+
+        result["returncode"] = (
+            test.returncode
+        )
+
+        result["stdout"] = (
+            test.stdout or ""
+        )[:5000]
+
+        result["stderr"] = (
+            test.stderr or ""
+        )[:5000]
+
+    except Exception as e:
+
+        result["exception"] = repr(e)
+
+    text = "\n".join(
+        f"{k}: {v}"
+        for k, v in result.items()
+    )
+
+    ok = (
+        result["exists"]
+        and result["executable"]
+        and result["returncode"] == 0
+    )
+
+    return Response(
+        text,
+        status=200 if ok else 500,
+        mimetype="text/plain",
+        headers=NO_CACHE_HEADERS,
+    )
 
 
 # ============================================================
 # HEALTH
 # ============================================================
 
-@app.route(
-    "/health"
-)
+@app.route("/health")
 def health():
 
     response = make_response({
-
-        "service":
-            "ixxy VPN",
-
-        "status":
-            "ok",
-
-        "version":
-            APP_VERSION,
+        "service": "ixxy VPN",
+        "status": "ok",
+        "version": APP_VERSION,
     })
 
     for key, value in NO_CACHE_HEADERS.items():
-
-        response.headers[
-            key
-        ] = value
+        response.headers[key] = value
 
     return response
 
@@ -2811,10 +2536,7 @@ p {
     )
 
     for key, value in NO_CACHE_HEADERS.items():
-
-        response.headers[
-            key
-        ] = value
+        response.headers[key] = value
 
     return response
 
@@ -2857,6 +2579,12 @@ if __name__ == "__main__":
     print(
         "HPWNR_PATH:",
         HPWNR_PATH,
+        flush=True
+    )
+
+    print(
+        "Machine:",
+        platform.machine(),
         flush=True
     )
 
