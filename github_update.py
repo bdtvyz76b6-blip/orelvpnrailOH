@@ -37,8 +37,8 @@ PROFILE_UPDATE_INTERVAL = 1
 # HAPP — СКРЫТИЕ НАСТРОЕК СЕРВЕРОВ
 # ============================================================
 
-# Эта переменная больше не используется напрямую,
-# скрытие всегда включено принудительно.
+# Эта переменная оставлена для совместимости, но фактически
+# скрытие будет принудительным всегда.
 HIDE_SETTINGS = True
 
 # ============================================================
@@ -165,13 +165,16 @@ def get_subscription_content_url(user_id):
 # ============================================================
 
 def build_profile_header(announce):
-    # Принудительно всегда скрываем настройки серверов
-    hide_value = "true"
+    # Добавляем несколько вариантов скрытия настроек,
+    # чтобы покрыть разные версии и форки Happ.
+    # Лишние строки игнорируются клиентами.
     return (
         f"#profile-title: {PROFILE_TITLE}\n"
-        f"#profile-update-interval: "
-        f"{PROFILE_UPDATE_INTERVAL}\n"
-        f"#hide-settings: {hide_value}\n"
+        f"#profile-update-interval: {PROFILE_UPDATE_INTERVAL}\n"
+        f"#hide-settings: true\n"
+        f"#happ-hide-settings: true\n"
+        f"#hide_server_settings: true\n"
+        f"#hidesettings: true\n"
         f"#announce: {announce}\n\n"
     )
 
@@ -200,8 +203,6 @@ def save_user_subscription(
 # НОВЫЙ ПОЛЬЗОВАТЕЛЬ
 # ============================================================
 
-# Генерируем заголовок через общую функцию, чтобы гарантировать
-# одинаковые параметры и скрытие настроек.
 _NEW_USER_ANNOUNCE = "🔒 Подписка не активна • Оформите подписку через @orelvpntopbot"
 
 NEW_USER_TEMPLATE = (
