@@ -208,11 +208,6 @@ def render_page(
     happ_url = build_happ_url(token)
     incy_url = build_incy_url(token)
 
-    # ВАЖНО:
-    # subscription_link намеренно НЕ показывается,
-    # если это может раскрыть серверные настройки.
-    #
-    # Вместо него показываем безопасную ссылку /sub/<token>.
     safe_subscription_url = build_subscription_url(token)
 
     if active:
@@ -237,7 +232,7 @@ def render_page(
 
 <meta
     name="theme-color"
-    content="#050507"
+    content="#0d0d14"
 >
 
 <meta
@@ -255,9 +250,39 @@ def render_page(
     content="ixxy VPN"
 >
 
-<title>ixxy VPN</title>
+<title>ixxy VPN — Личный кабинет</title>
 
 <style>
+
+:root {{
+    --bg: #0d0d14;
+    --bg-secondary: #13131f;
+    --surface: rgba(255, 255, 255, 0.04);
+    --surface-hover: rgba(255, 255, 255, 0.08);
+    --border: rgba(255, 255, 255, 0.08);
+    --text-primary: #f5f5f7;
+    --text-secondary: rgba(245, 245, 247, 0.64);
+    --text-tertiary: rgba(245, 245, 247, 0.4);
+    --accent-pink: #ff5c8a;
+    --accent-purple: #a45cff;
+    --accent-gradient: linear-gradient(135deg, #ff5c8a, #a45cff);
+    --shadow: 0 25px 60px rgba(0, 0, 0, 0.4);
+    --progress-bg: rgba(255, 255, 255, 0.08);
+    --progress-fill: linear-gradient(90deg, #ff5c8a, #a45cff);
+}}
+
+body.light-theme {{
+    --bg: #f7f7fb;
+    --bg-secondary: #ffffff;
+    --surface: rgba(0, 0, 0, 0.03);
+    --surface-hover: rgba(0, 0, 0, 0.06);
+    --border: rgba(0, 0, 0, 0.08);
+    --text-primary: #1a1a2e;
+    --text-secondary: rgba(26, 26, 46, 0.7);
+    --text-tertiary: rgba(26, 26, 46, 0.45);
+    --shadow: 0 20px 50px rgba(0, 0, 0, 0.08);
+    --progress-bg: rgba(0, 0, 0, 0.08);
+}}
 
 * {{
     box-sizing: border-box;
@@ -265,7 +290,8 @@ def render_page(
 }}
 
 html {{
-    background: #050507;
+    background: var(--bg);
+    transition: background 0.4s ease;
 }}
 
 body {{
@@ -275,17 +301,17 @@ body {{
     background:
         radial-gradient(
             circle at 50% -10%,
-            rgba(255,255,255,.09),
-            transparent 34%
+            rgba(255, 92, 138, 0.15),
+            transparent 38%
         ),
         radial-gradient(
             circle at 100% 30%,
-            rgba(255,255,255,.035),
-            transparent 30%
+            rgba(164, 92, 255, 0.12),
+            transparent 32%
         ),
-        #050507;
+        var(--bg);
 
-    color: #fff;
+    color: var(--text-primary);
 
     font-family:
         -apple-system,
@@ -297,6 +323,7 @@ body {{
         sans-serif;
 
     overflow-x: hidden;
+    transition: background 0.4s ease, color 0.3s ease;
 }}
 
 body::before {{
@@ -311,11 +338,12 @@ body::before {{
         linear-gradient(
             120deg,
             transparent 0%,
-            rgba(255,255,255,.025) 50%,
+            rgba(255, 92, 138, 0.04) 50%,
             transparent 100%
         );
 
-    opacity: .7;
+    opacity: 0.7;
+    z-index: 0;
 }}
 
 .container {{
@@ -328,6 +356,9 @@ body::before {{
         calc(24px + env(safe-area-inset-top))
         18px
         calc(30px + env(safe-area-inset-bottom));
+
+    position: relative;
+    z-index: 1;
 }}
 
 .header {{
@@ -345,8 +376,8 @@ body::before {{
 }}
 
 .logo {{
-    width: 44px;
-    height: 44px;
+    width: 46px;
+    height: 46px;
 
     border-radius: 14px;
 
@@ -357,23 +388,16 @@ body::before {{
     font-size: 22px;
     font-weight: 900;
 
-    background:
-        linear-gradient(
-            145deg,
-            #ffffff,
-            #a7a7a7
-        );
+    background: var(--accent-gradient);
+    color: #fff;
 
-    color: #08080a;
-
-    box-shadow:
-        0 10px 30px rgba(255,255,255,.12);
+    box-shadow: 0 10px 30px rgba(255, 92, 138, 0.3);
 }}
 
 .brand-text {{
     font-size: 19px;
     font-weight: 800;
-    letter-spacing: -.4px;
+    letter-spacing: -0.4px;
 }}
 
 .brand-sub {{
@@ -381,9 +405,36 @@ body::before {{
 
     font-size: 11px;
 
-    color: rgba(255,255,255,.42);
+    color: var(--text-tertiary);
 
-    letter-spacing: .5px;
+    letter-spacing: 0.5px;
+}}
+
+.header-controls {{
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}}
+
+.theme-toggle {{
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-primary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    transition: all 0.3s ease;
+    outline: none;
+}}
+
+.theme-toggle:hover {{
+    background: var(--surface-hover);
+    transform: scale(1.05);
 }}
 
 .status {{
@@ -398,17 +449,18 @@ body::before {{
     font-size: 10px;
     font-weight: 800;
 
-    letter-spacing: .5px;
+    letter-spacing: 0.5px;
 
-    border: 1px solid rgba(255,255,255,.07);
+    border: 1px solid var(--border);
 
-    background: rgba(255,255,255,.035);
+    background: var(--surface);
 
-    color: rgba(255,255,255,.55);
+    color: var(--text-secondary);
 }}
 
 .status.active {{
-    color: #fff;
+    color: var(--text-primary);
+    border-color: rgba(255, 92, 138, 0.3);
 }}
 
 .status-dot {{
@@ -417,16 +469,16 @@ body::before {{
 
     border-radius: 50%;
 
-    background: #777;
+    background: var(--text-tertiary);
 
-    box-shadow: 0 0 10px rgba(255,255,255,.25);
+    box-shadow: 0 0 10px rgba(0,0,0,0.2);
 }}
 
 .active .status-dot {{
-    background: #fff;
+    background: #ff5c8a;
 
     box-shadow:
-        0 0 10px rgba(255,255,255,.8);
+        0 0 10px rgba(255, 92, 138, 0.8);
 }}
 
 .hero {{
@@ -436,20 +488,15 @@ body::before {{
 
     border-radius: 30px;
 
-    background:
-        linear-gradient(
-            145deg,
-            rgba(255,255,255,.075),
-            rgba(255,255,255,.025)
-        );
+    background: var(--surface);
 
-    border: 1px solid rgba(255,255,255,.08);
+    border: 1px solid var(--border);
 
-    box-shadow:
-        0 30px 80px rgba(0,0,0,.45),
-        inset 0 1px 0 rgba(255,255,255,.04);
+    box-shadow: var(--shadow),
+                inset 0 1px 0 rgba(255,255,255,0.03);
 
     overflow: hidden;
+    transition: background 0.3s ease, border 0.3s ease, box-shadow 0.3s ease;
 }}
 
 .hero::before {{
@@ -457,15 +504,16 @@ body::before {{
 
     position: absolute;
 
-    width: 220px;
-    height: 220px;
+    width: 250px;
+    height: 250px;
 
-    top: -130px;
+    top: -140px;
     left: 50%;
 
     transform: translateX(-50%);
 
-    background: rgba(255,255,255,.08);
+    background: var(--accent-gradient);
+    opacity: 0.2;
 
     filter: blur(70px);
 
@@ -480,7 +528,7 @@ body::before {{
 }}
 
 .eyebrow {{
-    color: rgba(255,255,255,.4);
+    color: var(--text-tertiary);
 
     font-size: 11px;
 
@@ -503,10 +551,14 @@ body::before {{
     margin-bottom: 7px;
 
     word-break: break-word;
+    background: var(--accent-gradient);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
 }}
 
 .user-description {{
-    color: rgba(255,255,255,.43);
+    color: var(--text-secondary);
 
     font-size: 13px;
 
@@ -527,29 +579,27 @@ body::before {{
 
     text-decoration: none;
 
-    color: #050507;
+    color: #fff;
 
-    background: #fff;
+    background: var(--accent-gradient);
 
     font-size: 16px;
 
     font-weight: 850;
 
-    letter-spacing: -.2px;
+    letter-spacing: -0.2px;
 
-    box-shadow:
-        0 15px 40px rgba(255,255,255,.12);
+    box-shadow: 0 15px 40px rgba(255, 92, 138, 0.3);
 
     transition:
-        transform .15s ease,
-        box-shadow .15s ease;
+        transform 0.15s ease,
+        box-shadow 0.15s ease;
 }}
 
 .connect:active {{
-    transform: scale(.975);
+    transform: scale(0.975);
 
-    box-shadow:
-        0 8px 20px rgba(255,255,255,.08);
+    box-shadow: 0 8px 20px rgba(255, 92, 138, 0.2);
 }}
 
 .connect-icon {{
@@ -574,16 +624,16 @@ body::before {{
 
     border-radius: 21px;
 
-    background:
-        rgba(255,255,255,.035);
+    background: var(--surface);
 
-    border: 1px solid rgba(255,255,255,.065);
+    border: 1px solid var(--border);
 
     min-width: 0;
+    transition: background 0.3s ease, border 0.3s ease;
 }}
 
 .card-label {{
-    color: rgba(255,255,255,.35);
+    color: var(--text-tertiary);
 
     font-size: 10px;
 
@@ -601,7 +651,7 @@ body::before {{
 
     font-weight: 750;
 
-    color: rgba(255,255,255,.9);
+    color: var(--text-primary);
 
     overflow: hidden;
 
@@ -617,10 +667,10 @@ body::before {{
 
     border-radius: 21px;
 
-    background:
-        rgba(255,255,255,.035);
+    background: var(--surface);
 
-    border: 1px solid rgba(255,255,255,.065);
+    border: 1px solid var(--border);
+    transition: background 0.3s ease, border 0.3s ease;
 }}
 
 .progress-top {{
@@ -636,7 +686,7 @@ body::before {{
 .progress-title {{
     font-size: 12px;
 
-    color: rgba(255,255,255,.55);
+    color: var(--text-secondary);
 
     font-weight: 700;
 }}
@@ -644,7 +694,7 @@ body::before {{
 .progress-value {{
     font-size: 12px;
 
-    color: rgba(255,255,255,.8);
+    color: var(--text-primary);
 
     font-weight: 800;
 }}
@@ -658,7 +708,7 @@ body::before {{
 
     overflow: hidden;
 
-    background: rgba(255,255,255,.08);
+    background: var(--progress-bg);
 }}
 
 .progress-bar {{
@@ -668,10 +718,9 @@ body::before {{
 
     border-radius: inherit;
 
-    background: #fff;
+    background: var(--progress-fill);
 
-    box-shadow:
-        0 0 14px rgba(255,255,255,.4);
+    box-shadow: 0 0 14px rgba(255, 92, 138, 0.5);
 }}
 
 .section {{
@@ -685,7 +734,7 @@ body::before {{
 
     font-weight: 800;
 
-    color: rgba(255,255,255,.7);
+    color: var(--text-secondary);
 }}
 
 .app-card {{
@@ -703,21 +752,25 @@ body::before {{
 
     border-radius: 20px;
 
-    color: #fff;
+    color: var(--text-primary);
 
     text-decoration: none;
 
-    background:
-        rgba(255,255,255,.035);
+    background: var(--surface);
 
-    border: 1px solid rgba(255,255,255,.065);
+    border: 1px solid var(--border);
 
-    transition: background .15s ease;
+    transition: all 0.3s ease;
+}}
+
+.app-card:hover {{
+    background: var(--surface-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
 }}
 
 .app-card:active {{
-    background:
-        rgba(255,255,255,.07);
+    transform: scale(0.98);
 }}
 
 .app-left {{
@@ -742,12 +795,13 @@ body::before {{
     align-items: center;
     justify-content: center;
 
-    background:
-        rgba(255,255,255,.07);
+    background: var(--accent-gradient);
+    color: #fff;
 
-    border: 1px solid rgba(255,255,255,.06);
+    border: none;
 
     font-size: 20px;
+    box-shadow: 0 5px 15px rgba(255, 92, 138, 0.3);
 }}
 
 .app-name {{
@@ -761,11 +815,11 @@ body::before {{
 .app-description {{
     font-size: 11px;
 
-    color: rgba(255,255,255,.36);
+    color: var(--text-tertiary);
 }}
 
 .arrow {{
-    color: rgba(255,255,255,.35);
+    color: var(--text-tertiary);
 
     font-size: 20px;
 }}
@@ -775,10 +829,10 @@ body::before {{
 
     border-radius: 20px;
 
-    background:
-        rgba(255,255,255,.035);
+    background: var(--surface);
 
-    border: 1px solid rgba(255,255,255,.065);
+    border: 1px solid var(--border);
+    transition: background 0.3s ease, border 0.3s ease;
 }}
 
 .subscription-label {{
@@ -790,7 +844,7 @@ body::before {{
 
     letter-spacing: 1px;
 
-    color: rgba(255,255,255,.35);
+    color: var(--text-tertiary);
 
     margin-bottom: 10px;
 }}
@@ -812,12 +866,11 @@ body::before {{
 
     border-radius: 13px;
 
-    background:
-        rgba(0,0,0,.22);
+    background: rgba(0, 0, 0, 0.2);
 
-    border: 1px solid rgba(255,255,255,.05);
+    border: 1px solid var(--border);
 
-    color: rgba(255,255,255,.5);
+    color: var(--text-secondary);
 
     font-family: monospace;
 
@@ -828,6 +881,11 @@ body::before {{
     text-overflow: ellipsis;
 
     white-space: nowrap;
+    transition: background 0.3s ease;
+}}
+
+.light-theme .subscription-url {{
+    background: rgba(255, 255, 255, 0.8);
 }}
 
 .copy {{
@@ -837,15 +895,23 @@ body::before {{
 
     border-radius: 13px;
 
-    background: #fff;
+    background: var(--accent-gradient);
 
-    color: #050507;
+    color: #fff;
 
     font-size: 11px;
 
     font-weight: 850;
 
     cursor: pointer;
+
+    transition: all 0.3s ease;
+    box-shadow: 0 5px 15px rgba(255, 92, 138, 0.3);
+}}
+
+.copy:hover {{
+    transform: translateY(-1px);
+    box-shadow: 0 8px 20px rgba(255, 92, 138, 0.4);
 }}
 
 .info {{
@@ -855,14 +921,10 @@ body::before {{
 
     border-radius: 21px;
 
-    background:
-        linear-gradient(
-            145deg,
-            rgba(255,255,255,.045),
-            rgba(255,255,255,.02)
-        );
+    background: var(--surface);
 
-    border: 1px solid rgba(255,255,255,.06);
+    border: 1px solid var(--border);
+    transition: background 0.3s ease, border 0.3s ease;
 }}
 
 .info-title {{
@@ -871,6 +933,7 @@ body::before {{
     font-weight: 800;
 
     margin-bottom: 13px;
+    color: var(--text-primary);
 }}
 
 .step {{
@@ -880,7 +943,7 @@ body::before {{
 
     margin-top: 11px;
 
-    color: rgba(255,255,255,.5);
+    color: var(--text-secondary);
 
     font-size: 12px;
 
@@ -899,10 +962,8 @@ body::before {{
     align-items: center;
     justify-content: center;
 
-    background:
-        rgba(255,255,255,.07);
-
-    color: rgba(255,255,255,.8);
+    background: var(--accent-gradient);
+    color: #fff;
 
     font-size: 10px;
 
@@ -924,16 +985,22 @@ body::before {{
 
     text-decoration: none;
 
-    background:
-        rgba(255,255,255,.035);
+    background: var(--surface);
 
-    border: 1px solid rgba(255,255,255,.065);
+    border: 1px solid var(--border);
 
-    color: rgba(255,255,255,.72);
+    color: var(--text-secondary);
 
     font-size: 13px;
 
     font-weight: 750;
+
+    transition: all 0.3s ease;
+}}
+
+.support:hover {{
+    background: var(--surface-hover);
+    color: var(--text-primary);
 }}
 
 .security {{
@@ -941,7 +1008,7 @@ body::before {{
 
     text-align: center;
 
-    color: rgba(255,255,255,.28);
+    color: var(--text-tertiary);
 
     font-size: 10px;
 
@@ -953,11 +1020,11 @@ body::before {{
 
     margin-top: 27px;
 
-    color: rgba(255,255,255,.2);
+    color: var(--text-tertiary);
 
     font-size: 10px;
 
-    letter-spacing: .3px;
+    letter-spacing: 0.3px;
 }}
 
 @media (max-width: 380px) {{
@@ -988,7 +1055,7 @@ body::before {{
 </style>
 </head>
 
-<body>
+<body class="dark-theme">
 
 <div class="container">
 
@@ -1012,12 +1079,20 @@ body::before {{
 
         </div>
 
-        <div class="status {status_class}">
+        <div class="header-controls">
+            <button
+                class="theme-toggle"
+                id="themeToggle"
+                aria-label="Переключить тему"
+                title="Переключить тему"
+            >
+                <span id="themeIcon">☀️</span>
+            </button>
 
-            <span class="status-dot"></span>
-
-            {status_text}
-
+            <div class="status {status_class}">
+                <span class="status-dot"></span>
+                {status_text}
+            </div>
         </div>
 
     </header>
@@ -1329,6 +1404,33 @@ body::before {{
 const SUB_URL = {safe_subscription_url!r};
 
 
+// Переключение темы
+function applyTheme(theme) {{
+    if (theme === 'light') {{
+        document.body.classList.add('light-theme');
+        document.body.classList.remove('dark-theme');
+        document.getElementById('themeIcon').textContent = '🌙';
+    }} else {{
+        document.body.classList.add('dark-theme');
+        document.body.classList.remove('light-theme');
+        document.getElementById('themeIcon').textContent = '☀️';
+    }}
+
+    localStorage.setItem('ixxy-theme', theme);
+}}
+
+document.addEventListener('DOMContentLoaded', function() {{
+    const savedTheme = localStorage.getItem('ixxy-theme') || 'dark';
+    applyTheme(savedTheme);
+
+    document.getElementById('themeToggle').addEventListener('click', function() {{
+        const current = document.body.classList.contains('light-theme') ? 'light' : 'dark';
+        const next = current === 'light' ? 'dark' : 'light';
+        applyTheme(next);
+    }});
+}});
+
+
 async function copySubscription() {{
 
     try {{
@@ -1407,7 +1509,7 @@ def index():
             name="viewport"
             content="width=device-width,initial-scale=1"
         >
-        <meta name="theme-color" content="#050507">
+        <meta name="theme-color" content="#0d0d14">
         <title>ixxy VPN</title>
 
         <style>
@@ -1424,8 +1526,7 @@ def index():
             align-items: center;
             justify-content: center;
 
-            background: #050507;
-
+            background: radial-gradient(circle at 50% 0%, #1a0b2e 0%, #0d0d14 70%);
             color: white;
 
             font-family:
@@ -1444,15 +1545,20 @@ def index():
         .logo {
             font-size: 54px;
             margin-bottom: 15px;
+            filter: drop-shadow(0 0 20px rgba(255, 92, 138, 0.6));
         }
 
         h1 {
             margin: 0 0 8px;
             font-size: 30px;
+            background: linear-gradient(135deg, #ff5c8a, #a45cff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
 
         p {
-            color: rgba(255,255,255,.4);
+            color: rgba(255,255,255,.5);
             font-size: 13px;
         }
 
