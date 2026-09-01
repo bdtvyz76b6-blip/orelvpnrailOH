@@ -1,12 +1,9 @@
 import os
 import html
-import shutil
-import subprocess
-import platform
 from datetime import datetime
 from urllib.parse import quote
 
-from flask import Flask, Response, abort, make_response
+from flask import Flask, Response, abort
 
 from database import (
     get_user,
@@ -14,14 +11,13 @@ from database import (
 )
 
 
+# ============================================================
+# IXXY VPN — WEB
+# ============================================================
+
 app = Flask(__name__)
 
-
-# ============================================================
-# CONFIG
-# ============================================================
-
-APP_VERSION = "ixxy-2026.09.01-happ-fix"
+APP_VERSION = "ixxy-2026.09.01-premium"
 
 PUBLIC_SITE_URL = os.getenv(
     "PUBLIC_SITE_URL",
@@ -31,23 +27,12 @@ PUBLIC_SITE_URL = os.getenv(
 SUBSCRIPTION_PREFIX = os.getenv(
     "SUBSCRIPTION_PREFIX",
     "2ix847xy"
-).strip()
+)
 
 TELEGRAM_URL = os.getenv(
     "TELEGRAM_URL",
     "https://t.me/orelvpntopbot"
-)
-
-# Render build command создаёт именно этот файл
-HPWNR_PATH = os.getenv(
-    "HPWNR_PATH",
-    "/opt/render/project/src/bin/hpwnr"
-)
-
-
-# ============================================================
-# CACHE
-# ============================================================
+).strip()
 
 NO_CACHE_HEADERS = {
     "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
@@ -57,723 +42,202 @@ NO_CACHE_HEADERS = {
 
 
 # ============================================================
-# ESCAPE
+# HELPERS
 # ============================================================
 
-def esc(value):
-    return html.escape(str(value or ""))
-
-
-# ============================================================
-# DATABASE
-# ============================================================
-
-def user_value(user, index, default=""):
-    try:
-        if user and len(user) > index:
-            value = user[index]
-
-            if value is not None:
-                return value
-
-    except Exception:
-        pass
-
-    return default
-
-
-def get_real_user(user_id):
-    try:
-        return get_user(user_id)
-
-    except Exception as e:
-        print(
-            "[WEB] PostgreSQL get_user error:",
-            repr(e),
-            flush=True
-        )
-
-        return None
-
-
-def get_real_subscription(user_id):
-    try:
-        return (
-            get_subscription_content(user_id)
-            or ""
-        )
-
-    except Exception as e:
-        print(
-            "[WEB] PostgreSQL subscription_content error:",
-            repr(e),
-            flush=True
-        )
-
-        return ""
-
-
-# ============================================================
-# TOKEN
-# ============================================================
-
-def get_token(user_id):
-    return f"{SUBSCRIPTION_PREFIX}{user_id}"
-
-
-def get_user_id_from_token(token):
+def parse_token(token: str):
+    """
+    Ожидается:
+        2ix847xy123456789
+    """
 
     if not token:
         return None
 
-    token = str(token).strip()
-
     if not token.startswith(SUBSCRIPTION_PREFIX):
         return None
 
-    user_id = token[len(SUBSCRIPTION_PREFIX):]
+    raw_user_id = token[len(SUBSCRIPTION_PREFIX):]
 
-    if not user_id.isdigit():
+    if not raw_user_id.isdigit():
         return None
 
     try:
-        return int(user_id)
-
+        return int(raw_user_id)
     except Exception:
         return None
 
 
-# ============================================================
-# HPWNR
-# ============================================================
-
-def find_hpwnr():
-
-    candidates = [
-        HPWNR_PATH,
-
-        "/opt/render/project/src/bin/hpwnr",
-
-        "/opt/render/project/src/hpwnr",
-
-        "/usr/local/bin/hpwnr",
-
-        "/usr/bin/hpwnr",
-
-        os.path.abspath("./bin/hpwnr"),
-
-        os.path.abspath("./hpwnr"),
-
-        "hpwnr",
-    ]
-
-    print(
-        "[HAPP] Searching hpwnr...",
-        flush=True
-    )
-
-    checked = set()
-
-    for candidate in candidates:
-
-        if not candidate:
-            continue
-
-        # Не проверяем одно и то же дважды
-        try:
-            normalized = os.path.abspath(candidate)
-
-        except Exception:
-            normalized = candidate
-
-        if normalized in checked:
-            continue
-
-        checked.add(normalized)
-
-        # ----------------------------------------------------
-        # FILE
-        # ----------------------------------------------------
-
-        try:
-
-            if os.path.isfile(normalized):
-
-                executable = os.access(
-                    normalized,
-                    os.X_OK
-                )
-
-                size = os.path.getsize(
-                    normalized
-                )
-
-                print(
-                    "[HAPP] file:",
-                    normalized,
-                    "size=",
-                    size,
-                    "executable=",
-                    executable,
-                    flush=True
-                )
-
-                if executable:
-
-                    return normalized
-
-        except Exception as e:
-
-            print(
-                "[HAPP] file check error:",
-                repr(e),
-                flush=True
-            )
-
-        # ----------------------------------------------------
-        # PATH
-        # ----------------------------------------------------
-
-        try:
-
-            found = shutil.which(candidate)
-
-            if found:
-
-                found = os.path.abspath(found)
-
-                print(
-                    "[HAPP] PATH:",
-                    found,
-                    flush=True
-                )
-
-                return found
-
-        except Exception as e:
-
-            print(
-                "[HAPP] PATH check error:",
-                repr(e),
-                flush=True
-            )
-
-    print(
-        "[HAPP] hpwnr NOT FOUND",
-        flush=True
-    )
-
-    return None
+def build_subscription_url(token: str):
+    return f"{PUBLIC_SITE_URL}/sub/{quote(token, safe='')}"
 
 
-# ============================================================
-# HPWNR EXECUTION
-# ============================================================
+def build_happ_url(token: str):
+    """
+    Основная кнопка Happ.
 
-def run_hpwnr(subscription_url):
+    Crypt5 здесь специально не генерируем.
+    Используем обычный happ://add/ URL.
+    """
 
-    if not subscription_url:
+    subscription_url = build_subscription_url(token)
 
-        return {
-            "success": False,
-            "hpwnr": None,
-            "returncode": None,
-            "stdout": "",
-            "stderr": "",
-            "happ_url": "",
-            "error": "empty_subscription_url",
-        }
-
-    hpwnr = find_hpwnr()
-
-    if not hpwnr:
-
-        return {
-            "success": False,
-            "hpwnr": None,
-            "returncode": None,
-            "stdout": "",
-            "stderr": "",
-            "happ_url": "",
-            "error": "hpwnr_not_found",
-        }
-
-    print(
-        "[HAPP] hpwnr:",
-        hpwnr,
-        flush=True
-    )
-
-    # --------------------------------------------------------
-    # Сначала пробуем официальный вариант:
-    #
-    # hpwnr URL crypt5
-    #
-    # Именно такой формат указан в официальной документации.
-    # --------------------------------------------------------
-
-    command = [
-        hpwnr,
+    return "happ://add/" + quote(
         subscription_url,
-        "crypt5",
-    ]
-
-    try:
-
-        result = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            timeout=30,
-            check=False,
-            cwd=os.path.dirname(hpwnr) or None,
-        )
-
-    except FileNotFoundError as e:
-
-        print(
-            "[HAPP] EXEC FileNotFoundError:",
-            repr(e),
-            flush=True
-        )
-
-        return {
-            "success": False,
-            "hpwnr": hpwnr,
-            "returncode": None,
-            "stdout": "",
-            "stderr": repr(e),
-            "happ_url": "",
-            "error": "executable_cannot_start",
-        }
-
-    except PermissionError as e:
-
-        print(
-            "[HAPP] EXEC PermissionError:",
-            repr(e),
-            flush=True
-        )
-
-        return {
-            "success": False,
-            "hpwnr": hpwnr,
-            "returncode": None,
-            "stdout": "",
-            "stderr": repr(e),
-            "happ_url": "",
-            "error": "permission_denied",
-        }
-
-    except subprocess.TimeoutExpired:
-
-        return {
-            "success": False,
-            "hpwnr": hpwnr,
-            "returncode": None,
-            "stdout": "",
-            "stderr": "hpwnr timeout after 30 seconds",
-            "happ_url": "",
-            "error": "timeout",
-        }
-
-    except Exception as e:
-
-        print(
-            "[HAPP] EXEC error:",
-            repr(e),
-            flush=True
-        )
-
-        return {
-            "success": False,
-            "hpwnr": hpwnr,
-            "returncode": None,
-            "stdout": "",
-            "stderr": repr(e),
-            "happ_url": "",
-            "error": "execution_error",
-        }
-
-    stdout = (result.stdout or "").strip()
-    stderr = (result.stderr or "").strip()
-
-    print(
-        "[HAPP] returncode:",
-        result.returncode,
-        flush=True
-    )
-
-    print(
-        "[HAPP] stdout length:",
-        len(stdout),
-        flush=True
-    )
-
-    print(
-        "[HAPP] stderr length:",
-        len(stderr),
-        flush=True
-    )
-
-    if stderr:
-        print(
-            "[HAPP] stderr:",
-            stderr[:1000],
-            flush=True
-        )
-
-    # --------------------------------------------------------
-    # SEARCH CRYPT5
-    # --------------------------------------------------------
-
-    marker = "happ://crypt5/"
-
-    position = stdout.find(marker)
-
-    if position >= 0:
-
-        happ_url = (
-            stdout[position:]
-            .splitlines()[0]
-            .strip()
-            .strip("\"'")
-        )
-
-        if happ_url.startswith(marker):
-
-            print(
-                "[HAPP] CRYPT5 SUCCESS",
-                flush=True
-            )
-
-            return {
-                "success": True,
-                "hpwnr": hpwnr,
-                "returncode": result.returncode,
-                "stdout": stdout,
-                "stderr": stderr,
-                "happ_url": happ_url,
-                "error": "",
-            }
-
-    # Иногда инструмент может вернуть crypt5 с дополнительным
-    # текстом — ищем любой happ://crypt5/ в stdout.
-    for line in stdout.splitlines():
-
-        line = line.strip()
-
-        if "happ://crypt5/" in line:
-
-            position = line.find(
-                "happ://crypt5/"
-            )
-
-            happ_url = line[position:].strip()
-
-            if happ_url:
-                return {
-                    "success": True,
-                    "hpwnr": hpwnr,
-                    "returncode": result.returncode,
-                    "stdout": stdout,
-                    "stderr": stderr,
-                    "happ_url": happ_url,
-                    "error": "",
-                }
-
-    return {
-        "success": False,
-        "hpwnr": hpwnr,
-        "returncode": result.returncode,
-        "stdout": stdout,
-        "stderr": stderr,
-        "happ_url": "",
-        "error": "crypt5_not_found",
-    }
-
-
-# ============================================================
-# CRYPT5
-# ============================================================
-
-def generate_happ_crypt5(subscription_url):
-
-    result = run_hpwnr(
-        subscription_url
-    )
-
-    if result.get("success"):
-        return result.get(
-            "happ_url",
-            ""
-        )
-
-    return ""
-
-
-# ============================================================
-# URLS
-# ============================================================
-
-def build_happ_url(subscription_url):
-
-    crypt5 = generate_happ_crypt5(
-        subscription_url
-    )
-
-    if crypt5:
-        return crypt5
-
-    # Безопасный fallback
-    return (
-        "happ://add/"
-        + quote(
-            subscription_url,
-            safe=""
-        )
+        safe=""
     )
 
 
-def build_incy_url(subscription_url):
+def build_incy_url(token: str):
+    subscription_url = build_subscription_url(token)
 
-    return (
-        "incy://add/"
-        + quote(
-            subscription_url,
-            safe=""
-        )
+    return "incy://add/" + quote(
+        subscription_url,
+        safe=""
     )
 
 
-# ============================================================
-# DATE
-# ============================================================
-
-def parse_date(value):
-
-    if not value:
-        return None
+def safe_text(value, default="—"):
+    if value is None:
+        return default
 
     value = str(value).strip()
 
-    formats = [
-        "%Y-%m-%d",
-        "%Y-%m-%d %H:%M",
-        "%Y-%m-%d %H:%M:%S",
-        "%d.%m.%Y",
-        "%d.%m.%Y %H:%M",
-        "%d.%m.%Y %H:%M:%S",
-    ]
+    if not value:
+        return default
 
-    for fmt in formats:
-
-        try:
-            return datetime.strptime(
-                value,
-                fmt
-            )
-
-        except Exception:
-            pass
-
-    try:
-        return datetime.fromisoformat(
-            value.replace("Z", "")
-        )
-
-    except Exception:
-        return None
+    return html.escape(value)
 
 
 def format_date(value):
-
     if not value:
-        return "Не указана"
+        return "—"
 
-    date = parse_date(value)
+    try:
+        if isinstance(value, datetime):
+            dt = value
+        else:
+            text = str(value).strip()
 
-    if not date:
-        return str(value)
+            try:
+                dt = datetime.fromisoformat(
+                    text.replace("Z", "+00:00")
+                )
+            except Exception:
+                return safe_text(text)
 
-    return date.strftime(
-        "%d.%m.%Y"
-    )
+        return dt.strftime("%d.%m.%Y")
+    except Exception:
+        return safe_text(value)
 
 
-def days_left(value):
-
-    date = parse_date(value)
-
-    if not date:
+def get_days_left(subscription_until):
+    if not subscription_until:
         return 0
 
-    return max(
-        0,
-        (
-            date.date()
-            - datetime.now().date()
-        ).days
-    )
+    try:
+        if isinstance(subscription_until, datetime):
+            dt = subscription_until
+        else:
+            text = str(subscription_until).strip()
+
+            dt = datetime.fromisoformat(
+                text.replace("Z", "+00:00")
+            )
+
+        now = datetime.now(dt.tzinfo) if dt.tzinfo else datetime.now()
+
+        seconds = (dt - now).total_seconds()
+
+        if seconds <= 0:
+            return 0
+
+        return max(1, int(seconds / 86400))
+    except Exception:
+        return 0
 
 
-def subscription_status(value):
+def is_subscription_active(subscription_until):
+    if not subscription_until:
+        return False
 
-    if not value:
-        return (
-            "Неактивна",
-            "expired"
-        )
+    try:
+        if isinstance(subscription_until, datetime):
+            dt = subscription_until
+        else:
+            dt = datetime.fromisoformat(
+                str(subscription_until).replace("Z", "+00:00")
+            )
 
-    date = parse_date(value)
+        now = datetime.now(dt.tzinfo) if dt.tzinfo else datetime.now()
 
-    if not date:
-        return (
-            "Активна",
-            "active"
-        )
+        return dt > now
 
-    if date.date() >= datetime.now().date():
-        return (
-            "Активна",
-            "active"
-        )
-
-    return (
-        "Истекла",
-        "expired"
-    )
+    except Exception:
+        return False
 
 
 # ============================================================
-# PAGE
+# PREMIUM HTML
 # ============================================================
 
-def render_page(user_id):
+def render_page(
+    token,
+    user_id,
+    first_name,
+    subscription,
+    subscription_until,
+    subscription_link,
+):
 
-    user = get_real_user(user_id)
+    active = is_subscription_active(subscription_until)
+    days_left = get_days_left(subscription_until)
 
-    if not user:
-        abort(404)
+    name = safe_text(first_name, "Пользователь")
+    tariff = safe_text(subscription, "ixxy VPN")
 
-    real_user_id = user_value(
-        user,
-        0,
-        user_id
-    )
+    expiry = format_date(subscription_until)
 
-    username = user_value(
-        user,
-        1,
-        ""
-    )
-
-    first_name = user_value(
-        user,
-        2,
-        ""
-    )
-
-    subscription = user_value(
-        user,
-        3,
-        "none"
-    )
-
-    subscription_until = user_value(
-        user,
-        4,
-        ""
-    )
-
-    display_name = (
-        first_name
-        or username
-        or f"ID {real_user_id}"
-    )
-
-    if subscription == "vip":
-
-        tariff_name = "👑 ixxy VPN"
-
-    elif subscription == "trial":
-
-        tariff_name = "🎁 Пробный период"
-
-    elif subscription in ("", "none", None):
-
-        tariff_name = "Нет подписки"
-
+    if active:
+        status_text = "VPN АКТИВЕН"
+        status_class = "active"
     else:
+        status_text = "ПОДПИСКА НЕАКТИВНА"
+        status_class = "inactive"
 
-        tariff_name = str(subscription)
+    happ_url = build_happ_url(token)
+    incy_url = build_incy_url(token)
 
-    status_text, status_class = (
-        subscription_status(
-            subscription_until
+    # ВАЖНО:
+    # subscription_link намеренно НЕ показывается,
+    # если это может раскрыть серверные настройки.
+    #
+    # Вместо него показываем безопасную ссылку /sub/<token>.
+    safe_subscription_url = build_subscription_url(token)
+
+    if active:
+        days_text = (
+            f"{days_left} дн."
+            if days_left != 1
+            else "1 день"
         )
-    )
-
-    remaining_days = days_left(
-        subscription_until
-    )
-
-    real_content = get_real_subscription(
-        real_user_id
-    )
-
-    subscription_ready = bool(
-        real_content.strip()
-    )
-
-    token = get_token(
-        real_user_id
-    )
-
-    real_subscription_url = (
-        f"{PUBLIC_SITE_URL}/sub/{token}"
-    )
-
-    happ_url = build_happ_url(
-        real_subscription_url
-    )
-
-    incy_url = build_incy_url(
-        real_subscription_url
-    )
-
-    if remaining_days <= 0:
-
-        progress = 0
-
-    elif remaining_days >= 30:
-
-        progress = 100
-
     else:
+        days_text = "Завершена"
 
-        progress = round(
-            remaining_days / 30 * 100
-        )
-
-    page = f"""
-<!DOCTYPE html>
+    return f"""<!DOCTYPE html>
 <html lang="ru">
-
 <head>
 
 <meta charset="UTF-8">
 
 <meta
     name="viewport"
-    content="width=device-width,
-    initial-scale=1,
-    maximum-scale=1"
+    content="width=device-width, initial-scale=1.0, viewport-fit=cover"
 >
 
 <meta
     name="theme-color"
-    content="#08060e"
+    content="#050507"
 >
 
 <meta
@@ -781,9 +245,17 @@ def render_page(user_id):
     content="yes"
 >
 
-<title>
-ixxy VPN — {esc(display_name)}
-</title>
+<meta
+    name="apple-mobile-web-app-status-bar-style"
+    content="black-translucent"
+>
+
+<meta
+    name="apple-mobile-web-app-title"
+    content="ixxy VPN"
+>
+
+<title>ixxy VPN</title>
 
 <style>
 
@@ -793,56 +265,77 @@ ixxy VPN — {esc(display_name)}
 }}
 
 html {{
-    background: #08060e;
+    background: #050507;
 }}
 
 body {{
     margin: 0;
     min-height: 100vh;
-    color: #fff;
 
     background:
         radial-gradient(
-            circle at 10% 0%,
-            rgba(126,72,255,.25),
-            transparent 32%
+            circle at 50% -10%,
+            rgba(255,255,255,.09),
+            transparent 34%
         ),
         radial-gradient(
-            circle at 90% 15%,
-            rgba(69,103,255,.18),
+            circle at 100% 30%,
+            rgba(255,255,255,.035),
             transparent 30%
         ),
-        #08060e;
+        #050507;
+
+    color: #fff;
 
     font-family:
         -apple-system,
         BlinkMacSystemFont,
         "SF Pro Display",
+        "SF Pro Text",
+        Inter,
         Arial,
         sans-serif;
+
+    overflow-x: hidden;
 }}
 
-a {{
-    color: inherit;
-    text-decoration: none;
+body::before {{
+    content: "";
+
+    position: fixed;
+    inset: 0;
+
+    pointer-events: none;
+
+    background:
+        linear-gradient(
+            120deg,
+            transparent 0%,
+            rgba(255,255,255,.025) 50%,
+            transparent 100%
+        );
+
+    opacity: .7;
 }}
 
-button {{
-    font: inherit;
-}}
-
-.page {{
+.container {{
     width: 100%;
-    max-width: 760px;
-    margin: auto;
-    padding: 22px 18px 50px;
+    max-width: 560px;
+
+    margin: 0 auto;
+
+    padding:
+        calc(24px + env(safe-area-inset-top))
+        18px
+        calc(30px + env(safe-area-inset-bottom));
 }}
 
-.top {{
+.header {{
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 18px;
+
+    margin-bottom: 28px;
 }}
 
 .brand {{
@@ -852,41 +345,45 @@ button {{
 }}
 
 .logo {{
-    width: 46px;
-    height: 46px;
+    width: 44px;
+    height: 44px;
+
+    border-radius: 14px;
 
     display: flex;
     align-items: center;
     justify-content: center;
 
-    border-radius: 15px;
+    font-size: 22px;
+    font-weight: 900;
 
     background:
         linear-gradient(
             145deg,
-            #ad76ff,
-            #572dcc
+            #ffffff,
+            #a7a7a7
         );
 
-    font-size: 17px;
-    font-weight: 950;
+    color: #08080a;
 
     box-shadow:
-        0 12px 35px
-        rgba(109,58,240,.4);
+        0 10px 30px rgba(255,255,255,.12);
 }}
 
-.brand-title {{
-    font-size: 18px;
-    font-weight: 950;
+.brand-text {{
+    font-size: 19px;
+    font-weight: 800;
+    letter-spacing: -.4px;
 }}
 
 .brand-sub {{
     margin-top: 2px;
-    color: rgba(255,255,255,.4);
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
+
+    font-size: 11px;
+
+    color: rgba(255,255,255,.42);
+
+    letter-spacing: .5px;
 }}
 
 .status {{
@@ -898,236 +395,283 @@ button {{
 
     border-radius: 999px;
 
-    background:
-        rgba(255,255,255,.055);
+    font-size: 10px;
+    font-weight: 800;
 
-    border:
-        1px solid
-        rgba(255,255,255,.08);
+    letter-spacing: .5px;
 
-    font-size: 11px;
-    font-weight: 900;
+    border: 1px solid rgba(255,255,255,.07);
+
+    background: rgba(255,255,255,.035);
+
+    color: rgba(255,255,255,.55);
 }}
 
-.dot {{
+.status.active {{
+    color: #fff;
+}}
+
+.status-dot {{
     width: 7px;
     height: 7px;
+
     border-radius: 50%;
-    background: #ff4d65;
+
+    background: #777;
+
+    box-shadow: 0 0 10px rgba(255,255,255,.25);
 }}
 
-.active .dot {{
-    background: #5cffaa;
+.active .status-dot {{
+    background: #fff;
+
     box-shadow:
-        0 0 13px
-        rgba(92,255,170,.8);
+        0 0 10px rgba(255,255,255,.8);
 }}
 
 .hero {{
-    padding: 30px 23px 24px;
-    border-radius: 30px;
+    position: relative;
 
-    border:
-        1px solid
-        rgba(255,255,255,.1);
+    padding: 30px 22px 24px;
+
+    border-radius: 30px;
 
     background:
         linear-gradient(
             145deg,
-            rgba(255,255,255,.095),
-            rgba(255,255,255,.035)
+            rgba(255,255,255,.075),
+            rgba(255,255,255,.025)
         );
 
-    box-shadow:
-        0 30px 100px
-        rgba(0,0,0,.35);
+    border: 1px solid rgba(255,255,255,.08);
 
-    backdrop-filter: blur(25px);
+    box-shadow:
+        0 30px 80px rgba(0,0,0,.45),
+        inset 0 1px 0 rgba(255,255,255,.04);
+
+    overflow: hidden;
+}}
+
+.hero::before {{
+    content: "";
+
+    position: absolute;
+
+    width: 220px;
+    height: 220px;
+
+    top: -130px;
+    left: 50%;
+
+    transform: translateX(-50%);
+
+    background: rgba(255,255,255,.08);
+
+    filter: blur(70px);
+
+    pointer-events: none;
+}}
+
+.hero-content {{
+    position: relative;
+    z-index: 2;
+
+    text-align: center;
 }}
 
 .eyebrow {{
-    color: #ae8bff;
-    font-size: 10px;
-    font-weight: 950;
-    letter-spacing: 2px;
+    color: rgba(255,255,255,.4);
+
+    font-size: 11px;
+
+    font-weight: 800;
+
+    letter-spacing: 1.6px;
+
+    text-transform: uppercase;
+
+    margin-bottom: 12px;
 }}
 
-h1 {{
-    margin: 12px 0 0;
+.user-name {{
+    font-size: 28px;
 
-    font-size:
-        clamp(
-            36px,
-            10vw,
-            58px
-        );
+    font-weight: 850;
 
-    line-height: .94;
-    letter-spacing: -3px;
+    letter-spacing: -1px;
+
+    margin-bottom: 7px;
+
+    word-break: break-word;
 }}
 
-.desc {{
-    margin-top: 16px;
-    color: rgba(255,255,255,.52);
+.user-description {{
+    color: rgba(255,255,255,.43);
+
     font-size: 13px;
-    line-height: 1.55;
+
+    margin-bottom: 25px;
 }}
 
-.user {{
+.connect {{
     display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-top: 22px;
-    font-size: 13px;
-}}
 
-.avatar {{
-    width: 35px;
-    height: 35px;
-
-    display: flex;
     align-items: center;
     justify-content: center;
 
-    border-radius: 50%;
-
-    background:
-        linear-gradient(
-            145deg,
-            #9060ff,
-            #3d207d
-        );
-
-    font-weight: 950;
-}}
-
-.connect-main {{
     width: 100%;
-    min-height: 68px;
-    margin-top: 24px;
 
-    border: 0;
-    border-radius: 20px;
+    min-height: 60px;
 
-    color: white;
+    border-radius: 18px;
 
-    background:
-        linear-gradient(
-            135deg,
-            #a16eff,
-            #693be2,
-            #4b24ad
-        );
+    text-decoration: none;
+
+    color: #050507;
+
+    background: #fff;
+
+    font-size: 16px;
+
+    font-weight: 850;
+
+    letter-spacing: -.2px;
 
     box-shadow:
-        0 16px 42px
-        rgba(103,57,227,.38);
+        0 15px 40px rgba(255,255,255,.12);
 
-    cursor: pointer;
+    transition:
+        transform .15s ease,
+        box-shadow .15s ease;
 }}
 
-.connect-main strong {{
-    display: block;
-    font-size: 16px;
+.connect:active {{
+    transform: scale(.975);
+
+    box-shadow:
+        0 8px 20px rgba(255,255,255,.08);
 }}
 
-.connect-main small {{
-    display: block;
-    margin-top: 4px;
-    color: rgba(255,255,255,.65);
-    font-size: 10px;
+.connect-icon {{
+    margin-right: 9px;
+
+    font-size: 18px;
 }}
 
 .cards {{
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+
+    grid-template-columns:
+        repeat(2, minmax(0, 1fr));
+
     gap: 11px;
+
     margin-top: 12px;
 }}
 
 .card {{
-    padding: 19px;
-    min-height: 115px;
+    padding: 18px;
 
     border-radius: 21px;
 
-    border:
-        1px solid
-        rgba(255,255,255,.07);
-
     background:
-        rgba(255,255,255,.045);
+        rgba(255,255,255,.035);
+
+    border: 1px solid rgba(255,255,255,.065);
+
+    min-width: 0;
 }}
 
-.icon {{
-    margin-bottom: 14px;
-    font-size: 19px;
-}}
+.card-label {{
+    color: rgba(255,255,255,.35);
 
-.label {{
-    color: rgba(255,255,255,.38);
-    font-size: 9px;
-    font-weight: 800;
-    letter-spacing: 1px;
+    font-size: 10px;
+
     text-transform: uppercase;
+
+    letter-spacing: 1px;
+
+    font-weight: 800;
+
+    margin-bottom: 8px;
 }}
 
-.value {{
-    margin-top: 6px;
+.card-value {{
     font-size: 15px;
-    font-weight: 950;
-    word-break: break-word;
+
+    font-weight: 750;
+
+    color: rgba(255,255,255,.9);
+
+    overflow: hidden;
+
+    text-overflow: ellipsis;
+
+    white-space: nowrap;
 }}
 
 .progress-card {{
     margin-top: 12px;
-    padding: 20px;
+
+    padding: 19px;
 
     border-radius: 21px;
 
-    border:
-        1px solid
-        rgba(255,255,255,.07);
-
     background:
-        rgba(255,255,255,.045);
+        rgba(255,255,255,.035);
+
+    border: 1px solid rgba(255,255,255,.065);
 }}
 
 .progress-top {{
     display: flex;
+
     justify-content: space-between;
-    margin-bottom: 12px;
+
+    align-items: center;
+
+    margin-bottom: 11px;
 }}
 
 .progress-title {{
-    font-size: 13px;
-    font-weight: 900;
+    font-size: 12px;
+
+    color: rgba(255,255,255,.55);
+
+    font-weight: 700;
 }}
 
-.progress-days {{
-    color: #ad89ff;
-    font-size: 11px;
-    font-weight: 900;
+.progress-value {{
+    font-size: 12px;
+
+    color: rgba(255,255,255,.8);
+
+    font-weight: 800;
 }}
 
 .progress {{
-    height: 8px;
-    overflow: hidden;
+    width: 100%;
+
+    height: 6px;
+
     border-radius: 999px;
-    background: rgba(255,255,255,.07);
+
+    overflow: hidden;
+
+    background: rgba(255,255,255,.08);
 }}
 
-.bar {{
-    width: {progress}%;
+.progress-bar {{
+    width: {min(100, max(3, days_left))}%;
+
     height: 100%;
+
     border-radius: inherit;
 
-    background:
-        linear-gradient(
-            90deg,
-            #6938dd,
-            #ae80ff
-        );
+    background: #fff;
+
+    box-shadow:
+        0 0 14px rgba(255,255,255,.4);
 }}
 
 .section {{
@@ -1135,784 +679,706 @@ h1 {{
 }}
 
 .section-title {{
-    margin-bottom: 11px;
-    font-size: 17px;
-    font-weight: 950;
+    margin: 0 0 11px 4px;
+
+    font-size: 13px;
+
+    font-weight: 800;
+
+    color: rgba(255,255,255,.7);
 }}
 
-.option {{
+.app-card {{
     display: flex;
-    align-items: center;
-    gap: 14px;
 
-    min-height: 72px;
-    margin-bottom: 10px;
-    padding: 14px;
+    align-items: center;
+
+    justify-content: space-between;
+
+    gap: 12px;
+
+    padding: 17px;
+
+    margin-bottom: 9px;
 
     border-radius: 20px;
 
-    border:
-        1px solid
-        rgba(255,255,255,.07);
+    color: #fff;
+
+    text-decoration: none;
 
     background:
-        rgba(255,255,255,.045);
+        rgba(255,255,255,.035);
 
-    cursor: pointer;
+    border: 1px solid rgba(255,255,255,.065);
+
+    transition: background .15s ease;
 }}
 
-.option-icon {{
-    width: 44px;
-    height: 44px;
+.app-card:active {{
+    background:
+        rgba(255,255,255,.07);
+}}
 
-    flex: 0 0 auto;
+.app-left {{
+    display: flex;
+
+    align-items: center;
+
+    gap: 13px;
+
+    min-width: 0;
+}}
+
+.app-icon {{
+    width: 43px;
+    height: 43px;
+
+    flex: 0 0 43px;
+
+    border-radius: 13px;
 
     display: flex;
     align-items: center;
     justify-content: center;
 
-    border-radius: 14px;
-    background: rgba(255,255,255,.07);
+    background:
+        rgba(255,255,255,.07);
+
+    border: 1px solid rgba(255,255,255,.06);
 
     font-size: 20px;
 }}
 
-.option-main {{
-    flex: 1;
+.app-name {{
+    font-size: 14px;
+
+    font-weight: 800;
+
+    margin-bottom: 3px;
 }}
 
-.option-title {{
-    font-size: 13px;
-    font-weight: 900;
-}}
+.app-description {{
+    font-size: 11px;
 
-.option-desc {{
-    margin-top: 4px;
-    color: rgba(255,255,255,.4);
-    font-size: 10px;
+    color: rgba(255,255,255,.36);
 }}
 
 .arrow {{
-    color: rgba(255,255,255,.3);
-    font-size: 21px;
+    color: rgba(255,255,255,.35);
+
+    font-size: 20px;
 }}
 
-.subscription {{
-    padding: 19px;
+.subscription-box {{
+    padding: 17px;
 
-    border-radius: 22px;
-
-    border:
-        1px solid
-        rgba(255,255,255,.08);
+    border-radius: 20px;
 
     background:
-        linear-gradient(
-            145deg,
-            rgba(128,76,255,.11),
-            rgba(255,255,255,.035)
-        );
+        rgba(255,255,255,.035);
+
+    border: 1px solid rgba(255,255,255,.065);
 }}
 
 .subscription-label {{
-    color: rgba(255,255,255,.38);
-    font-size: 9px;
-    letter-spacing: 1px;
-    font-weight: 900;
+    font-size: 10px;
+
+    font-weight: 800;
+
     text-transform: uppercase;
+
+    letter-spacing: 1px;
+
+    color: rgba(255,255,255,.35);
+
+    margin-bottom: 10px;
 }}
 
-.url {{
+.subscription-row {{
     display: flex;
+
     align-items: center;
-    gap: 8px;
-    margin-top: 10px;
+
+    gap: 9px;
 }}
 
-.url-text {{
-    min-width: 0;
+.subscription-url {{
     flex: 1;
 
-    padding: 13px;
+    min-width: 0;
+
+    padding: 12px 13px;
 
     border-radius: 13px;
 
-    background: rgba(0,0,0,.25);
+    background:
+        rgba(0,0,0,.22);
 
-    color: rgba(255,255,255,.67);
+    border: 1px solid rgba(255,255,255,.05);
+
+    color: rgba(255,255,255,.5);
+
+    font-family: monospace;
 
     font-size: 10px;
 
     overflow: hidden;
-    white-space: nowrap;
+
     text-overflow: ellipsis;
+
+    white-space: nowrap;
 }}
 
 .copy {{
-    width: 48px;
-    height: 48px;
-
     border: 0;
-    border-radius: 14px;
 
-    background:
-        rgba(255,255,255,.08);
+    padding: 12px 14px;
 
-    color: white;
+    border-radius: 13px;
+
+    background: #fff;
+
+    color: #050507;
+
+    font-size: 11px;
+
+    font-weight: 850;
 
     cursor: pointer;
-    font-size: 17px;
 }}
 
-.security {{
-    margin-top: 18px;
-    padding: 16px;
+.info {{
+    margin-top: 25px;
 
-    display: flex;
-    gap: 12px;
+    padding: 18px;
 
-    border-radius: 19px;
-
-    border:
-        1px solid
-        rgba(92,255,170,.08);
+    border-radius: 21px;
 
     background:
-        rgba(92,255,170,.03);
+        linear-gradient(
+            145deg,
+            rgba(255,255,255,.045),
+            rgba(255,255,255,.02)
+        );
+
+    border: 1px solid rgba(255,255,255,.06);
 }}
 
-.security-icon {{
-    font-size: 18px;
+.info-title {{
+    font-size: 13px;
+
+    font-weight: 800;
+
+    margin-bottom: 13px;
 }}
 
-.security-title {{
-    font-size: 11px;
-    font-weight: 900;
+.step {{
+    display: flex;
+
+    gap: 11px;
+
+    margin-top: 11px;
+
+    color: rgba(255,255,255,.5);
+
+    font-size: 12px;
+
+    line-height: 1.45;
 }}
 
-.security-text {{
-    margin-top: 4px;
-    color: rgba(255,255,255,.36);
-    font-size: 9px;
-    line-height: 1.5;
-}}
+.step-number {{
+    width: 23px;
+    height: 23px;
 
-.support {{
+    flex: 0 0 23px;
+
+    border-radius: 8px;
+
     display: flex;
     align-items: center;
     justify-content: center;
 
-    min-height: 57px;
-    margin-top: 12px;
-
-    border-radius: 19px;
-
     background:
-        rgba(255,255,255,.045);
-
-    border:
-        1px solid
         rgba(255,255,255,.07);
 
-    font-size: 12px;
-    font-weight: 900;
+    color: rgba(255,255,255,.8);
+
+    font-size: 10px;
+
+    font-weight: 850;
+}}
+
+.support {{
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    min-height: 52px;
+
+    margin-top: 12px;
+
+    border-radius: 17px;
+
+    text-decoration: none;
+
+    background:
+        rgba(255,255,255,.035);
+
+    border: 1px solid rgba(255,255,255,.065);
+
+    color: rgba(255,255,255,.72);
+
+    font-size: 13px;
+
+    font-weight: 750;
+}}
+
+.security {{
+    margin-top: 14px;
+
+    text-align: center;
+
+    color: rgba(255,255,255,.28);
+
+    font-size: 10px;
+
+    line-height: 1.5;
 }}
 
 .footer {{
-    margin-top: 25px;
     text-align: center;
+
+    margin-top: 27px;
 
     color: rgba(255,255,255,.2);
 
-    font-size: 9px;
-    line-height: 1.7;
+    font-size: 10px;
+
+    letter-spacing: .3px;
 }}
 
-.toast {{
-    position: fixed;
+@media (max-width: 380px) {{
 
-    left: 50%;
-    bottom: 25px;
-
-    transform:
-        translate(-50%, 20px);
-
-    padding: 12px 17px;
-
-    border-radius: 999px;
-
-    background:
-        rgba(25,20,35,.9);
-
-    border:
-        1px solid
-        rgba(255,255,255,.1);
-
-    color: white;
-
-    font-size: 11px;
-    font-weight: 900;
-
-    opacity: 0;
-    pointer-events: none;
-
-    transition: .25s;
-}}
-
-.toast.show {{
-    opacity: 1;
-
-    transform:
-        translate(-50%, 0);
-}}
-
-@media (min-width: 700px) {{
-
-    .page {{
-        padding-top: 45px;
+    .container {{
+        padding-left: 13px;
+        padding-right: 13px;
     }}
 
     .hero {{
-        padding: 42px;
+        padding-left: 17px;
+        padding-right: 17px;
+    }}
+
+    .user-name {{
+        font-size: 25px;
     }}
 
     .cards {{
-        grid-template-columns:
-            repeat(4, 1fr);
+        gap: 8px;
     }}
 
+    .card {{
+        padding: 15px;
+    }}
 }}
 
 </style>
-
 </head>
 
 <body>
 
-<main class="page">
+<div class="container">
 
-<header class="top">
+    <header class="header">
 
-    <div class="brand">
+        <div class="brand">
 
-        <div class="logo">
-            IX
-        </div>
-
-        <div>
-
-            <div class="brand-title">
-                ixxy VPN
+            <div class="logo">
+                ⚡
             </div>
 
-            <div class="brand-sub">
-                Private access
-            </div>
-
-        </div>
-
-    </div>
-
-    <div class="status {status_class}">
-
-        <span class="dot"></span>
-
-        {esc(status_text)}
-
-    </div>
-
-</header>
-
-
-<section class="hero">
-
-    <div class="eyebrow">
-        PERSONAL VPN
-    </div>
-
-    <h1>
-        Твоя<br>
-        подписка.
-    </h1>
-
-    <div class="desc">
-
-        Всё управление подключением
-        в одном месте. Конфигурация серверов
-        не отображается в интерфейсе.
-
-    </div>
-
-    <div class="user">
-
-        <div class="avatar">
-            {esc(str(display_name)[:1]).upper()}
-        </div>
-
-        <div>
-            {esc(display_name)}
-        </div>
-
-    </div>
-
-
-    <button
-        class="connect-main"
-        onclick="openHapp()"
-    >
-
-        <strong>
-            ⚡ Подключить в Happ
-        </strong>
-
-        <small>
-            Персональный импорт подписки
-        </small>
-
-    </button>
-
-</section>
-
-
-<section class="cards">
-
-    <div class="card">
-
-        <div class="icon">
-            👑
-        </div>
-
-        <div class="label">
-            Тариф
-        </div>
-
-        <div class="value">
-            {esc(tariff_name)}
-        </div>
-
-    </div>
-
-
-    <div class="card">
-
-        <div class="icon">
-            📅
-        </div>
-
-        <div class="label">
-            До
-        </div>
-
-        <div class="value">
-            {esc(format_date(subscription_until))}
-        </div>
-
-    </div>
-
-
-    <div class="card">
-
-        <div class="icon">
-            ⏳
-        </div>
-
-        <div class="label">
-            Осталось
-        </div>
-
-        <div class="value">
-            {remaining_days} дн.
-        </div>
-
-    </div>
-
-
-    <div class="card">
-
-        <div class="icon">
-            🔐
-        </div>
-
-        <div class="label">
-            Подписка
-        </div>
-
-        <div class="value">
-            {"Готова" if subscription_ready else "Не готова"}
-        </div>
-
-    </div>
-
-</section>
-
-
-<section class="progress-card">
-
-    <div class="progress-top">
-
-        <div class="progress-title">
-            Состояние подписки
-        </div>
-
-        <div class="progress-days">
-            {remaining_days} дней
-        </div>
-
-    </div>
-
-    <div class="progress">
-
-        <div class="bar"></div>
-
-    </div>
-
-</section>
-
-
-<section class="section">
-
-    <div class="section-title">
-        Подключение
-    </div>
-
-
-    <div
-        class="option"
-        onclick="openHapp()"
-    >
-
-        <div class="option-icon">
-            ⚡
-        </div>
-
-        <div class="option-main">
-
-            <div class="option-title">
-                Happ
-            </div>
-
-            <div class="option-desc">
-                Открыть персональный импорт
+            <div>
+                <div class="brand-text">
+                    ixxy VPN
+                </div>
+
+                <div class="brand-sub">
+                    PRIVATE NETWORK
+                </div>
             </div>
 
         </div>
 
-        <div class="arrow">
-            ›
+        <div class="status {status_class}">
+
+            <span class="status-dot"></span>
+
+            {status_text}
+
         </div>
 
-    </div>
+    </header>
 
 
-    <div
-        class="option"
-        onclick="openIncy()"
-    >
+    <section class="hero">
 
-        <div class="option-icon">
-            🟣
-        </div>
+        <div class="hero-content">
 
-        <div class="option-main">
-
-            <div class="option-title">
-                INCY
+            <div class="eyebrow">
+                Личный кабинет
             </div>
 
-            <div class="option-desc">
-                Добавить персональную подписку
+            <div class="user-name">
+                {name}
             </div>
 
-        </div>
+            <div class="user-description">
+                Ваше защищённое подключение
+            </div>
 
-        <div class="arrow">
-            ›
-        </div>
-
-    </div>
-
-</section>
-
-
-<section class="section">
-
-    <div class="section-title">
-        Персональная подписка
-    </div>
-
-    <div class="subscription">
-
-        <div class="subscription-label">
-            Subscription URL
-        </div>
-
-        <div class="url">
-
-            <div
-                class="url-text"
-                id="url"
+            <a
+                class="connect"
+                href="{happ_url}"
             >
-                {esc(real_subscription_url)}
-            </div>
-
-            <button
-                class="copy"
-                onclick="copySubscription()"
-            >
-                ⧉
-            </button>
+                <span class="connect-icon">⚡</span>
+                Подключить в Happ
+            </a>
 
         </div>
 
-    </div>
-
-</section>
+    </section>
 
 
-<section class="section">
+    <div class="cards">
 
-    <div class="section-title">
-        Как подключиться
-    </div>
+        <div class="card">
 
-
-    <div class="option">
-
-        <div class="option-icon">
-            01
-        </div>
-
-        <div class="option-main">
-
-            <div class="option-title">
-                Открой Happ
+            <div class="card-label">
+                Тариф
             </div>
 
-            <div class="option-desc">
-                Нажми кнопку подключения выше.
+            <div class="card-value">
+                {tariff}
             </div>
 
         </div>
 
-    </div>
 
+        <div class="card">
 
-    <div class="option">
-
-        <div class="option-icon">
-            02
-        </div>
-
-        <div class="option-main">
-
-            <div class="option-title">
-                Импортируй подписку
+            <div class="card-label">
+                Осталось
             </div>
 
-            <div class="option-desc">
-                Подтверди добавление конфигурации.
+            <div class="card-value">
+                {days_text}
             </div>
 
         </div>
 
-    </div>
 
+        <div class="card">
 
-    <div class="option">
-
-        <div class="option-icon">
-            03
-        </div>
-
-        <div class="option-main">
-
-            <div class="option-title">
-                Подключись
+            <div class="card-label">
+                До
             </div>
 
-            <div class="option-desc">
-                Выбери подключение и включи VPN.
+            <div class="card-value">
+                {expiry}
+            </div>
+
+        </div>
+
+
+        <div class="card">
+
+            <div class="card-label">
+                Статус
+            </div>
+
+            <div class="card-value">
+                {"Активен" if active else "Неактивен"}
             </div>
 
         </div>
 
     </div>
 
-</section>
 
+    <div class="progress-card">
 
-<a
-    class="support"
-    href="{esc(TELEGRAM_URL)}"
-    target="_blank"
-    rel="noopener"
->
-    💬 Поддержка ixxy VPN
-</a>
+        <div class="progress-top">
 
+            <div class="progress-title">
+                Состояние подписки
+            </div>
 
-<div class="security">
+            <div class="progress-value">
+                {"ACTIVE" if active else "EXPIRED"}
+            </div>
 
-    <div class="security-icon">
-        🛡️
-    </div>
-
-    <div>
-
-        <div class="security-title">
-            Серверная конфигурация скрыта
         </div>
 
-        <div class="security-text">
-            Интерфейс не показывает содержимое
-            подписки, UUID, адреса серверов или
-            другие параметры конфигурации.
-            Клиент получает подписку через
-            персональный URL.
+        <div class="progress">
+
+            <div class="progress-bar"></div>
+
         </div>
 
     </div>
 
-</div>
+
+    <section class="section">
+
+        <div class="section-title">
+            Приложения
+        </div>
 
 
-<footer class="footer">
+        <a
+            class="app-card"
+            href="{happ_url}"
+        >
 
-    ixxy VPN · Private access<br>
+            <div class="app-left">
 
-    ID: {esc(real_user_id)} · {esc(APP_VERSION)}
+                <div class="app-icon">
+                    ⚡
+                </div>
 
-</footer>
+                <div>
 
-</main>
+                    <div class="app-name">
+                        Happ
+                    </div>
+
+                    <div class="app-description">
+                        Быстрое подключение
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="arrow">
+                ›
+            </div>
+
+        </a>
 
 
-<div
-    class="toast"
-    id="toast"
->
-    Готово
+        <a
+            class="app-card"
+            href="{incy_url}"
+        >
+
+            <div class="app-left">
+
+                <div class="app-icon">
+                    ◉
+                </div>
+
+                <div>
+
+                    <div class="app-name">
+                        INCY
+                    </div>
+
+                    <div class="app-description">
+                        Альтернативный клиент
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="arrow">
+                ›
+            </div>
+
+        </a>
+
+    </section>
+
+
+    <section class="section">
+
+        <div class="section-title">
+            Ваша подписка
+        </div>
+
+        <div class="subscription-box">
+
+            <div class="subscription-label">
+                Персональная ссылка
+            </div>
+
+            <div class="subscription-row">
+
+                <div
+                    class="subscription-url"
+                    id="subscriptionUrl"
+                >
+                    {html.escape(safe_subscription_url)}
+                </div>
+
+                <button
+                    class="copy"
+                    onclick="copySubscription()"
+                >
+                    КОПИРОВАТЬ
+                </button>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <section class="info">
+
+        <div class="info-title">
+            Как подключиться
+        </div>
+
+
+        <div class="step">
+
+            <div class="step-number">
+                1
+            </div>
+
+            <div>
+                Нажмите «Подключить в Happ».
+            </div>
+
+        </div>
+
+
+        <div class="step">
+
+            <div class="step-number">
+                2
+            </div>
+
+            <div>
+                Подтвердите добавление подписки в приложении.
+            </div>
+
+        </div>
+
+
+        <div class="step">
+
+            <div class="step-number">
+                3
+            </div>
+
+            <div>
+                Включите VPN одной кнопкой.
+            </div>
+
+        </div>
+
+
+        <div class="step">
+
+            <div class="step-number">
+                4
+            </div>
+
+            <div>
+                Готово — подключение работает автоматически.
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <a
+        class="support"
+        href="{html.escape(TELEGRAM_URL)}"
+        target="_blank"
+        rel="noopener noreferrer"
+    >
+        💬 Поддержка ixxy VPN
+    </a>
+
+
+    <div class="security">
+        🔒 Конфигурация серверов не отображается
+        в личном кабинете.
+        Управление подключением выполняется автоматически.
+    </div>
+
+
+    <div class="footer">
+        ixxy VPN · ID {user_id} · {APP_VERSION}
+    </div>
+
 </div>
 
 
 <script>
 
-const HAPP_URL = {happ_url!r};
-
-const INCY_URL = {incy_url!r};
-
-const SUB_URL = {real_subscription_url!r};
-
-
-function toast(text) {{
-
-    const el =
-        document.getElementById(
-            "toast"
-        );
-
-    el.textContent = text;
-
-    el.classList.add(
-        "show"
-    );
-
-    clearTimeout(
-        window.toastTimer
-    );
-
-    window.toastTimer =
-        setTimeout(
-            () => {{
-
-                el.classList.remove(
-                    "show"
-                );
-
-            }},
-            1800
-        );
-}}
-
-
-function openHapp() {{
-
-    toast(
-        "Открываем Happ…"
-    );
-
-    window.location.href =
-        HAPP_URL;
-
-}}
-
-
-function openIncy() {{
-
-    toast(
-        "Открываем INCY…"
-    );
-
-    window.location.href =
-        INCY_URL;
-
-}}
+const SUB_URL = {safe_subscription_url!r};
 
 
 async function copySubscription() {{
 
     try {{
 
-        if (
-            navigator.clipboard &&
-            window.isSecureContext
-        ) {{
+        await navigator.clipboard.writeText(SUB_URL);
 
-            await navigator.clipboard.writeText(
-                SUB_URL
-            );
+        const button =
+            document.querySelector(".copy");
 
-        }} else {{
-
-            const input =
-                document.createElement(
-                    "textarea"
-                );
-
-            input.value =
-                SUB_URL;
-
-            input.style.position =
-                "fixed";
-
-            input.style.left =
-                "-9999px";
-
-            document.body.appendChild(
-                input
-            );
-
-            input.focus();
-
-            input.select();
-
-            document.execCommand(
-                "copy"
-            );
-
-            input.remove();
-
+        if (!button) {{
+            return;
         }}
 
-        toast(
-            "Ссылка скопирована"
-        );
+        const oldText = button.innerText;
+
+        button.innerText = "СКОПИРОВАНО";
+
+        setTimeout(() => {{
+            button.innerText = oldText;
+        }}, 1600);
 
     }} catch (error) {{
 
-        toast(
-            "Не удалось скопировать"
-        );
+        const input =
+            document.createElement("textarea");
+
+        input.value = SUB_URL;
+
+        document.body.appendChild(input);
+
+        input.select();
+
+        document.execCommand("copy");
+
+        input.remove();
+
+        const button =
+            document.querySelector(".copy");
+
+        if (button) {{
+
+            const oldText = button.innerText;
+
+            button.innerText = "СКОПИРОВАНО";
+
+            setTimeout(() => {{
+                button.innerText = oldText;
+            }}, 1600);
+
+        }}
 
     }}
 
@@ -1921,505 +1387,206 @@ async function copySubscription() {{
 </script>
 
 </body>
-
 </html>
 """
 
-    response = make_response(page)
-
-    for key, value in NO_CACHE_HEADERS.items():
-        response.headers[key] = value
-
-    response.headers[
-        "X-Content-Type-Options"
-    ] = "nosniff"
-
-    return response
-
 
 # ============================================================
-# SUBSCRIPTION PAGE
-# ============================================================
-
-@app.route("/s/<token>")
-def subscription_page(token):
-
-    user_id = get_user_id_from_token(token)
-
-    if not user_id:
-        abort(404)
-
-    if not get_real_user(user_id):
-        abort(404)
-
-    return render_page(user_id)
-
-
-# ============================================================
-# REAL SUBSCRIPTION
-# ============================================================
-
-@app.route("/sub/<token>")
-def subscription_endpoint(token):
-
-    user_id = get_user_id_from_token(token)
-
-    if not user_id:
-        abort(404)
-
-    if not get_real_user(user_id):
-        abort(404)
-
-    content = get_real_subscription(user_id)
-
-    if not content:
-        return Response(
-            "Subscription unavailable",
-            status=404,
-            mimetype="text/plain",
-            headers=NO_CACHE_HEADERS,
-        )
-
-    response = Response(
-        content,
-        status=200,
-        mimetype="text/plain",
-    )
-
-    for key, value in NO_CACHE_HEADERS.items():
-        response.headers[key] = value
-
-    response.headers[
-        "X-Content-Type-Options"
-    ] = "nosniff"
-
-    return response
-
-
-# ============================================================
-# HAPP TEST
-# ============================================================
-
-@app.route("/happ-test/<token>")
-def happ_test(token):
-
-    user_id = get_user_id_from_token(token)
-
-    if not user_id:
-        abort(404)
-
-    if not get_real_user(user_id):
-        abort(404)
-
-    subscription_url = (
-        f"{PUBLIC_SITE_URL}/sub/{token}"
-    )
-
-    result = run_hpwnr(
-        subscription_url
-    )
-
-    hpwnr = result.get("hpwnr")
-
-    happ_url = result.get(
-        "happ_url",
-        ""
-    )
-
-    stdout = result.get(
-        "stdout",
-        ""
-    )
-
-    stderr = result.get(
-        "stderr",
-        ""
-    )
-
-    returncode = result.get(
-        "returncode"
-    )
-
-    success = result.get(
-        "success",
-        False
-    )
-
-    try:
-        exists = bool(
-            hpwnr and os.path.isfile(hpwnr)
-        )
-
-        executable = bool(
-            hpwnr and os.access(hpwnr, os.X_OK)
-        )
-
-        size = (
-            os.path.getsize(hpwnr)
-            if hpwnr and exists
-            else 0
-        )
-
-    except Exception:
-        exists = False
-        executable = False
-        size = 0
-
-    result_text = f"""
-IXXY HAPP DIAGNOSTICS
-
-status:
-{"OK" if success else "ERROR"}
-
-platform:
-{platform.platform()}
-
-machine:
-{platform.machine()}
-
-python:
-{platform.python_version()}
-
-hpwnr_found:
-{"YES" if hpwnr else "NO"}
-
-hpwnr_path:
-{hpwnr or "NOT FOUND"}
-
-file_exists:
-{"YES" if exists else "NO"}
-
-executable:
-{"YES" if executable else "NO"}
-
-size:
-{size} bytes
-
-returncode:
-{returncode}
-
-error:
-{result.get("error", "")}
-
-stdout_length:
-{len(stdout)}
-
-stderr_length:
-{len(stderr)}
-
-crypt5_found:
-{"YES" if happ_url else "NO"}
-
-stdout:
-{stdout[:5000]}
-
-stderr:
-{stderr[:5000]}
-"""
-
-    if happ_url:
-        result_text += (
-            "\n\nHAPP URL:\n"
-            + happ_url
-        )
-
-    response = Response(
-        result_text.strip(),
-        status=200 if success else 500,
-        mimetype="text/plain",
-    )
-
-    for key, value in NO_CACHE_HEADERS.items():
-        response.headers[key] = value
-
-    return response
-
-
-# ============================================================
-# HPWNR BASIC TEST
-# ============================================================
-
-@app.route("/hpwnr-test")
-def hpwnr_test():
-
-    hpwnr = find_hpwnr()
-
-    result = {
-        "platform": platform.platform(),
-        "machine": platform.machine(),
-        "python": platform.python_version(),
-        "hpwnr": hpwnr,
-        "exists": False,
-        "executable": False,
-        "size": 0,
-        "returncode": None,
-        "stdout": "",
-        "stderr": "",
-        "exception": "",
-    }
-
-    if not hpwnr:
-        return Response(
-            "\n".join(
-                f"{k}: {v}"
-                for k, v in result.items()
-            ),
-            status=500,
-            mimetype="text/plain",
-            headers=NO_CACHE_HEADERS,
-        )
-
-    try:
-
-        result["exists"] = os.path.isfile(
-            hpwnr
-        )
-
-        result["executable"] = os.access(
-            hpwnr,
-            os.X_OK
-        )
-
-        result["size"] = os.path.getsize(
-            hpwnr
-        )
-
-    except Exception as e:
-
-        result["exception"] = repr(e)
-
-    # Проверяем именно запуск бинарника.
-    try:
-
-        test = subprocess.run(
-            [
-                hpwnr,
-                "h",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=False,
-            cwd=os.path.dirname(hpwnr) or None,
-        )
-
-        result["returncode"] = (
-            test.returncode
-        )
-
-        result["stdout"] = (
-            test.stdout or ""
-        )[:5000]
-
-        result["stderr"] = (
-            test.stderr or ""
-        )[:5000]
-
-    except Exception as e:
-
-        result["exception"] = repr(e)
-
-    text = "\n".join(
-        f"{k}: {v}"
-        for k, v in result.items()
-    )
-
-    ok = (
-        result["exists"]
-        and result["executable"]
-        and result["returncode"] == 0
-    )
-
-    return Response(
-        text,
-        status=200 if ok else 500,
-        mimetype="text/plain",
-        headers=NO_CACHE_HEADERS,
-    )
-
-
-# ============================================================
-# HEALTH
-# ============================================================
-
-@app.route("/health")
-def health():
-
-    response = make_response({
-        "service": "ixxy VPN",
-        "status": "ok",
-        "version": APP_VERSION,
-    })
-
-    for key, value in NO_CACHE_HEADERS.items():
-        response.headers[key] = value
-
-    return response
-
-
-# ============================================================
-# ROOT
+# ROUTES
 # ============================================================
 
 @app.route("/")
 def index():
 
     return """
-<!DOCTYPE html>
+    <!DOCTYPE html>
+    <html lang="ru">
+    <head>
+        <meta charset="UTF-8">
+        <meta
+            name="viewport"
+            content="width=device-width,initial-scale=1"
+        >
+        <meta name="theme-color" content="#050507">
+        <title>ixxy VPN</title>
 
-<html lang="ru">
+        <style>
 
-<head>
+        * {
+            box-sizing: border-box;
+        }
 
-<meta charset="UTF-8">
+        body {
+            margin: 0;
+            min-height: 100vh;
 
-<meta
-    name="viewport"
-    content="width=device-width,
-    initial-scale=1"
->
+            display: flex;
+            align-items: center;
+            justify-content: center;
 
-<meta
-    name="theme-color"
-    content="#08060e"
->
+            background: #050507;
 
-<title>
-ixxy VPN
-</title>
+            color: white;
 
-<style>
+            font-family:
+                -apple-system,
+                BlinkMacSystemFont,
+                Arial,
+                sans-serif;
 
-body {
+            text-align: center;
+        }
 
-    margin: 0;
+        .box {
+            padding: 35px;
+        }
 
-    min-height: 100vh;
+        .logo {
+            font-size: 54px;
+            margin-bottom: 15px;
+        }
 
-    display: flex;
+        h1 {
+            margin: 0 0 8px;
+            font-size: 30px;
+        }
 
-    align-items: center;
+        p {
+            color: rgba(255,255,255,.4);
+            font-size: 13px;
+        }
 
-    justify-content: center;
+        </style>
+    </head>
 
-    padding: 20px;
+    <body>
 
-    color: white;
+        <div class="box">
 
-    background:
+            <div class="logo">
+                ⚡
+            </div>
 
-        radial-gradient(
-            circle at 50% 0%,
-            rgba(130,75,255,.25),
-            transparent 40%
-        ),
+            <h1>
+                ixxy VPN
+            </h1>
 
-        #08060e;
+            <p>
+                Private network
+            </p>
 
-    font-family:
+        </div>
 
-        -apple-system,
-        BlinkMacSystemFont,
-        Arial,
-        sans-serif;
-}
+    </body>
+    </html>
+    """
 
-.card {
 
-    width: 100%;
+@app.route("/health")
+def health():
 
-    max-width: 470px;
+    response = Response(
+        '{"service":"ixxy VPN","status":"ok"}',
+        mimetype="application/json"
+    )
 
-    padding: 45px 28px;
+    response.headers.update(NO_CACHE_HEADERS)
 
-    text-align: center;
+    return response
 
-    border-radius: 30px;
 
-    border:
-        1px solid
-        rgba(255,255,255,.09);
+# ============================================================
+# PERSONAL CABINET
+# ============================================================
 
-    background:
-        rgba(255,255,255,.05);
+@app.route("/s/<token>")
+def subscription_page(token):
 
-    box-shadow:
-        0 30px 100px
-        rgba(0,0,0,.4);
-}
+    user_id = parse_token(token)
 
-.logo {
+    if user_id is None:
+        abort(404)
 
-    width: 70px;
-    height: 70px;
+    try:
+        user = get_user(user_id)
+    except Exception as e:
+        return Response(
+            f"Database error: {html.escape(str(e))}",
+            status=500,
+            mimetype="text/plain"
+        )
 
-    margin: auto;
+    if not user:
+        abort(404)
 
-    display: flex;
+    # database.py mapping:
+    #
+    # 0 user_id
+    # 1 username
+    # 2 first_name
+    # 3 subscription
+    # 4 subscription_until
+    # 5 subscription_link
+    # 6 uuid
+    # 7 trial_used
+    # 8 pending_days
+    # 9 notify
+    # 10 accepted_terms
+    # 11 created_at
 
-    align-items: center;
+    user_id_db = user[0]
+    first_name = user[2] or user[1] or "Пользователь"
+    subscription = user[3] or "ixxy VPN"
+    subscription_until = user[4] or ""
+    subscription_link = user[5] or ""
 
-    justify-content: center;
+    page = render_page(
+        token=token,
+        user_id=user_id_db,
+        first_name=first_name,
+        subscription=subscription,
+        subscription_until=subscription_until,
+        subscription_link=subscription_link,
+    )
 
-    border-radius: 22px;
+    response = Response(
+        page,
+        mimetype="text/html"
+    )
 
-    background:
+    response.headers.update(NO_CACHE_HEADERS)
 
-        linear-gradient(
-            145deg,
-            #ad76ff,
-            #572dcc
-        );
+    return response
 
-    font-size: 23px;
 
-    font-weight: 950;
-}
+# ============================================================
+# SUBSCRIPTION ENDPOINT
+# ============================================================
 
-h1 {
+@app.route("/sub/<token>")
+def subscription(token):
 
-    margin:
-        22px 0 8px;
+    user_id = parse_token(token)
 
-    font-size: 36px;
-}
+    if user_id is None:
+        abort(404)
 
-p {
+    try:
+        content = get_subscription_content(user_id)
+    except Exception:
+        content = ""
 
-    color:
-        rgba(255,255,255,.42);
+    if not content:
+        abort(404)
 
-    line-height: 1.55;
-}
+    response = Response(
+        content,
+        mimetype="text/plain"
+    )
 
-</style>
+    response.headers.update(NO_CACHE_HEADERS)
 
-</head>
-
-<body>
-
-<div class="card">
-
-    <div class="logo">
-        IX
-    </div>
-
-    <h1>
-        ixxy VPN
-    </h1>
-
-    <p>
-        Веб-сервис работает.
-        Используй персональную ссылку
-        подписки для входа.
-    </p>
-
-</div>
-
-</body>
-
-</html>
-"""
+    return response
 
 
 # ============================================================
@@ -2429,172 +1596,24 @@ p {
 @app.errorhandler(404)
 def not_found(error):
 
-    response = make_response(
-        """
-<!DOCTYPE html>
-
-<html lang="ru">
-
-<head>
-
-<meta charset="UTF-8">
-
-<meta
-    name="viewport"
-    content="width=device-width,
-    initial-scale=1"
->
-
-<meta
-    name="theme-color"
-    content="#08060e"
->
-
-<title>
-ixxy VPN — 404
-</title>
-
-<style>
-
-body {
-
-    margin: 0;
-
-    min-height: 100vh;
-
-    display: flex;
-
-    align-items: center;
-
-    justify-content: center;
-
-    background:
-        #08060e;
-
-    color: white;
-
-    font-family:
-
-        -apple-system,
-        BlinkMacSystemFont,
-        Arial,
-        sans-serif;
-}
-
-.box {
-
-    padding: 40px;
-
-    text-align: center;
-
-    border-radius: 30px;
-
-    background:
-        rgba(255,255,255,.05);
-
-    border:
-        1px solid
-        rgba(255,255,255,.08);
-}
-
-.code {
-
-    font-size: 70px;
-
-    font-weight: 950;
-}
-
-p {
-
-    color:
-        rgba(255,255,255,.4);
-}
-
-</style>
-
-</head>
-
-<body>
-
-<div class="box">
-
-    <div class="code">
-        404
-    </div>
-
-    <p>
-        Страница не найдена.
-    </p>
-
-</div>
-
-</body>
-
-</html>
-        """,
-        404
+    return Response(
+        "Not Found",
+        status=404,
+        mimetype="text/plain"
     )
-
-    for key, value in NO_CACHE_HEADERS.items():
-        response.headers[key] = value
-
-    return response
 
 
 # ============================================================
-# START
+# RUN
 # ============================================================
 
 if __name__ == "__main__":
 
     port = int(
-        os.getenv(
-            "PORT",
-            "10000"
-        )
-    )
-
-    print(
-        "=================================",
-        flush=True
-    )
-
-    print(
-        "ixxy VPN WEB",
-        flush=True
-    )
-
-    print(
-        "Version:",
-        APP_VERSION,
-        flush=True
-    )
-
-    print(
-        "PUBLIC_SITE_URL:",
-        PUBLIC_SITE_URL,
-        flush=True
-    )
-
-    print(
-        "HPWNR_PATH:",
-        HPWNR_PATH,
-        flush=True
-    )
-
-    print(
-        "Machine:",
-        platform.machine(),
-        flush=True
-    )
-
-    print(
-        "=================================",
-        flush=True
+        os.getenv("PORT", "10000")
     )
 
     app.run(
         host="0.0.0.0",
-        port=port,
-        debug=False,
+        port=port
     )
