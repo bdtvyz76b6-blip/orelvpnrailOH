@@ -12,7 +12,9 @@ from database import (
     get_subscription_content,
 )
 
+
 app = Flask(__name__)
+
 
 # ============================================================
 # CONFIG
@@ -40,14 +42,20 @@ HPWNR_PATH = os.getenv(
     "bin/hpwnr"
 )
 
+
 # ============================================================
 # CACHE
 # ============================================================
 
 NO_CACHE_HEADERS = {
-    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
-    "Pragma": "no-cache",
-    "Expires": "0",
+    "Cache-Control":
+        "no-store, no-cache, must-revalidate, max-age=0",
+
+    "Pragma":
+        "no-cache",
+
+    "Expires":
+        "0",
 }
 
 
@@ -56,22 +64,34 @@ NO_CACHE_HEADERS = {
 # ============================================================
 
 def esc(value):
-    return html.escape(str(value or ""))
+
+    return html.escape(
+        str(value or "")
+    )
 
 
 # ============================================================
 # DATABASE
 # ============================================================
 
-def user_value(user, index, default=""):
+def user_value(
+    user,
+    index,
+    default=""
+):
+
     try:
+
         if user and len(user) > index:
+
             value = user[index]
 
             if value is not None:
+
                 return value
 
     except Exception:
+
         pass
 
     return default
@@ -80,13 +100,17 @@ def user_value(user, index, default=""):
 def get_real_user(user_id):
 
     try:
-        return get_user(user_id)
+
+        return get_user(
+            user_id
+        )
 
     except Exception as e:
 
         print(
             "[WEB] Ошибка PostgreSQL get_user:",
-            repr(e)
+            repr(e),
+            flush=True
         )
 
         return None
@@ -95,13 +119,20 @@ def get_real_user(user_id):
 def get_real_subscription(user_id):
 
     try:
-        return get_subscription_content(user_id) or ""
+
+        return (
+            get_subscription_content(
+                user_id
+            )
+            or ""
+        )
 
     except Exception as e:
 
         print(
             "[WEB] Ошибка PostgreSQL subscription_content:",
-            repr(e)
+            repr(e),
+            flush=True
         )
 
         return ""
@@ -113,19 +144,25 @@ def get_real_subscription(user_id):
 
 def get_token(user_id):
 
-    return f"{SUBSCRIPTION_PREFIX}{user_id}"
+    return (
+        f"{SUBSCRIPTION_PREFIX}{user_id}"
+    )
 
 
 def get_user_id_from_token(token):
 
     if not token:
+
         return None
 
-    token = str(token).strip()
+    token = str(
+        token
+    ).strip()
 
     if not token.startswith(
         SUBSCRIPTION_PREFIX
     ):
+
         return None
 
     user_id = token[
@@ -133,12 +170,17 @@ def get_user_id_from_token(token):
     ]
 
     if not user_id.isdigit():
+
         return None
 
     try:
-        return int(user_id)
+
+        return int(
+            user_id
+        )
 
     except Exception:
+
         return None
 
 
@@ -173,25 +215,62 @@ def find_hpwnr():
         "/opt/bin/hpwnr",
     ]
 
+    print(
+        "[HAPP] Поиск hpwnr...",
+        flush=True
+    )
+
     for candidate in candidates:
 
         if not candidate:
+
             continue
+
+        # ----------------------------------------------------
+        # Проверка как файла
+        # ----------------------------------------------------
 
         try:
 
-            if (
-                os.path.isfile(candidate)
-                and os.access(
+            if os.path.isfile(
+                candidate
+            ):
+
+                executable = os.access(
                     candidate,
                     os.X_OK
                 )
-            ):
 
-                return candidate
+                print(
+                    "[HAPP] Проверка:",
+                    candidate,
+                    "exists=True",
+                    f"executable={executable}",
+                    flush=True
+                )
 
-        except Exception:
-            pass
+                if executable:
+
+                    print(
+                        "[HAPP] ✅ Найден:",
+                        candidate,
+                        flush=True
+                    )
+
+                    return candidate
+
+        except Exception as e:
+
+            print(
+                "[HAPP] Ошибка проверки:",
+                candidate,
+                repr(e),
+                flush=True
+            )
+
+        # ----------------------------------------------------
+        # Проверка через PATH
+        # ----------------------------------------------------
 
         try:
 
@@ -200,12 +279,304 @@ def find_hpwnr():
             )
 
             if found:
+
+                print(
+                    "[HAPP] ✅ Найден через PATH:",
+                    found,
+                    flush=True
+                )
+
                 return found
 
-        except Exception:
-            pass
+        except Exception as e:
+
+            print(
+                "[HAPP] shutil.which error:",
+                repr(e),
+                flush=True
+            )
+
+    print(
+        "[HAPP] ❌ hpwnr НЕ найден",
+        flush=True
+    )
 
     return None
+
+
+# ============================================================
+# HPWNR DIAGNOSTIC
+# ============================================================
+
+def run_hpwnr(
+    subscription_url
+):
+
+    if not subscription_url:
+
+        print(
+            "[HAPP] ❌ Пустой subscription URL",
+            flush=True
+        )
+
+        return {
+            "success": False,
+            "hpwnr": None,
+            "returncode": None,
+            "stdout": "",
+            "stderr": "",
+            "happ_url": "",
+            "error": "empty_subscription_url",
+        }
+
+    print(
+        "[HAPP] =================================",
+        flush=True
+    )
+
+    print(
+        "[HAPP] Запуск hpwnr",
+        flush=True
+    )
+
+    # В логи полный персональный URL НЕ выводим.
+    print(
+        "[HAPP] Subscription URL: получен",
+        flush=True
+    )
+
+    hpwnr = find_hpwnr()
+
+    if not hpwnr:
+
+        return {
+            "success": False,
+            "hpwnr": None,
+            "returncode": None,
+            "stdout": "",
+            "stderr": "",
+            "happ_url": "",
+            "error": "hpwnr_not_found",
+        }
+
+    print(
+        "[HAPP] hpwnr path:",
+        hpwnr,
+        flush=True
+    )
+
+    # ========================================================
+    # Официальный формат:
+    #
+    # hpwnr <URL> crypt5
+    #
+    # Дополнительно пробуем просто URL.
+    # ========================================================
+
+    commands = [
+
+        [
+            hpwnr,
+            subscription_url,
+            "crypt5",
+        ],
+
+        [
+            hpwnr,
+            subscription_url,
+        ],
+    ]
+
+    last_returncode = None
+    last_stdout = ""
+    last_stderr = ""
+
+    for number, command in enumerate(
+        commands,
+        start=1
+    ):
+
+        print(
+            f"[HAPP] Попытка #{number}",
+            flush=True
+        )
+
+        # Никогда не печатаем персональный URL.
+        print(
+            "[HAPP] Аргументы: URL + режим",
+            flush=True
+        )
+
+        try:
+
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=20,
+                check=False,
+            )
+
+        except subprocess.TimeoutExpired:
+
+            print(
+                f"[HAPP] ❌ Попытка #{number}: timeout",
+                flush=True
+            )
+
+            last_returncode = None
+
+            last_stdout = ""
+
+            last_stderr = (
+                "Process timed out after 20 seconds"
+            )
+
+            continue
+
+        except Exception as e:
+
+            print(
+                f"[HAPP] ❌ Попытка #{number}:",
+                repr(e),
+                flush=True
+            )
+
+            last_returncode = None
+
+            last_stdout = ""
+
+            last_stderr = repr(e)
+
+            continue
+
+        stdout = (
+            result.stdout or ""
+        ).strip()
+
+        stderr = (
+            result.stderr or ""
+        ).strip()
+
+        last_returncode = (
+            result.returncode
+        )
+
+        last_stdout = stdout
+
+        last_stderr = stderr
+
+        print(
+            "[HAPP] returncode:",
+            result.returncode,
+            flush=True
+        )
+
+        print(
+            "[HAPP] stdout length:",
+            len(stdout),
+            flush=True
+        )
+
+        print(
+            "[HAPP] stderr length:",
+            len(stderr),
+            flush=True
+        )
+
+        if stdout:
+
+            print(
+                "[HAPP] stdout:",
+                stdout[:3000],
+                flush=True
+            )
+
+        if stderr:
+
+            print(
+                "[HAPP] stderr:",
+                stderr[:3000],
+                flush=True
+            )
+
+        # ====================================================
+        # ИЩЕМ CRYPT5
+        # ====================================================
+
+        marker = (
+            "happ://crypt5/"
+        )
+
+        position = stdout.find(
+            marker
+        )
+
+        if position >= 0:
+
+            happ_url = (
+                stdout[position:]
+                .splitlines()[0]
+                .strip()
+                .strip("\"'")
+            )
+
+            if happ_url.startswith(
+                marker
+            ):
+
+                print(
+                    "[HAPP] ✅ CRYPT5 УСПЕШНО СОЗДАН",
+                    flush=True
+                )
+
+                print(
+                    "[HAPP] =================================",
+                    flush=True
+                )
+
+                return {
+                    "success": True,
+                    "hpwnr": hpwnr,
+                    "returncode":
+                        result.returncode,
+                    "stdout": stdout,
+                    "stderr": stderr,
+                    "happ_url": happ_url,
+                    "error": "",
+                }
+
+        if result.returncode == 0:
+
+            print(
+                "[HAPP] ⚠️ returncode=0, "
+                "но happ://crypt5 не найден",
+                flush=True
+            )
+
+    print(
+        "[HAPP] ❌ Crypt5 создать не удалось",
+        flush=True
+    )
+
+    print(
+        "[HAPP] =================================",
+        flush=True
+    )
+
+    return {
+        "success": False,
+        "hpwnr": hpwnr,
+        "returncode":
+            last_returncode,
+        "stdout":
+            last_stdout,
+        "stderr":
+            last_stderr,
+        "happ_url": "",
+        "error":
+            "crypt5_not_found",
+    }
 
 
 # ============================================================
@@ -216,194 +587,20 @@ def generate_happ_crypt5(
     subscription_url
 ):
 
-    if not subscription_url:
-        return ""
+    result = run_hpwnr(
+        subscription_url
+    )
 
-    hpwnr = find_hpwnr()
+    if result.get(
+        "success"
+    ):
 
-    if not hpwnr:
-
-        print(
-            "[HAPP] ❌ hpwnr не найден"
+        return result.get(
+            "happ_url",
+            ""
         )
 
-        return ""
-
-    try:
-
-        print(
-            "[HAPP] ================================="
-        )
-
-        print(
-            "[HAPP] hpwnr:",
-            hpwnr
-        )
-
-        print(
-            "[HAPP] URL:",
-            subscription_url
-        )
-
-        # ====================================================
-        # ОСНОВНАЯ КОМАНДА
-        #
-        # hpwnr <URL> crypt5
-        # ====================================================
-
-        commands = [
-
-            [
-                hpwnr,
-                subscription_url,
-                "crypt5",
-            ],
-
-            [
-                hpwnr,
-                "crypt5",
-                subscription_url,
-            ],
-        ]
-
-        for command in commands:
-
-            print(
-                "[HAPP] Команда:",
-                command
-            )
-
-            try:
-
-                result = subprocess.run(
-                    command,
-                    capture_output=True,
-                    text=True,
-                    timeout=20,
-                    check=False,
-                )
-
-            except Exception as e:
-
-                print(
-                    "[HAPP] Ошибка запуска:",
-                    repr(e)
-                )
-
-                continue
-
-            stdout = (
-                result.stdout or ""
-            ).strip()
-
-            stderr = (
-                result.stderr or ""
-            ).strip()
-
-            print(
-                "[HAPP] returncode:",
-                result.returncode
-            )
-
-            if stdout:
-
-                print(
-                    "[HAPP] stdout:",
-                    stdout[:2000]
-                )
-
-            if stderr:
-
-                print(
-                    "[HAPP] stderr:",
-                    stderr[:2000]
-                )
-
-            # =================================================
-            # ИЩЕМ CRYPT5
-            # =================================================
-
-            for line in stdout.splitlines():
-
-                line = line.strip()
-
-                if line.startswith(
-                    "happ://crypt5/"
-                ):
-
-                    print(
-                        "[HAPP] ✅ Crypt5 найден"
-                    )
-
-                    print(
-                        "[HAPP] ================================="
-                    )
-
-                    return line
-
-            # =================================================
-            # CRYPT5 МОЖЕТ БЫТЬ ВНУТРИ СТРОКИ
-            # =================================================
-
-            marker = "happ://crypt5/"
-
-            position = stdout.find(
-                marker
-            )
-
-            if position >= 0:
-
-                value = (
-                    stdout[position:]
-                    .strip()
-                )
-
-                value = (
-                    value
-                    .splitlines()[0]
-                    .strip()
-                )
-
-                value = value.strip(
-                    "\"'"
-                )
-
-                if value.startswith(
-                    marker
-                ):
-
-                    print(
-                        "[HAPP] ✅ Crypt5 найден внутри вывода"
-                    )
-
-                    return value
-
-        print(
-            "[HAPP] ❌ Crypt5 создать не удалось"
-        )
-
-        print(
-            "[HAPP] ================================="
-        )
-
-        return ""
-
-    except subprocess.TimeoutExpired:
-
-        print(
-            "[HAPP] ❌ hpwnr timeout"
-        )
-
-        return ""
-
-    except Exception as e:
-
-        print(
-            "[HAPP] ❌ Ошибка:",
-            repr(e)
-        )
-
-        return ""
+    return ""
 
 
 # ============================================================
@@ -485,9 +682,12 @@ def get_urls(user_id):
 def parse_date(value):
 
     if not value:
+
         return None
 
-    value = str(value).strip()
+    value = str(
+        value
+    ).strip()
 
     formats = [
 
@@ -514,6 +714,7 @@ def parse_date(value):
             )
 
         except Exception:
+
             pass
 
     try:
@@ -533,12 +734,18 @@ def parse_date(value):
 def format_date(value):
 
     if not value:
+
         return "Не указана"
 
-    date = parse_date(value)
+    date = parse_date(
+        value
+    )
 
     if not date:
-        return str(value)
+
+        return str(
+            value
+        )
 
     return date.strftime(
         "%d.%m.%Y"
@@ -547,9 +754,12 @@ def format_date(value):
 
 def days_left(value):
 
-    date = parse_date(value)
+    date = parse_date(
+        value
+    )
 
     if not date:
+
         return 0
 
     return max(
@@ -570,7 +780,9 @@ def subscription_status(value):
             "expired"
         )
 
-    date = parse_date(value)
+    date = parse_date(
+        value
+    )
 
     if not date:
 
@@ -610,6 +822,7 @@ def render_page(user_id):
     )
 
     if not user:
+
         abort(404)
 
     real_user_id = user_value(
@@ -664,11 +877,15 @@ def render_page(user_id):
 
     if subscription == "vip":
 
-        tariff_name = "👑 ixxy VPN"
+        tariff_name = (
+            "👑 ixxy VPN"
+        )
 
     elif subscription == "trial":
 
-        tariff_name = "🎁 Пробный период"
+        tariff_name = (
+            "🎁 Пробный период"
+        )
 
     elif subscription in (
         "",
@@ -676,7 +893,9 @@ def render_page(user_id):
         None,
     ):
 
-        tariff_name = "Нет подписки"
+        tariff_name = (
+            "Нет подписки"
+        )
 
     else:
 
@@ -701,10 +920,7 @@ def render_page(user_id):
     # ========================================================
     # REAL SUBSCRIPTION
     #
-    # Мы только проверяем наличие.
-    #
-    # Содержимое серверов здесь НИКОГДА
-    # не выводится.
+    # Серверные настройки НЕ выводятся.
     # ========================================================
 
     real_content = (
@@ -2088,6 +2304,7 @@ def subscription_page(token):
     )
 
     if not user_id:
+
         abort(404)
 
     user = get_real_user(
@@ -2095,6 +2312,7 @@ def subscription_page(token):
     )
 
     if not user:
+
         abort(404)
 
     return render_page(
@@ -2107,10 +2325,7 @@ def subscription_page(token):
 #
 # РЕАЛЬНАЯ ПОДПИСКА ИЗ POSTGRESQL
 #
-# Серверные настройки здесь не
-# отображаются на сайте.
-# Они выдаются только клиенту,
-# который использует subscription URL.
+# Содержимое серверов не выводится на веб-страницу.
 # ============================================================
 
 @app.route(
@@ -2123,6 +2338,7 @@ def subscription_endpoint(token):
     )
 
     if not user_id:
+
         abort(404)
 
     user = get_real_user(
@@ -2130,6 +2346,7 @@ def subscription_endpoint(token):
     )
 
     if not user:
+
         abort(404)
 
     content = get_real_subscription(
@@ -2157,11 +2374,17 @@ def subscription_endpoint(token):
             key
         ] = value
 
+    response.headers[
+        "X-Content-Type-Options"
+    ] = "nosniff"
+
     return response
 
 
 # ============================================================
 # HAPP TEST
+#
+# ДИАГНОСТИКА HPWNR / CRYPT5
 # ============================================================
 
 @app.route(
@@ -2174,6 +2397,7 @@ def happ_test(token):
     )
 
     if not user_id:
+
         abort(404)
 
     user = get_real_user(
@@ -2181,19 +2405,91 @@ def happ_test(token):
     )
 
     if not user:
+
         abort(404)
 
     subscription_url = (
         f"{PUBLIC_SITE_URL}/sub/{token}"
     )
 
-    happ_url = build_happ_url(
+    result = run_hpwnr(
         subscription_url
     )
 
+    hpwnr = result.get(
+        "hpwnr"
+    )
+
+    happ_url = result.get(
+        "happ_url",
+        ""
+    )
+
+    stdout = result.get(
+        "stdout",
+        ""
+    )
+
+    stderr = result.get(
+        "stderr",
+        ""
+    )
+
+    returncode = result.get(
+        "returncode"
+    )
+
+    success = result.get(
+        "success",
+        False
+    )
+
+    # ========================================================
+    # ДИАГНОСТИКА
+    #
+    # Важное:
+    # subscription URL намеренно не показываем.
+    # ========================================================
+
+    result_text = f"""
+IXXY HAPP DIAGNOSTICS
+
+status: {"OK" if success else "ERROR"}
+
+hpwnr_found: {"YES" if hpwnr else "NO"}
+
+hpwnr_path:
+{hpwnr or "NOT FOUND"}
+
+returncode:
+{returncode}
+
+stdout_length:
+{len(stdout)}
+
+stderr_length:
+{len(stderr)}
+
+crypt5_found:
+{"YES" if happ_url else "NO"}
+
+stdout:
+{stdout[:5000]}
+
+stderr:
+{stderr[:5000]}
+"""
+
+    if happ_url:
+
+        result_text += (
+            "\n\nHAPP URL:\n"
+            + happ_url
+        )
+
     response = Response(
-        happ_url,
-        status=200,
+        result_text.strip(),
+        status=200 if success else 500,
         mimetype="text/plain",
     )
 
@@ -2534,6 +2830,39 @@ if __name__ == "__main__":
             "PORT",
             "10000"
         )
+    )
+
+    print(
+        "=================================",
+        flush=True
+    )
+
+    print(
+        "ixxy VPN WEB",
+        flush=True
+    )
+
+    print(
+        "Version:",
+        APP_VERSION,
+        flush=True
+    )
+
+    print(
+        "PUBLIC_SITE_URL:",
+        PUBLIC_SITE_URL,
+        flush=True
+    )
+
+    print(
+        "HPWNR_PATH:",
+        HPWNR_PATH,
+        flush=True
+    )
+
+    print(
+        "=================================",
+        flush=True
     )
 
     app.run(
