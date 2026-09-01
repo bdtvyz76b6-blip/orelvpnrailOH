@@ -1,9 +1,13 @@
 import os
 import html
+import json
+import base64
 from datetime import datetime
 from urllib.parse import quote
 
+import requests
 from flask import Flask, Response, abort
+
 
 from database import (
     get_subscription_content,
@@ -28,12 +32,54 @@ PUBLIC_SITE_URL = os.getenv(
     "https://orelvpnrailoh-1.onrender.com",
 ).rstrip("/")
 
+
 SUBSCRIPTION_PREFIX = os.getenv(
     "SUBSCRIPTION_PREFIX",
     "2ix847xy",
 ).strip()
 
-TELEGRAM_URL = "https://t.me/orelvpntopbot"
+
+TELEGRAM_URL = os.getenv(
+    "TELEGRAM_URL",
+    "https://t.me/orelvpntopbot",
+).strip()
+
+
+# ============================================================
+# HAPP CRYPT5
+# ============================================================
+#
+# ВАЖНО:
+#
+# HAPP_CRYPT5_API_URL должен указывать на сервис/API,
+# который принимает обычную HTTPS-ссылку подписки
+# и возвращает готовую:
+#
+#     happ://crypt5/....
+#
+# Сам алгоритм Crypt5 здесь не реализован вручную.
+#
+# Пример переменной Render:
+#
+# HAPP_CRYPT5_API_URL=https://....../encrypt
+#
+# Если API отсутствует или временно недоступен,
+# сайт автоматически использует happ://add/ как fallback.
+#
+# ============================================================
+
+HAPP_CRYPT5_API_URL = os.getenv(
+    "HAPP_CRYPT5_API_URL",
+    "",
+).strip()
+
+
+HAPP_CRYPT5_TIMEOUT = int(
+    os.getenv(
+        "HAPP_CRYPT5_TIMEOUT",
+        "8",
+    )
+)
 
 
 # ============================================================
@@ -47,23 +93,222 @@ def get_user_id_from_token(token):
 
     token = str(token).strip()
 
-    if not token.startswith(SUBSCRIPTION_PREFIX):
+    if not token.startswith(
+        SUBSCRIPTION_PREFIX
+    ):
         return None
 
-    user_id = token[len(SUBSCRIPTION_PREFIX):]
+    user_id = token[
+        len(SUBSCRIPTION_PREFIX):
+    ]
 
     if not user_id.isdigit():
         return None
 
     try:
         return int(user_id)
+
     except Exception:
         return None
 
 
 def get_token(user_id):
 
-    return f"{SUBSCRIPTION_PREFIX}{user_id}"
+    return (
+        f"{SUBSCRIPTION_PREFIX}"
+        f"{user_id}"
+    )
+
+
+# ============================================================
+# CRYPT5 API RESPONSE PARSER
+# ============================================================
+
+def extract_crypt5_response(data):
+
+    if data is None:
+        return ""
+
+    # --------------------------------------------------------
+    # Plain string
+    # --------------------------------------------------------
+
+    if isinstance(data, str):
+
+        value = data.strip()
+
+        if value.startswith(
+            "happ://crypt5/"
+        ):
+            return value
+
+        # Иногда API может вернуть JSON
+        # в виде строки.
+
+        try:
+
+            decoded = json.loads(value)
+
+            result = extract_crypt5_response(
+                decoded
+            )
+
+            if result:
+                return result
+
+        except Exception:
+            pass
+
+        return ""
+
+
+    # --------------------------------------------------------
+    # Dictionary
+    # --------------------------------------------------------
+
+    if isinstance(data, dict):
+
+        possible_keys = (
+            "url",
+            "link",
+            "result",
+            "data",
+            "encrypted",
+            "encrypted_url",
+            "crypt5",
+            "happ",
+        )
+
+        for key in possible_keys:
+
+            value = data.get(key)
+
+            result = extract_crypt5_response(
+                value
+            )
+
+            if result:
+                return result
+
+        return ""
+
+
+    # --------------------------------------------------------
+    # List
+    # --------------------------------------------------------
+
+    if isinstance(data, list):
+
+        for item in data:
+
+            result = extract_crypt5_response(
+                item
+            )
+
+            if result:
+                return result
+
+    return ""
+
+
+# ============================================================
+# GENERATE HAPP CRYPT5
+# ============================================================
+
+def generate_happ_crypt5(
+    subscription_url
+):
+
+    if not subscription_url:
+        return ""
+
+
+    # --------------------------------------------------------
+    # Без API Crypt5 создать корректно невозможно.
+    # --------------------------------------------------------
+
+    if not HAPP_CRYPT5_API_URL:
+
+        return ""
+
+
+    try:
+
+        # ----------------------------------------------------
+        # Основной формат запроса.
+        #
+        # Большинство подобных API принимают:
+        #
+        # {
+        #     "url": "https://..."
+        # }
+        #
+        # ----------------------------------------------------
+
+        response = requests.post(
+
+            HAPP_CRYPT5_API_URL,
+
+            json={
+                "url": subscription_url,
+            },
+
+            timeout=HAPP_CRYPT5_TIMEOUT,
+
+        )
+
+
+        if response.status_code != 200:
+
+            return ""
+
+
+        content_type = (
+            response.headers
+            .get(
+                "Content-Type",
+                ""
+            )
+            .lower()
+        )
+
+
+        # ----------------------------------------------------
+        # JSON
+        # ----------------------------------------------------
+
+        if "json" in content_type:
+
+            try:
+
+                data = response.json()
+
+            except Exception:
+
+                return ""
+
+            return extract_crypt5_response(
+                data
+            )
+
+
+        # ----------------------------------------------------
+        # TEXT
+        # ----------------------------------------------------
+
+        text = (
+            response.text
+            .strip()
+        )
+
+        return extract_crypt5_response(
+            text
+        )
+
+
+    except Exception:
+
+        return ""
 
 
 # ============================================================
@@ -72,23 +317,54 @@ def get_token(user_id):
 
 def get_urls(user_id):
 
-    token = get_token(user_id)
+    token = get_token(
+        user_id
+    )
+
 
     page_url = (
-        f"{PUBLIC_SITE_URL}/s/{token}"
+        f"{PUBLIC_SITE_URL}"
+        f"/s/{token}"
     )
+
 
     subscription_url = (
-        f"{PUBLIC_SITE_URL}/sub/{token}"
+        f"{PUBLIC_SITE_URL}"
+        f"/sub/{token}"
     )
 
-    happ_url = (
-        "happ://add/"
-        + quote(
-            subscription_url,
-            safe=""
-        )
+
+    # --------------------------------------------------------
+    # HAPP CRYPT5
+    # --------------------------------------------------------
+
+    crypt5_url = generate_happ_crypt5(
+        subscription_url
     )
+
+
+    # --------------------------------------------------------
+    # FALLBACK
+    # --------------------------------------------------------
+
+    if not crypt5_url:
+
+        happ_url = (
+            "happ://add/"
+            + quote(
+                subscription_url,
+                safe=""
+            )
+        )
+
+    else:
+
+        happ_url = crypt5_url
+
+
+    # --------------------------------------------------------
+    # INCY
+    # --------------------------------------------------------
 
     incy_url = (
         "incy://add/"
@@ -97,6 +373,7 @@ def get_urls(user_id):
             safe=""
         )
     )
+
 
     return (
         page_url,
@@ -114,12 +391,30 @@ def js_escape(value):
 
     return (
         str(value)
-        .replace("\\", "\\\\")
-        .replace("'", "\\'")
-        .replace('"', '\\"')
-        .replace("\n", "\\n")
-        .replace("\r", "\\r")
-        .replace("</", "<\\/")
+        .replace(
+            "\\",
+            "\\\\"
+        )
+        .replace(
+            "'",
+            "\\'"
+        )
+        .replace(
+            '"',
+            '\\"'
+        )
+        .replace(
+            "\n",
+            "\\n"
+        )
+        .replace(
+            "\r",
+            "\\r"
+        )
+        .replace(
+            "</",
+            "<\\/"
+        )
     )
 
 
@@ -130,20 +425,33 @@ def js_escape(value):
 def days_word(days):
 
     try:
-        days = abs(int(days))
+
+        days = abs(
+            int(days)
+        )
+
     except Exception:
+
         days = 0
 
+
     if 11 <= days % 100 <= 14:
+
         return "дней"
+
 
     last = days % 10
 
+
     if last == 1:
+
         return "день"
 
+
     if 2 <= last <= 4:
+
         return "дня"
+
 
     return "дней"
 
@@ -155,29 +463,45 @@ def days_word(days):
 def parse_subscription_date(value):
 
     if not value:
+
         return None
 
-    value = str(value).strip()
+
+    value = str(
+        value
+    ).strip()
+
 
     formats = (
+
         "%Y-%m-%d",
+
         "%Y-%m-%d %H:%M:%S",
+
         "%Y-%m-%d %H:%M",
+
         "%d.%m.%Y",
+
         "%d.%m.%Y %H:%M:%S",
+
         "%d.%m.%Y %H:%M",
+
     )
+
 
     for fmt in formats:
 
         try:
+
             return datetime.strptime(
                 value,
                 fmt
             ).date()
 
         except Exception:
+
             pass
+
 
     return None
 
@@ -189,52 +513,78 @@ def parse_subscription_date(value):
 def get_user_data(user_id):
 
     try:
-        user = get_user(user_id)
+
+        user = get_user(
+            user_id
+        )
+
     except Exception:
+
         user = None
 
+
     username = "нет"
+
     first_name = "Пользователь"
+
     subscription = "none"
+
     until = ""
+
 
     if user:
 
         try:
+
             username = (
                 str(user[1])
                 if user[1]
                 else "нет"
             )
+
         except Exception:
+
             pass
 
+
         try:
+
             first_name = (
                 str(user[2])
                 if user[2]
                 else "Пользователь"
             )
+
         except Exception:
+
             pass
 
+
         try:
+
             subscription = (
                 str(user[3])
                 if user[3]
                 else "none"
             )
+
         except Exception:
+
             pass
 
+
         try:
+
             until = (
                 str(user[4])
                 if user[4]
                 else ""
             )
+
         except Exception:
+
             pass
+
 
     return (
         user,
@@ -255,8 +605,10 @@ def no_subscription_page():
         TELEGRAM_URL
     )
 
+
     return f"""
 <!DOCTYPE html>
+
 <html lang="ru">
 
 <head>
@@ -265,37 +617,50 @@ def no_subscription_page():
 
 <meta
     name="viewport"
-    content="width=device-width,
-             initial-scale=1.0,
-             viewport-fit=cover"
-/>
+    content="
+        width=device-width,
+        initial-scale=1.0
+    "
+>
 
 <meta
     name="theme-color"
     content="#07070b"
-/>
+>
 
-<title>ixxy VPN</title>
+<title>
+    ixxy VPN
+</title>
 
 <style>
 
 * {{
-    box-sizing: border-box;
+    box-sizing:
+        border-box;
 }}
 
 html,
 body {{
-    margin: 0;
-    min-height: 100%;
+    margin:
+        0;
+
+    min-height:
+        100%;
 }}
 
 body {{
 
-    min-height: 100vh;
+    min-height:
+        100vh;
 
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    display:
+        flex;
+
+    align-items:
+        center;
+
+    justify-content:
+        center;
 
     padding:
         20px;
@@ -313,7 +678,8 @@ body {{
         ),
         #07070b;
 
-    color: white;
+    color:
+        white;
 
     font-family:
         -apple-system,
@@ -325,14 +691,20 @@ body {{
 
 .card {{
 
-    width: 100%;
-    max-width: 430px;
+    width:
+        100%;
 
-    padding: 35px 25px;
+    max-width:
+        430px;
 
-    border-radius: 32px;
+    padding:
+        35px 25px;
 
-    text-align: center;
+    border-radius:
+        32px;
+
+    text-align:
+        center;
 
     background:
         rgba(17,18,27,.82);
@@ -354,20 +726,29 @@ body {{
 
 .logo {{
 
-    width: 88px;
-    height: 88px;
+    width:
+        88px;
+
+    height:
+        88px;
 
     margin:
         0 auto 22px;
 
-    display: flex;
+    display:
+        flex;
 
-    align-items: center;
-    justify-content: center;
+    align-items:
+        center;
 
-    border-radius: 28px;
+    justify-content:
+        center;
 
-    font-size: 44px;
+    border-radius:
+        28px;
+
+    font-size:
+        44px;
 
     background:
         linear-gradient(
@@ -384,10 +765,14 @@ body {{
 
 h1 {{
 
-    margin: 0;
+    margin:
+        0;
 
-    font-size: 29px;
-    font-weight: 900;
+    font-size:
+        29px;
+
+    font-weight:
+        900;
 }}
 
 p {{
@@ -404,22 +789,32 @@ p {{
 
 .button {{
 
-    display: flex;
+    display:
+        flex;
 
-    align-items: center;
-    justify-content: center;
+    align-items:
+        center;
 
-    min-height: 55px;
+    justify-content:
+        center;
 
-    margin-top: 24px;
+    min-height:
+        55px;
 
-    border-radius: 18px;
+    margin-top:
+        24px;
 
-    color: white;
+    border-radius:
+        18px;
 
-    text-decoration: none;
+    color:
+        white;
 
-    font-weight: 900;
+    text-decoration:
+        none;
+
+    font-weight:
+        900;
 
     background:
         linear-gradient(
@@ -460,6 +855,7 @@ p {{
 </div>
 
 </body>
+
 </html>
 """
 
@@ -468,7 +864,9 @@ p {{
 # PREMIUM PAGE
 # ============================================================
 
-@app.route("/s/<token>")
+@app.route(
+    "/s/<token>"
+)
 def subscription_page(token):
 
     # --------------------------------------------------------
@@ -479,8 +877,11 @@ def subscription_page(token):
         token
     )
 
+
     if user_id is None:
+
         abort(404)
+
 
     # --------------------------------------------------------
     # DATABASE
@@ -488,29 +889,41 @@ def subscription_page(token):
 
     try:
 
-        content = get_subscription_content(
-            user_id
+        content = (
+            get_subscription_content(
+                user_id
+            )
         )
 
     except Exception:
 
         content = ""
 
+
     if not content:
 
         return Response(
+
             no_subscription_page(),
+
             status=404,
+
             mimetype="text/html",
+
             headers={
+
                 "Cache-Control":
                     "no-cache, no-store, must-revalidate",
+
                 "Pragma":
                     "no-cache",
+
                 "Expires":
                     "0",
+
             },
         )
+
 
     (
         user,
@@ -518,7 +931,10 @@ def subscription_page(token):
         first_name,
         subscription,
         until,
-    ) = get_user_data(user_id)
+    ) = get_user_data(
+        user_id
+    )
+
 
     # ========================================================
     # TARIFF
@@ -530,25 +946,35 @@ def subscription_page(token):
         else ""
     )
 
+
     if subscription_lower in (
+
         "vip",
         "ixxy vip",
         "premium vip",
+
     ):
 
         tariff = "ixxy VIP"
+
         tariff_icon = "👑"
 
+
     elif subscription_lower in (
+
         "trial",
         "пробный",
         "пробный период",
+
     ):
 
         tariff = "Пробный период"
+
         tariff_icon = "🎁"
 
+
     elif subscription_lower in (
+
         "active",
         "premium",
         "standard",
@@ -556,44 +982,67 @@ def subscription_page(token):
         "👑 орёл vpn",
         "☂️ ixxy vpn",
         "ixxy vpn",
+
     ):
 
         tariff = "ixxy VPN"
+
         tariff_icon = "☂️"
+
 
     else:
 
-        # Поддерживаем и кастомные тарифы
-        if subscription and subscription != "none":
+        if (
+            subscription
+            and
+            subscription != "none"
+        ):
+
             tariff = subscription
+
         else:
+
             tariff = "ixxy VPN"
 
+
         tariff_icon = "☂️"
+
 
     # ========================================================
     # EXPIRATION
     # ========================================================
 
-    expire_date = parse_subscription_date(
-        until
+    expire_date = (
+        parse_subscription_date(
+            until
+        )
     )
+
 
     today = datetime.now().date()
 
+
     days_left = 0
+
 
     if expire_date:
 
         days_left = (
-            expire_date - today
+            expire_date
+            - today
         ).days
 
-    if days_left >= 0 and expire_date:
+
+    if (
+        days_left >= 0
+        and expire_date
+    ):
 
         active = True
 
-        status_text = "Подписка активна"
+        status_text = (
+            "Подписка активна"
+        )
 
         status_description = (
             "Защищённое VPN-подключение"
@@ -603,11 +1052,14 @@ def subscription_page(token):
 
         status_icon = "✓"
 
+
     else:
 
         active = False
 
-        status_text = "Подписка истекла"
+        status_text = (
+            "Подписка истекла"
+        )
 
         status_description = (
             "Продлите подписку для подключения"
@@ -619,24 +1071,29 @@ def subscription_page(token):
 
         days_left = 0
 
+
     # ========================================================
-    # DATE TEXT
+    # DATE
     # ========================================================
 
     if expire_date:
 
-        until_text = expire_date.strftime(
-            "%d.%m.%Y"
+        until_text = (
+            expire_date.strftime(
+                "%d.%m.%Y"
+            )
         )
 
     else:
 
         until_text = "—"
 
+
     days_text = (
         f"{days_left} "
         f"{days_word(days_left)}"
     )
+
 
     # ========================================================
     # URLS
@@ -647,7 +1104,10 @@ def subscription_page(token):
         subscription_url,
         happ_url,
         incy_url,
-    ) = get_urls(user_id)
+    ) = get_urls(
+        user_id
+    )
+
 
     # ========================================================
     # SAFE VALUES
@@ -669,20 +1129,17 @@ def subscription_page(token):
         until_text
     )
 
-    safe_days = html.escape(
-        days_text
+    safe_subscription_url = html.escape(
+        happ_url
     )
 
-    safe_subscription_url = html.escape(
-        subscription_url
-    )
 
     # ========================================================
     # JS
     # ========================================================
 
     js_subscription_url = js_escape(
-        subscription_url
+        happ_url
     )
 
     js_happ_url = js_escape(
@@ -701,13 +1158,10 @@ def subscription_page(token):
         TELEGRAM_URL
     )
 
+
     # ========================================================
     # PROGRESS
     # ========================================================
-
-    # Визуальная шкала.
-    # Для очень больших подписок не даём полосе
-    # выглядеть слишком маленькой.
 
     if days_left <= 0:
 
@@ -720,14 +1174,23 @@ def subscription_page(token):
     else:
 
         progress = min(
+
             100,
+
             max(
+
                 15,
+
                 int(
-                    days_left / 365 * 100
+                    days_left
+                    / 365
+                    * 100
                 )
+
             )
+
         )
+
 
     # ========================================================
     # HTML
@@ -790,7 +1253,8 @@ def subscription_page(token):
 
 * {{
 
-    box-sizing: border-box;
+    box-sizing:
+        border-box;
 
     -webkit-tap-highlight-color:
         transparent;
@@ -798,7 +1262,8 @@ def subscription_page(token):
 
 html {{
 
-    min-height: 100%;
+    min-height:
+        100%;
 
     scroll-behavior:
         smooth;
@@ -806,11 +1271,14 @@ html {{
 
 body {{
 
-    margin: 0;
+    margin:
+        0;
 
-    min-height: 100vh;
+    min-height:
+        100vh;
 
-    min-height: 100dvh;
+    min-height:
+        100dvh;
 
     color:
         #ffffff;
@@ -834,6 +1302,7 @@ body {{
     -webkit-font-smoothing:
         antialiased;
 }}
+
 
 /* ============================================================
    VARIABLES
@@ -910,6 +1379,7 @@ body.light {{
     --muted:
         #6d707b;
 }}
+
 
 /* ============================================================
    BACKGROUND
@@ -1048,6 +1518,7 @@ body.light {{
     }}
 }}
 
+
 /* ============================================================
    GRID
 ============================================================ */
@@ -1087,6 +1558,7 @@ body.light {{
         );
 }}
 
+
 /* ============================================================
    APP
 ============================================================ */
@@ -1119,6 +1591,7 @@ body.light {{
             env(safe-area-inset-bottom)
         );
 }}
+
 
 /* ============================================================
    TOPBAR
@@ -1272,6 +1745,7 @@ body.light {{
         scale(.9);
 }}
 
+
 /* ============================================================
    HERO
 ============================================================ */
@@ -1366,14 +1840,18 @@ body.light {{
 @keyframes heroIn {{
 
     from {{
-        opacity: 0;
+        opacity:
+            0;
+
         transform:
             translateY(16px)
             scale(.985);
     }}
 
     to {{
-        opacity: 1;
+        opacity:
+            1;
+
         transform:
             translateY(0)
             scale(1);
@@ -1566,6 +2044,7 @@ body.light {{
         rgba(255,83,109,.8);
 }}
 
+
 /* ============================================================
    MAIN CARD
 ============================================================ */
@@ -1625,8 +2104,9 @@ body.light {{
     }}
 }}
 
+
 /* ============================================================
-   SUBSCRIPTION HEADER
+   HEADER
 ============================================================ */
 
 .panel-header {{
@@ -1695,6 +2175,7 @@ body.light {{
     font-weight:
         800;
 }}
+
 
 /* ============================================================
    STATS
@@ -1806,11 +2287,6 @@ body.light {{
         #b7aaff;
 }}
 
-.stat-value.green {{
-
-    color:
-        #82efb6;
-}}
 
 /* ============================================================
    REMAINING
@@ -1967,6 +2443,7 @@ body.light {{
         ease;
 }}
 
+
 /* ============================================================
    PROFILE
 ============================================================ */
@@ -2122,6 +2599,7 @@ body.light {{
         break-word;
 }}
 
+
 /* ============================================================
    TELEGRAM ID
 ============================================================ */
@@ -2177,6 +2655,7 @@ body.light {{
     font-weight:
         850;
 }}
+
 
 /* ============================================================
    SECTION
@@ -2238,6 +2717,7 @@ body.light {{
     line-height:
         1.5;
 }}
+
 
 /* ============================================================
    CONNECT BUTTON
@@ -2434,6 +2914,7 @@ body.light {{
         rgba(0,150,255,.08);
 }}
 
+
 /* ============================================================
    COPY
 ============================================================ */
@@ -2589,6 +3070,7 @@ body.light {{
         rgba(255,255,255,.09);
 }}
 
+
 /* ============================================================
    REFRESH
 ============================================================ */
@@ -2635,6 +3117,7 @@ body.light {{
     transform:
         scale(.98);
 }}
+
 
 /* ============================================================
    HELP
@@ -2696,6 +3179,7 @@ body.light {{
         1.55;
 }}
 
+
 /* ============================================================
    TELEGRAM
 ============================================================ */
@@ -2752,6 +3236,7 @@ body.light {{
         scale(.98);
 }}
 
+
 /* ============================================================
    FOOTER
 ============================================================ */
@@ -2782,6 +3267,7 @@ body.light {{
     opacity:
         .8;
 }}
+
 
 /* ============================================================
    TOAST
@@ -2877,6 +3363,7 @@ body.light {{
         translate(-50%,0);
 }}
 
+
 /* ============================================================
    RESPONSIVE
 ============================================================ */
@@ -2970,18 +3457,22 @@ body.light {{
 
 <body>
 
+
 <div class="background">
 
     <div class="grid-overlay"></div>
 
     <div class="orb orb-one"></div>
+
     <div class="orb orb-two"></div>
+
     <div class="orb orb-three"></div>
 
 </div>
 
 
 <div class="app">
+
 
     <!-- ====================================================
          TOPBAR
@@ -3008,6 +3499,7 @@ body.light {{
             </div>
 
         </div>
+
 
         <button
             class="theme"
@@ -3061,6 +3553,7 @@ body.light {{
 
     <section class="panel">
 
+
         <div class="panel-header">
 
             <div class="panel-title">
@@ -3082,16 +3575,16 @@ body.light {{
         </div>
 
 
-        <!-- =================================================
-             STATS
-        ================================================== -->
+        <!-- STATS -->
 
         <div class="stats">
+
 
             <div class="stat">
 
                 <div class="stat-label">
-                    {tariff_icon} ТАРИФ
+                    {tariff_icon}
+                    ТАРИФ
                 </div>
 
                 <div class="stat-value purple">
@@ -3113,12 +3606,11 @@ body.light {{
 
             </div>
 
+
         </div>
 
 
-        <!-- =================================================
-             REMAINING
-        ================================================== -->
+        <!-- REMAINING -->
 
         <div class="remaining">
 
@@ -3131,19 +3623,24 @@ body.light {{
                     </div>
 
                     <div class="remaining-number">
+
                         {days_left}
+
                         <span>
                             {days_word(days_left)}
                         </span>
+
                     </div>
 
                 </div>
+
 
                 <div class="remaining-icon">
                     ⚡
                 </div>
 
             </div>
+
 
             <div class="progress">
 
@@ -3156,11 +3653,10 @@ body.light {{
         </div>
 
 
-        <!-- =================================================
-             PROFILE
-        ================================================== -->
+        <!-- PROFILE -->
 
         <div class="profile">
+
 
             <div class="profile-head">
 
@@ -3208,12 +3704,11 @@ body.light {{
 
             </div>
 
+
         </div>
 
 
-        <!-- =================================================
-             TELEGRAM ID
-        ================================================== -->
+        <!-- TELEGRAM ID -->
 
         <div class="telegram-id">
 
@@ -3228,11 +3723,10 @@ body.light {{
         </div>
 
 
-        <!-- =================================================
-             CONNECTION
-        ================================================== -->
+        <!-- CONNECTION -->
 
         <div class="section">
+
 
             <div class="section-head">
 
@@ -3246,9 +3740,12 @@ body.light {{
 
             </div>
 
+
             <div class="section-description">
+
                 Добавьте персональную подписку
                 прямо в VPN-клиент.
+
             </div>
 
 
@@ -3267,6 +3764,7 @@ body.light {{
                     🚀
                 </div>
 
+
                 <div class="connect-content">
 
                     <strong>
@@ -3274,11 +3772,11 @@ body.light {{
                     </strong>
 
                     <small>
-                        Открыть VPN-клиент
-                        и добавить подписку
+                        Защищённый Crypt5-импорт
                     </small>
 
                 </div>
+
 
                 <div class="connect-arrow">
                     ›
@@ -3302,6 +3800,7 @@ body.light {{
                     ⚡
                 </div>
 
+
                 <div class="connect-content">
 
                     <strong>
@@ -3315,33 +3814,35 @@ body.light {{
 
                 </div>
 
+
                 <div class="connect-arrow">
                     ›
                 </div>
 
             </button>
 
+
         </div>
 
 
-        <!-- =================================================
-             LINK
-        ================================================== -->
+        <!-- HAPP LINK -->
 
         <div class="copy-card">
+
 
             <div class="copy-head">
 
                 <strong>
-                    🔗
-                    Ссылка подписки
+                    🔐
+                    Happ Crypt5
                 </strong>
 
                 <span>
-                    PERSONAL
+                    PRIVATE
                 </span>
 
             </div>
+
 
             <div
                 class="link"
@@ -3350,20 +3851,20 @@ body.light {{
                 {safe_subscription_url}
             </div>
 
+
             <button
                 type="button"
                 class="copy"
                 onclick="copyLink()"
             >
-                📋 Скопировать ссылку
+                📋 Скопировать Crypt5-ссылку
             </button>
+
 
         </div>
 
 
-        <!-- =================================================
-             REFRESH
-        ================================================== -->
+        <!-- REFRESH -->
 
         <button
             type="button"
@@ -3374,9 +3875,7 @@ body.light {{
         </button>
 
 
-        <!-- =================================================
-             HELP
-        ================================================== -->
+        <!-- HELP -->
 
         <div class="help">
 
@@ -3384,25 +3883,25 @@ body.light {{
                 💡 Как подключиться
             </div>
 
+
             <div class="help-text">
 
-                1. Нажмите «Добавить в Happ»
-                или «Добавить в INCY».<br>
+                1. Нажмите «Добавить в Happ».<br>
 
-                2. Подтвердите добавление
+                2. Happ получит зашифрованную
+                Crypt5-ссылку.<br>
+
+                3. Подтвердите добавление
                 подписки в приложении.<br>
 
-                3. Откройте VPN-клиент
-                и включите подключение.
+                4. Включите VPN.
 
             </div>
 
         </div>
 
 
-        <!-- =================================================
-             TELEGRAM
-        ================================================== -->
+        <!-- TELEGRAM -->
 
         <a
             class="telegram"
@@ -3411,16 +3910,16 @@ body.light {{
             ← Вернуться в Telegram
         </a>
 
+
     </section>
 
 
-    <!-- ====================================================
-         FOOTER
-    ===================================================== -->
+    <!-- FOOTER -->
 
     <div class="footer">
 
         ☂️
+
         <strong>
             ixxy VPN
         </strong>
@@ -3431,17 +3930,17 @@ body.light {{
 
     </div>
 
+
 </div>
 
 
-<!-- ========================================================
-     TOAST
-========================================================= -->
+<!-- TOAST -->
 
 <div
     class="toast"
     id="toast"
 >
+
     <span>
         ✓
     </span>
@@ -3449,6 +3948,7 @@ body.light {{
     <span id="toastText">
         Готово
     </span>
+
 </div>
 
 
@@ -3461,11 +3961,14 @@ body.light {{
 const subscriptionLink =
     '{js_subscription_url}';
 
+
 const happUrl =
     '{js_happ_url}';
 
+
 const incyUrl =
     '{js_incy_url}';
+
 
 const pageUrl =
     '{js_page_url}';
@@ -3477,6 +3980,7 @@ const pageUrl =
 
 let toastTimer = null;
 
+
 function showToast(message) {{
 
     const toast =
@@ -3484,25 +3988,36 @@ function showToast(message) {{
             "toast"
         );
 
+
     const text =
         document.getElementById(
             "toastText"
         );
 
-    if (!toast || !text) {{
+
+    if (
+        !toast ||
+        !text
+    ) {{
+
         return;
+
     }}
+
 
     text.textContent =
         message;
+
 
     toast.classList.add(
         "show"
     );
 
+
     clearTimeout(
         toastTimer
     );
+
 
     toastTimer =
         setTimeout(() => {{
@@ -3512,6 +4027,7 @@ function showToast(message) {{
             );
 
         }}, 2200);
+
 }}
 
 
@@ -3526,6 +4042,7 @@ function applyTheme(theme) {{
             "themeButton"
         );
 
+
     if (
         theme === "light"
     ) {{
@@ -3534,9 +4051,12 @@ function applyTheme(theme) {{
             "light"
         );
 
+
         if (button) {{
+
             button.textContent =
                 "☀️";
+
         }}
 
     }} else {{
@@ -3545,12 +4065,16 @@ function applyTheme(theme) {{
             "light"
         );
 
+
         if (button) {{
+
             button.textContent =
                 "🌙";
+
         }}
 
     }}
+
 }}
 
 
@@ -3561,26 +4085,32 @@ function toggleTheme() {{
             "ixxy_theme"
         ) || "dark";
 
+
     const next =
         current === "dark"
             ? "light"
             : "dark";
+
 
     localStorage.setItem(
         "ixxy_theme",
         next
     );
 
+
     applyTheme(
         next
     );
+
 }}
 
 
 applyTheme(
+
     localStorage.getItem(
         "ixxy_theme"
     ) || "dark"
+
 );
 
 
@@ -3593,6 +4123,7 @@ function openApp(name) {{
     let url;
 
     let title;
+
 
     if (
         name === "happ"
@@ -3611,16 +4142,33 @@ function openApp(name) {{
 
         title =
             "INCY";
+
     }}
 
+
+    if (!url) {{
+
+        showToast(
+            "❌ Ссылка недоступна"
+        );
+
+        return;
+
+    }}
+
+
     showToast(
+
         "📲 Открываем "
         + title
         + "..."
+
     );
+
 
     const started =
         Date.now();
+
 
     try {{
 
@@ -3635,6 +4183,7 @@ function openApp(name) {{
 
     }}
 
+
     setTimeout(() => {{
 
         if (
@@ -3643,12 +4192,15 @@ function openApp(name) {{
         ) {{
 
             showToast(
+
                 "⚠️ Приложение не открылось. Скопируйте ссылку."
+
             );
 
         }}
 
     }}, 1800);
+
 }}
 
 
@@ -3665,7 +4217,9 @@ async function copyLink() {{
         );
 
         return;
+
     }}
+
 
     try {{
 
@@ -3673,9 +4227,11 @@ async function copyLink() {{
             subscriptionLink
         );
 
+
         showToast(
-            "✓ Ссылка скопирована"
+            "✓ Crypt5-ссылка скопирована"
         );
+
 
         return;
 
@@ -3684,11 +4240,14 @@ async function copyLink() {{
         console.log(
             error
         );
+
     }}
+
 
     fallbackCopy(
         subscriptionLink
     );
+
 }}
 
 
@@ -3705,40 +4264,51 @@ function fallbackCopy(text) {{
                 "textarea"
             );
 
+
         textarea.value =
             text;
+
 
         textarea.style.position =
             "fixed";
 
+
         textarea.style.left =
             "-9999px";
+
 
         textarea.style.top =
             "0";
 
+
         textarea.style.opacity =
             "0";
+
 
         document.body.appendChild(
             textarea
         );
 
+
         textarea.focus();
 
+
         textarea.select();
+
 
         const result =
             document.execCommand(
                 "copy"
             );
 
+
         textarea.remove();
+
 
         if (result) {{
 
             showToast(
-                "✓ Ссылка скопирована"
+                "✓ Crypt5-ссылка скопирована"
             );
 
         }} else {{
@@ -3746,6 +4316,7 @@ function fallbackCopy(text) {{
             throw new Error(
                 "copy failed"
             );
+
         }}
 
     }} catch (error) {{
@@ -3754,7 +4325,9 @@ function fallbackCopy(text) {{
             "Скопируйте ссылку:",
             text
         );
+
     }}
+
 }}
 
 
@@ -3768,6 +4341,7 @@ function refreshPage() {{
         "🔄 Обновляем подписку..."
     );
 
+
     setTimeout(() => {{
 
         window.location.href =
@@ -3776,6 +4350,7 @@ function refreshPage() {{
             + Date.now();
 
     }}, 250);
+
 }}
 
 
@@ -3784,7 +4359,9 @@ function refreshPage() {{
 ============================================================ */
 
 document.addEventListener(
+
     "keydown",
+
     function(event) {{
 
         if (
@@ -3796,15 +4373,19 @@ document.addEventListener(
                     "toast"
                 );
 
+
             if (toast) {{
 
                 toast.classList.remove(
                     "show"
                 );
-            }}
-        }
 
-    }}
+            }}
+
+        }}
+
+    }
+
 );
 
 </script>
@@ -3813,6 +4394,7 @@ document.addEventListener(
 
 </html>
 """
+
 
     # ========================================================
     # RESPONSE
@@ -3838,6 +4420,7 @@ document.addEventListener(
                 "0",
 
         },
+
     )
 
 
@@ -3845,25 +4428,33 @@ document.addEventListener(
 # RAW SUBSCRIPTION
 # ============================================================
 
-@app.route("/sub/<token>")
+@app.route(
+    "/sub/<token>"
+)
 def subscription_content(token):
 
     user_id = get_user_id_from_token(
         token
     )
 
+
     if user_id is None:
+
         abort(404)
+
 
     try:
 
-        content = get_subscription_content(
-            user_id
+        content = (
+            get_subscription_content(
+                user_id
+            )
         )
 
     except Exception:
 
         content = ""
+
 
     if not content:
 
@@ -3888,7 +4479,9 @@ def subscription_content(token):
                     "0",
 
             },
+
         )
+
 
     return Response(
 
@@ -3913,6 +4506,7 @@ def subscription_content(token):
                 "*",
 
         },
+
     )
 
 
@@ -3934,41 +4528,56 @@ def index():
 
 <meta
     name="viewport"
-    content="width=device-width,initial-scale=1"
-/>
+    content="
+        width=device-width,
+        initial-scale=1
+    "
+>
 
 <meta
     name="theme-color"
     content="#07070b"
-/>
+>
 
-<title>☂️ ixxy VPN</title>
+<title>
+    ☂️ ixxy VPN
+</title>
 
 <style>
 
-* {
-    box-sizing: border-box;
-}
+* {{
+    box-sizing:
+        border-box;
+}}
 
 html,
-body {
-    margin: 0;
-    min-height: 100%;
-}
+body {{
+    margin:
+        0;
 
-body {
+    min-height:
+        100%;
+}}
 
-    min-height: 100vh;
+body {{
 
-    display: flex;
+    min-height:
+        100vh;
 
-    align-items: center;
+    display:
+        flex;
 
-    justify-content: center;
+    align-items:
+        center;
 
-    padding: 20px;
+    justify-content:
+        center;
 
-    color: white;
+    padding:
+        20px;
+
+    color:
+        white;
 
     font-family:
         -apple-system,
@@ -3989,19 +4598,24 @@ body {
             transparent 35%
         ),
         #07070b;
-}
+}}
 
-.card {
+.card {{
 
-    width: 100%;
+    width:
+        100%;
 
-    max-width: 450px;
+    max-width:
+        450px;
 
-    padding: 42px 25px;
+    padding:
+        42px 25px;
 
-    text-align: center;
+    text-align:
+        center;
 
-    border-radius: 32px;
+    border-radius:
+        32px;
 
     background:
         rgba(17,18,27,.85);
@@ -4019,26 +4633,33 @@ body {
 
     -webkit-backdrop-filter:
         blur(30px);
-}
+}}
 
-.logo {
+.logo {{
 
-    width: 90px;
+    width:
+        90px;
 
-    height: 90px;
+    height:
+        90px;
 
     margin:
         0 auto 22px;
 
-    display: flex;
+    display:
+        flex;
 
-    align-items: center;
+    align-items:
+        center;
 
-    justify-content: center;
+    justify-content:
+        center;
 
-    border-radius: 28px;
+    border-radius:
+        28px;
 
-    font-size: 46px;
+    font-size:
+        46px;
 
     background:
         linear-gradient(
@@ -4051,27 +4672,34 @@ body {
     box-shadow:
         0 20px 65px
         rgba(120,60,255,.4);
-}
+}}
 
-h1 {
+h1 {{
 
-    margin: 0;
+    margin:
+        0;
 
-    font-size: 32px;
+    font-size:
+        32px;
 
-    font-weight: 900;
-}
+    font-weight:
+        900;
+}}
 
-p {
+p {{
 
-    margin-top: 10px;
+    margin-top:
+        10px;
 
-    color: #9295a4;
+    color:
+        #9295a4;
 
-    font-size: 14px;
+    font-size:
+        14px;
 
-    line-height: 1.55;
-}
+    line-height:
+        1.55;
+}}
 
 </style>
 
@@ -4106,7 +4734,9 @@ p {
 # HEALTH
 # ============================================================
 
-@app.route("/health")
+@app.route(
+    "/health"
+)
 def health():
 
     return Response(
@@ -4123,6 +4753,7 @@ def health():
                 "no-cache, no-store, must-revalidate",
 
         },
+
     )
 
 
@@ -4133,15 +4764,19 @@ def health():
 if __name__ == "__main__":
 
     port = int(
+
         os.getenv(
             "PORT",
             "10000"
         )
+
     )
+
 
     app.run(
 
         host="0.0.0.0",
 
         port=port,
+
     )
