@@ -1,4 +1,7 @@
 import os
+import shutil
+import subprocess
+from urllib.parse import quote
 
 from aiogram import Router, F
 from aiogram.types import (
@@ -56,10 +59,179 @@ TELEGRAM_URL = "https://t.me/orelvpntopbot"
 
 
 # ============================================================
+# HPWNR
+# ============================================================
+
+def find_hpwnr():
+    """
+    Ищет установленный hpwnr.
+    """
+
+    candidates = [
+        shutil.which("hpwnr"),
+
+        os.path.join(
+            os.getcwd(),
+            "bin",
+            "hpwnr",
+        ),
+
+        "/opt/render/project/src/bin/hpwnr",
+
+        "/app/bin/hpwnr",
+
+        "/usr/local/bin/hpwnr",
+    ]
+
+    for path in candidates:
+
+        if not path:
+            continue
+
+        if os.path.isfile(path) and os.access(
+            path,
+            os.X_OK,
+        ):
+            return path
+
+    return None
+
+
+# ============================================================
+# СОЗДАНИЕ HAPP CRYPT4
+# ============================================================
+
+def generate_happ_crypt4(
+    subscription_url: str,
+):
+
+    hpwnr = find_hpwnr()
+
+    if not hpwnr:
+
+        print(
+            "❌ hpwnr не найден"
+        )
+
+        return None
+
+    try:
+
+        result = subprocess.run(
+            [
+                hpwnr,
+                subscription_url,
+                "crypt4",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+
+        stdout = (
+            result.stdout or ""
+        ).strip()
+
+        stderr = (
+            result.stderr or ""
+        ).strip()
+
+        print(
+            f"🔐 hpwnr returncode: "
+            f"{result.returncode}"
+        )
+
+        if stderr:
+
+            print(
+                f"⚠️ hpwnr stderr: "
+                f"{stderr}"
+            )
+
+        if result.returncode != 0:
+
+            print(
+                "❌ hpwnr завершился "
+                "с ошибкой"
+            )
+
+            return None
+
+        # ----------------------------------------------------
+        # Иногда hpwnr может вернуть лишний текст.
+        # Ищем непосредственно happ://crypt4/
+        # ----------------------------------------------------
+
+        position = stdout.find(
+            "happ://crypt4/"
+        )
+
+        if position == -1:
+
+            print(
+                "❌ hpwnr не вернул "
+                "happ://crypt4/"
+            )
+
+            print(
+                f"stdout: {stdout}"
+            )
+
+            return None
+
+        encrypted = stdout[
+            position:
+        ].splitlines()[0].strip()
+
+        if not encrypted.startswith(
+            "happ://crypt4/"
+        ):
+
+            print(
+                "❌ Некорректный Crypt4"
+            )
+
+            return None
+
+        # ----------------------------------------------------
+        # Создаём ссылку через Happ Web
+        # ----------------------------------------------------
+
+        happ_web_url = (
+            "https://happ.vpnbypass.click/"
+            "?RAW="
+            + quote(
+                encrypted,
+                safe=":/+=",
+            )
+        )
+
+        return happ_web_url
+
+    except subprocess.TimeoutExpired:
+
+        print(
+            "❌ hpwnr: timeout"
+        )
+
+        return None
+
+    except Exception as e:
+
+        print(
+            f"❌ Ошибка Crypt4: {e}"
+        )
+
+        return None
+
+
+# ============================================================
 # ПЕРСОНАЛЬНЫЙ ТОКЕН
 # ============================================================
 
-def get_subscription_token(user_id: int) -> str:
+def get_subscription_token(
+    user_id: int,
+) -> str:
 
     return (
         f"{SUBSCRIPTION_PREFIX}"
@@ -72,7 +244,7 @@ def get_subscription_token(user_id: int) -> str:
 # ============================================================
 
 def get_subscription_page_url(
-    user_id: int
+    user_id: int,
 ) -> str:
 
     token = get_subscription_token(
@@ -87,10 +259,15 @@ def get_subscription_page_url(
 
 # ============================================================
 # ПРЯМАЯ ССЫЛКА ПОДПИСКИ
+#
+# ВАЖНО:
+# Эта ссылка используется только внутри сервера
+# как исходник для Crypt4.
+# Пользователю она НЕ показывается.
 # ============================================================
 
 def get_subscription_url(
-    user_id: int
+    user_id: int,
 ) -> str:
 
     token = get_subscription_token(
@@ -100,6 +277,23 @@ def get_subscription_url(
     return (
         f"{PUBLIC_SITE_URL}"
         f"/sub/{token}"
+    )
+
+
+# ============================================================
+# CRYPT4 ССЫЛКА ПОЛЬЗОВАТЕЛЯ
+# ============================================================
+
+def get_happ_link(
+    user_id: int,
+):
+
+    subscription_url = get_subscription_url(
+        user_id
+    )
+
+    return generate_happ_crypt4(
+        subscription_url
     )
 
 
@@ -120,7 +314,7 @@ class PromoState(StatesGroup):
     F.text == "👤 Личный кабинет"
 )
 async def cabinet(
-    message: Message
+    message: Message,
 ):
 
     await show_cabinet(
@@ -133,7 +327,7 @@ async def cabinet(
 # ============================================================
 
 async def show_cabinet(
-    message: Message
+    message: Message,
 ):
 
     user_id = message.from_user.id
@@ -198,7 +392,7 @@ async def show_cabinet(
 
             expire_date = datetime.strptime(
                 str(until),
-                "%Y-%m-%d"
+                "%Y-%m-%d",
             ).date()
 
             today = datetime.now().date()
@@ -212,7 +406,7 @@ async def show_cabinet(
                 (
                     expire_date
                     - today
-                ).days
+                ).days,
             )
 
         except Exception as e:
@@ -265,7 +459,7 @@ async def show_cabinet(
     F.data == "get_link"
 )
 async def get_link(
-    callback: CallbackQuery
+    callback: CallbackQuery,
 ):
 
     user_id = callback.from_user.id
@@ -327,16 +521,33 @@ async def get_link(
         return
 
     # ========================================================
-    # ССЫЛКИ
+    # ССЫЛКА СТРАНИЦЫ
     # ========================================================
 
     site_url = get_subscription_page_url(
         user_id
     )
 
-    subscription_url = get_subscription_url(
+    # ========================================================
+    # CRYPT4
+    # ========================================================
+
+    happ_link = get_happ_link(
         user_id
     )
+
+    # --------------------------------------------------------
+    # Если Crypt4 не создался
+    # --------------------------------------------------------
+
+    if not happ_link:
+
+        await callback.answer(
+            "❌ Не удалось создать защищённую ссылку",
+            show_alert=True,
+        )
+
+        return
 
     # ========================================================
     # КНОПКИ
@@ -347,14 +558,21 @@ async def get_link(
 
             [
                 InlineKeyboardButton(
-                    text="🌐 Подключиться через сайт",
+                    text="⚡ Подключиться через Happ",
+                    url=happ_link,
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    text="🌐 Открыть ixxy VPN",
                     url=site_url,
                 )
             ],
 
             [
                 InlineKeyboardButton(
-                    text="📋 Скопировать ссылку",
+                    text="📋 Скопировать Crypt4",
                     callback_data="copy_subscription_link",
                 )
             ],
@@ -369,51 +587,53 @@ async def get_link(
     text = f"""
 ⚡ <b>Подключение ixxy VPN</b>
 
-Ваша персональная ссылка:
+🔐 <b>Защищённая ссылка</b>
 
-<code>{subscription_url}</code>
+<code>{happ_link}</code>
 
 ━━━━━━━━━━━━━━━━━━
 
-📲 <b>Вариант 1 — Happ</b>
+📲 <b>Happ</b>
 
-1. Скопируйте ссылку выше.
-2. Откройте приложение <b>Happ</b>.
-3. Добавьте эту ссылку как подписку.
+Нажмите кнопку ниже —
+Happ автоматически откроет
+защищённую подписку.
 
-🚀 <b>Вариант 2 — INCY</b>
+🚀 <b>INCY</b>
 
-1. Скопируйте ссылку выше.
-2. Откройте приложение <b>INCY</b>.
-3. Добавьте эту ссылку как подписку.
+Для INCY можно использовать
+персональную страницу ixxy VPN.
 
-🌐 <b>Вариант 3 — через сайт</b>
+🌐 <b>Сайт</b>
 
-Откройте персональную страницу —
-там можно подключиться через приложение
-и скопировать ссылку.
+Откройте страницу ixxy VPN,
+чтобы управлять подключением.
 
-👇 Выберите способ:
+🔒 Серверные настройки
+не отображаются.
+
+👇 <b>Выберите способ подключения:</b>
 """
 
     await callback.message.answer(
         text,
         reply_markup=keyboard,
         parse_mode="HTML",
+        disable_web_page_preview=True,
     )
 
     await callback.answer()
 
 
 # ============================================================
-# КОПИРОВАНИЕ ССЫЛКИ
+# КОПИРОВАНИЕ CRYPT4
 # ============================================================
 
 @router.callback_query(
     F.data == "copy_subscription_link"
 )
 async def copy_subscription_link(
-    callback: CallbackQuery
+    callback: CallbackQuery,
 ):
 
     user_id = callback.from_user.id
@@ -447,36 +667,46 @@ async def copy_subscription_link(
         return
 
     # --------------------------------------------------------
-    # Ссылка
+    # Создаём Crypt4
     # --------------------------------------------------------
 
-    subscription_url = get_subscription_url(
+    happ_link = get_happ_link(
         user_id
     )
 
+    if not happ_link:
+
+        await callback.answer(
+            "❌ Не удалось создать Crypt4",
+            show_alert=True,
+        )
+
+        return
+
     # --------------------------------------------------------
-    # Отправляем ссылку отдельным сообщением
-    #
-    # Telegram сам позволит пользователю
-    # нажать/скопировать текст.
+    # Отправляем Crypt4
     # --------------------------------------------------------
 
     await callback.message.answer(
         f"""
-📋 <b>Ваша ссылка подписки</b>
+🔐 <b>Ваша защищённая ссылка</b>
 
-<code>{subscription_url}</code>
+<code>{happ_link}</code>
 
-Нажмите и удерживайте ссылку,
-чтобы скопировать её.
+━━━━━━━━━━━━━━━━━━
 
-📲 Затем добавьте её в <b>Happ</b> или <b>INCY</b>.
+📲 Скопируйте её и используйте
+для подключения к ixxy VPN.
+
+🔒 Обычная ссылка подписки
+пользователю не показывается.
 """,
         parse_mode="HTML",
+        disable_web_page_preview=True,
     )
 
     await callback.answer(
-        "📋 Ссылка отправлена"
+        "📋 Crypt4-ссылка отправлена"
     )
 
 
@@ -488,7 +718,7 @@ async def copy_subscription_link(
     F.data == "refresh_subscription"
 )
 async def refresh_subscription(
-    callback: CallbackQuery
+    callback: CallbackQuery,
 ):
 
     user_id = callback.from_user.id
@@ -572,7 +802,7 @@ async def refresh_subscription(
 
         date = datetime.strptime(
             str(until),
-            "%Y-%m-%d"
+            "%Y-%m-%d",
         )
 
         date_text = date.strftime(
@@ -643,7 +873,7 @@ async def refresh_subscription(
 )
 async def enter_promo(
     callback: CallbackQuery,
-    state: FSMContext
+    state: FSMContext,
 ):
 
     await state.set_state(
@@ -667,7 +897,7 @@ async def enter_promo(
 )
 async def activate_promo(
     message: Message,
-    state: FSMContext
+    state: FSMContext,
 ):
 
     user_id = message.from_user.id
@@ -820,7 +1050,7 @@ async def activate_promo(
 
         date_text = datetime.strptime(
             str(new_date),
-            "%Y-%m-%d"
+            "%Y-%m-%d",
         ).strftime(
             "%d.%m.%Y"
         )
@@ -865,7 +1095,7 @@ async def activate_promo(
     F.data == "renew"
 )
 async def renew(
-    callback: CallbackQuery
+    callback: CallbackQuery,
 ):
 
     await callback.message.answer(
