@@ -1078,7 +1078,7 @@ def cashera():
     expected_amounts = {
 
         # ТЕСТ
-        30: 100,
+        30: 12900,
 
         90: 37900,
 
