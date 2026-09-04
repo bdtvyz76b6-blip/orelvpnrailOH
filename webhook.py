@@ -1,307 +1,285 @@
 @app.route("/webhook/cashera", methods=["POST"])
 def cashera():
 
+    import asyncio
     import traceback
 
+    from database import (
+        get_user,
+        save_subscription_link,
+        mark_payment_paid,
+        payment_already_paid,
+        activate_paid_subscription,
+    )
+
     try:
+        data = request.get_json(silent=True) or {}
 
-        data = request.json or {}
-
-        print("💳 CASHeRA PAYMENT:")
+        print("━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        print("💳 CASHeRA WEBHOOK")
         print(data)
+        print("━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
-        # =========================
-        # TEST WEBHOOK
-        # =========================
+        event = data.get("event")
 
-        if data.get("event") == "webhook.test":
+        # Тестовый webhook от Cashera
+        if event == "webhook.test":
+            print("✅ Webhook test")
             return "OK", 200
 
-        # =========================
-        # ТОЛЬКО ИЗМЕНЕНИЕ СТАТУСА
-        # =========================
-
-        if data.get("event") != "transaction.status_updated":
+        # Нас интересует только изменение статуса транзакции
+        if event != "transaction.status_updated":
+            print(f"ℹ️ Неинтересующее событие: {event}")
             return "OK", 200
 
-        transaction = data.get(
-            "transaction",
-            {}
-        )
+        transaction = data.get("transaction") or {}
 
-        # =========================
-        # СТАТУС
-        # =========================
+        transaction_uuid = str(
+            transaction.get("uuid") or ""
+        ).strip()
 
-        status = transaction.get(
-            "status"
-        )
+        external_id = str(
+            transaction.get("external_id") or ""
+        ).strip()
 
-        print(
-            "STATUS:",
-            status
-        )
+        status = str(
+            transaction.get("status") or ""
+        ).strip().lower()
 
+        amount = transaction.get("amount", 0)
+
+        currency = str(
+            transaction.get("currency") or ""
+        ).upper()
+
+        payment_method = str(
+            transaction.get("payment_method") or ""
+        ).lower()
+
+        print("UUID:", transaction_uuid)
+        print("EXTERNAL ID:", external_id)
+        print("STATUS:", status)
+        print("AMOUNT:", amount)
+        print("CURRENCY:", currency)
+        print("METHOD:", payment_method)
+
+        # Оплата считается успешной только при paid
         if status != "paid":
-
-            print(
-                "⏳ Оплата ещё не успешна:",
-                status
-            )
-
+            print(f"ℹ️ Оплата ещё не успешна: {status}")
             return "OK", 200
 
-        # =========================
-        # TELEGRAM ID
-        # =========================
+        # Проверяем валюту
+        if currency != "RUB":
+            print(
+                f"❌ Неверная валюта: {currency}"
+            )
+            return "OK", 200
 
-        external_id = transaction.get(
-            "external_id",
-            ""
-        )
-
-        print(
-            "EXTERNAL ID:",
-            external_id
-        )
-
+        # Проверяем external_id
         if not external_id:
-
-            print(
-                "❌ Нет external_id"
-            )
-
+            print("❌ Отсутствует external_id")
             return "OK", 200
 
-        # Формат:
-        # 123456789_abcd1234
+        # Наш external_id:
+        #
+        # 123456789_550e8400-e29b-41d4-a716-446655440000
+        #
+        # Telegram ID находится до первого "_"
+
+        user_id_str = external_id.split("_", 1)[0]
+
+        if not user_id_str.isdigit():
+            print(
+                f"❌ Не удалось определить Telegram ID: "
+                f"{external_id}"
+            )
+            return "OK", 200
+
+        user_id = int(user_id_str)
+
+        print("👤 USER ID:", user_id)
+
+        # ---------------------------------------------------------
+        # Определяем тариф по сумме
+        # ---------------------------------------------------------
 
         try:
-
-            user_id = int(
-                external_id.split("_")[0]
-            )
-
+            amount = int(amount)
         except Exception:
-
-            print(
-                "❌ Не удалось получить Telegram ID"
-            )
-
+            print("❌ Некорректная сумма")
             return "OK", 200
 
-        print(
-            "USER:",
-            user_id
-        )
-
-        # =========================
-        # СУММА
-        # =========================
-
-        amount = transaction.get(
-            "amount",
-            0
-        )
-
-        try:
-
-            amount = int(
-                float(amount)
-            )
-
-        except Exception:
-
-            print(
-                "❌ Некорректная сумма:",
-                amount
-            )
-
-            return "OK", 200
-
-        print(
-            "AMOUNT:",
-            amount
-        )
-
-        # =========================
-        # ОПРЕДЕЛЯЕМ ТАРИФ
-        # =========================
-        #
-        # Cashera отдаёт копейки
-        #
-        # 129 ₽   = 12900
-        # 379 ₽   = 37900
-        # 659 ₽   = 65900
-        # 1089 ₽  = 108900
-        #
-
-        tariff_days = {
-
+        tariffs = {
             12900: 30,
-
             37900: 90,
-
             65900: 180,
-
-            108900: 365
-
+            108900: 365,
         }
 
-        days = tariff_days.get(
-            amount,
-            0
-        )
+        days = tariffs.get(amount)
 
-        print(
-            "DAYS:",
-            days
-        )
-
-        if days == 0:
-
+        if days is None:
             print(
-                "❌ Срок не определён для суммы:",
-                amount
+                f"❌ Неизвестная сумма: {amount}"
             )
-
+            print(
+                "Разрешённые суммы:",
+                list(tariffs.keys())
+            )
             return "OK", 200
 
-        # =========================
-        # СОЗДАЁМ VPN ПОДПИСКУ
-        # =========================
-
         print(
-            "🔐 Создание подписки..."
+            f"✅ Тариф определён: "
+            f"{amount / 100:.2f} RUB → {days} дней"
         )
 
-        result = create_subscription(
-            user_id=user_id,
-            days=days
-        )
+        # ---------------------------------------------------------
+        # Проверяем пользователя
+        # ---------------------------------------------------------
 
-        print(
-            "SUBSCRIPTION RESULT:",
-            result
-        )
+        user = get_user(user_id)
 
-        # =========================
-        # ПОЛУЧАЕМ ССЫЛКУ
-        # =========================
-
-        link = ""
-
-        if isinstance(result, str):
-
-            link = result
-
-        elif isinstance(result, dict):
-
-            link = (
-                result.get("link")
-                or result.get("url")
-                or result.get("subscription_link")
-                or ""
+        if not user:
+            print(
+                f"❌ Пользователь {user_id} "
+                f"не найден в БД"
             )
+            return "OK", 200
+
+        # ---------------------------------------------------------
+        # Защита от повторного начисления
+        # ---------------------------------------------------------
+
+        if transaction_uuid:
+            if payment_already_paid(transaction_uuid):
+                print(
+                    "ℹ️ Этот платёж уже обработан:"
+                    f" {transaction_uuid}"
+                )
+                return "OK", 200
+
+        # ---------------------------------------------------------
+        # Создаём / обновляем VPN-подписку
+        # ---------------------------------------------------------
+
+        print(
+            f"🔄 Создаю подписку "
+            f"{user_id} на {days} дней..."
+        )
+
+        from github_update import create_subscription
+
+        # create_subscription:
+        #
+        # 1. загружает servers.txt
+        # 2. создаёт subscription content
+        # 3. сохраняет content в БД
+        # 4. сохраняет subscription_link
+        #
+        link = create_subscription(
+            user_id=user_id,
+            days=days,
+        )
 
         if not link:
-
-            print(
-                "❌ create_subscription не вернул ссылку"
+            raise RuntimeError(
+                "create_subscription() "
+                "не вернул ссылку"
             )
 
-            return "OK", 200
-
         print(
-            "🔗 LINK:",
-            link
+            f"🔗 Ссылка подписки: {link}"
         )
 
-        # =========================
-        # СОХРАНЯЕМ ССЫЛКУ
-        # =========================
+        # ---------------------------------------------------------
+        # Начисляем дни в БД
+        # ---------------------------------------------------------
 
-        save_subscription_link(
-            user_id,
-            link
+        new_until = activate_paid_subscription(
+            user_id=user_id,
+            link=link,
+            days=days,
         )
 
         print(
-            "✅ Ссылка сохранена"
+            f"📅 Новая дата окончания: "
+            f"{new_until}"
         )
 
-        # =========================
-        # СОХРАНЯЕМ CONTENT
-        # =========================
-        #
-        # Если create_subscription()
-        # возвращает только ссылку,
-        # content здесь получить нельзя.
-        #
-        # Если функция возвращает dict
-        # с content — сохраняем его.
-        #
+        # ---------------------------------------------------------
+        # Отмечаем платёж как оплаченный
+        # ---------------------------------------------------------
 
-        if isinstance(result, dict):
-
-            content = (
-                result.get("content")
-                or result.get("subscription_content")
-                or ""
+        if transaction_uuid:
+            mark_payment_paid(
+                transaction_uuid
             )
 
-            if content:
+        # ---------------------------------------------------------
+        # Отправляем сообщение пользователю
+        # ---------------------------------------------------------
 
-                save_subscription_content(
-                    user_id,
-                    content
-                )
+        message = f"""
+☂️ <b>ixxy VPN</b>
 
-                print(
-                    "✅ Subscription content сохранён"
-                )
+✅ <b>Оплата успешно получена!</b>
 
-        # =========================
-        # УВЕДОМЛЯЕМ ПОЛЬЗОВАТЕЛЯ
-        # =========================
+👑 Тариф: Орёл VPN
+📅 Начислено: <b>{days} дней</b>
+📆 Действует до: <b>{datetime.strptime(new_until, "%Y-%m-%d").strftime("%d.%m.%Y")}</b>
 
-        asyncio.run(
-
-            bot.send_message(
-
-                user_id,
-
-                f"""
-☂️ ixxy VPN
-
-✅ Оплата получена!
-
-📅 Срок:
-{days} дней
-
-💰 Оплачено:
-{amount / 100:.2f} ₽
-
-🔗 Ваша подписка:
+🔗 <b>Ваша подписка:</b>
 
 {link}
 
-📲 Добавьте её в Happ.
+📲 Добавьте ссылку в Happ.
+
+Спасибо за покупку! ❤️
 """
 
+        try:
+            asyncio.run(
+                bot.send_message(
+                    user_id,
+                    message,
+                    parse_mode="HTML",
+                )
             )
 
-        )
+            print(
+                f"📨 Сообщение отправлено "
+                f"пользователю {user_id}"
+            )
 
-        print(
-            "✅ Подписка выдана:",
-            user_id,
-            days,
-            "дней"
-        )
+        except Exception as telegram_error:
 
-    except Exception:
+            print(
+                "⚠️ Подписка выдана, "
+                "но сообщение Telegram "
+                "не отправилось:"
+            )
 
+            print(telegram_error)
+
+        print("━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        print("✅ ПЛАТЁЖ ОБРАБОТАН")
+        print(f"👤 Пользователь: {user_id}")
+        print(f"💰 Сумма: {amount / 100:.2f} ₽")
+        print(f"📅 Дней: {days}")
+        print(f"📆 До: {new_until}")
+        print(f"🔗 Ссылка: {link}")
+        print("━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+        return "OK", 200
+
+    except Exception as e:
+
+        print("━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        print("❌ ОШИБКА CASHeRA WEBHOOK")
+        print(str(e))
         traceback.print_exc()
+        print("━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
-    return "OK", 200
+        # Возвращаем 500, чтобы Cashera могла
+        # повторить webhook при серверной ошибке.
+        return "Webhook error", 500
