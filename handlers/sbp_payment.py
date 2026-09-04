@@ -8,13 +8,20 @@ from database import (
     save_payment_id,
 )
 
-
 router = Router()
 
 
 # ============================================================
-# СБП ТАРИФЫ
+# ТАРИФЫ СБП
 # ============================================================
+#
+# Сейчас 30 дней = 1 ₽ для безопасного теста.
+#
+# После успешного теста:
+# "sbp_30": {"amount": 129, "days": 30},
+#
+# Остальные цены уже реальные.
+#
 
 PAYMENTS = {
     "sbp_30": {
@@ -40,65 +47,32 @@ PAYMENTS = {
 
 
 # ============================================================
-# ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ
+# СОЗДАНИЕ ПЛАТЕЖА
 # ============================================================
 
-def find_value(data, *keys):
-    """
-    Ищет значение по ключам даже если Cashera
-    завернула ответ внутрь transaction/data/result.
-    """
-
-    if not isinstance(data, dict):
-        return None
-
-    for key in keys:
-        value = data.get(key)
-        if value not in (None, ""):
-            return value
-
-    for key in ("transaction", "data", "result"):
-        nested = data.get(key)
-
-        if isinstance(nested, dict):
-            value = find_value(nested, *keys)
-
-            if value not in (None, ""):
-                return value
-
-    return None
-
-
-# ============================================================
-# СОЗДАНИЕ СБП ПЛАТЕЖА
-# ============================================================
-
-@router.callback_query(
-    F.data.startswith("sbp_")
-)
-async def sbp_payment(
-    callback: CallbackQuery
-):
+@router.callback_query(F.data.startswith("sbp_"))
+async def sbp_payment(callback: CallbackQuery):
 
     code = callback.data
 
-    plan = PAYMENTS.get(code)
-
-    if not plan:
+    if code not in PAYMENTS:
         await callback.answer(
             "❌ Ошибка тарифа",
             show_alert=True
         )
         return
 
+    plan = PAYMENTS[code]
+
     amount = plan["amount"]
     days = plan["days"]
+
     user_id = callback.from_user.id
 
     try:
 
         # ----------------------------------------------------
-        # СОЗДАЁМ ПЛАТЁЖ В CASHERA
+        # Создаём платёж в Cashera
         # ----------------------------------------------------
 
         result = create_cashera_payment(
@@ -107,23 +81,27 @@ async def sbp_payment(
             days=days
         )
 
-        print("💳 CASHERA PAYMENT RESULT:")
-        print(result)
+        print(
+            "💳 CASHeRA PAYMENT RESULT:",
+            result
+        )
 
         if not isinstance(result, dict):
-            raise RuntimeError(
-                "Cashera вернула некорректный ответ"
+
+            await callback.message.answer(
+                "❌ Cashera вернула некорректный ответ."
             )
 
+            await callback.answer()
+            return
+
         # ----------------------------------------------------
-        # UUID
+        # UUID платежа
         # ----------------------------------------------------
 
-        payment_uuid = find_value(
-            result,
-            "uuid",
-            "id",
-            "transaction_id"
+        payment_uuid = (
+            result.get("uuid")
+            or result.get("id")
         )
 
         if not payment_uuid:
@@ -141,22 +119,13 @@ async def sbp_payment(
             await callback.answer()
             return
 
-        payment_uuid = str(payment_uuid)
-
-        print(
-            f"🆔 CASHERA UUID: {payment_uuid}"
-        )
-
         # ----------------------------------------------------
-        # ССЫЛКА НА ОПЛАТУ
+        # Ссылка на оплату
         # ----------------------------------------------------
 
-        payment_url = find_value(
-            result,
-            "payment_url",
-            "url",
-            "pay_url",
-            "payment_link"
+        payment_url = (
+            result.get("payment_url")
+            or result.get("url")
         )
 
         if not payment_url:
@@ -174,14 +143,8 @@ async def sbp_payment(
             await callback.answer()
             return
 
-        payment_url = str(payment_url)
-
-        print(
-            f"🔗 CASHERA URL: {payment_url}"
-        )
-
         # ----------------------------------------------------
-        # СОХРАНЯЕМ ПЛАТЁЖ
+        # Сохраняем платёж в нашу БД
         # ----------------------------------------------------
 
         add_payment(
@@ -190,21 +153,21 @@ async def sbp_payment(
             days=days
         )
 
-        # Привязываем UUID Cashera к созданному платежу
         save_payment_id(
             user_id=user_id,
-            payment_id=payment_uuid
+            payment_id=str(payment_uuid)
         )
 
         print(
-            f"💾 Платёж сохранён: "
+            f"💾 PAYMENT SAVED: "
             f"user={user_id}, "
-            f"uuid={payment_uuid}, "
-            f"days={days}"
+            f"payment={payment_uuid}, "
+            f"days={days}, "
+            f"amount={amount}"
         )
 
         # ----------------------------------------------------
-        # ОТПРАВЛЯЕМ ПОЛЬЗОВАТЕЛЮ
+        # Отправляем пользователю ссылку
         # ----------------------------------------------------
 
         await callback.message.answer(
@@ -218,24 +181,27 @@ async def sbp_payment(
 💰 Цена: {amount} ₽
 
 🔗 Оплатить:
+
 {payment_url}
 
 После успешной оплаты подписка
-выдастся автоматически.
+активируется автоматически.
 
-⚠️ Не закрывайте оплату до завершения платежа.
+⚠️ Не закрывайте страницу оплаты,
+пока платёж не будет завершён.
 """
         )
 
     except Exception as e:
 
         print(
-            f"❌ SBP ERROR: {type(e).__name__}: {e}"
+            "❌ SBP ERROR:",
+            repr(e)
         )
 
         await callback.message.answer(
             f"""
-❌ Не удалось создать платёж.
+❌ Ошибка создания платежа.
 
 Попробуйте ещё раз немного позже.
 """
