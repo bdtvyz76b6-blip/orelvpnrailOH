@@ -4,36 +4,29 @@ import requests
 
 
 # ============================================================
-# НАСТРОЙКИ CASHERA
+# НАСТРОЙКИ
 # ============================================================
 
-CASHERA_API_KEY = os.getenv("CASHERA_API_KEY", "").strip()
-
-CASHERA_API_SECRET = os.getenv(
-    "CASHERA_API_SECRET",
+CASHERA_API_KEY = os.getenv(
+    "CASHERA_API_KEY",
     ""
 ).strip()
 
-BASE_URL = os.getenv(
-    "CASHERA_BASE_URL",
-    "https://api.cashera.cash/api/v1"
-).rstrip("/")
-
-
-# Текущий публичный адрес твоего Flask-сервиса
-PUBLIC_SITE_URL = os.getenv(
-    "PUBLIC_SITE_URL",
-    "https://orelvpnrailoh-1.onrender.com"
-).rstrip("/")
-
-
-CALLBACK_URL = (
-    f"{PUBLIC_SITE_URL}/webhook/cashera"
-)
+BASE_URL = "https://api.cashera.cash/api/v1"
 
 
 # ============================================================
-# СОЗДАНИЕ ПЛАТЕЖА
+# URL НАШЕГО СЕРВЕРА
+# ============================================================
+
+PUBLIC_SITE_URL = os.getenv(
+    "PUBLIC_SITE_URL",
+    "https://orelvpnrailoh.onrender.com"
+).rstrip("/")
+
+
+# ============================================================
+# СОЗДАНИЕ ПЛАТЕЖА CASHeRA
 # ============================================================
 
 def create_cashera_payment(
@@ -44,92 +37,214 @@ def create_cashera_payment(
 
     if not CASHERA_API_KEY:
         raise RuntimeError(
-            "CASHERA_API_KEY не установлен"
+            "CASHERA_API_KEY не установлен в переменных окружения."
         )
 
-    if amount <= 0:
-        raise ValueError(
-            "Некорректная сумма платежа"
-        )
+    # --------------------------------------------------------
+    # Уникальный ID заказа
+    # --------------------------------------------------------
 
-    if days <= 0:
-        raise ValueError(
-            "Некорректный срок подписки"
-        )
-
-    url = (
-        f"{BASE_URL}/integration/transactions"
+    external_id = (
+        f"{user_id}_{uuid.uuid4().hex}"
     )
+
+    # --------------------------------------------------------
+    # RUB -> копейки
+    #
+    # 1 ₽    -> 100
+    # 129 ₽  -> 12900
+    # 379 ₽  -> 37900
+    # --------------------------------------------------------
+
+    amount_minor = int(amount * 100)
+
+    # --------------------------------------------------------
+    # URL webhook
+    # --------------------------------------------------------
+
+    callback_url = (
+        f"{PUBLIC_SITE_URL}/webhook/cashera"
+    )
+
+    success_url = (
+        "https://t.me/orelvpntopbot"
+    )
+
+    fail_url = (
+        "https://t.me/orelvpntopbot"
+    )
+
+    # --------------------------------------------------------
+    # Заголовки
+    # --------------------------------------------------------
 
     headers = {
         "X-Api-Key": CASHERA_API_KEY,
         "Content-Type": "application/json",
     }
 
-    # Уникальный внешний ID
-    external_id = (
-        f"{user_id}_{uuid.uuid4().hex}"
-    )
+    # --------------------------------------------------------
+    # Данные платежа
+    # --------------------------------------------------------
 
     data = {
-        # Cashera принимает сумму в копейках
-        "amount": amount * 100,
-
+        "amount": amount_minor,
         "currency": "RUB",
-
         "payment_method": "sbp",
-
         "external_id": external_id,
-
         "description": (
             f"ixxy VPN — {days} дней"
         ),
-
-        "callback_url": CALLBACK_URL,
-
-        "success_url": (
-            "https://t.me/orelvpntopbot"
-        ),
-
-        "fail_url": (
-            "https://t.me/orelvpntopbot"
-        ),
+        "callback_url": callback_url,
+        "success_url": success_url,
+        "fail_url": fail_url,
     }
 
-    print("================================")
-    print("💳 CASHERA CREATE PAYMENT")
-    print("URL:", url)
-    print("CALLBACK:", CALLBACK_URL)
-    print("USER:", user_id)
-    print("AMOUNT:", amount)
-    print("DAYS:", days)
-    print("EXTERNAL ID:", external_id)
-    print("================================")
+    print(
+        "💳 CASHeRA CREATE:"
+    )
+
+    print(
+        "amount:",
+        amount_minor
+    )
+
+    print(
+        "currency:",
+        "RUB"
+    )
+
+    print(
+        "payment_method:",
+        "sbp"
+    )
+
+    print(
+        "external_id:",
+        external_id
+    )
+
+    print(
+        "callback_url:",
+        callback_url
+    )
+
+    # --------------------------------------------------------
+    # Запрос
+    # --------------------------------------------------------
 
     response = requests.post(
-        url,
+        f"{BASE_URL}/integration/transactions",
         headers=headers,
         json=data,
         timeout=20
     )
 
+    # --------------------------------------------------------
+    # Логируем HTTP-код
+    # --------------------------------------------------------
+
     print(
-        "💳 CASHERA HTTP:",
+        "💳 CASHeRA HTTP:",
         response.status_code
     )
 
-    print(
-        "💳 CASHERA RESPONSE:",
-        response.text
+    # --------------------------------------------------------
+    # Если Cashera вернула ошибку
+    # --------------------------------------------------------
+
+    if not response.ok:
+
+        try:
+            error_data = response.json()
+        except Exception:
+            error_data = response.text
+
+        print(
+            "❌ CASHeRA ERROR:",
+            error_data
+        )
+
+        raise RuntimeError(
+            f"Cashera HTTP {response.status_code}: "
+            f"{error_data}"
+        )
+
+    # --------------------------------------------------------
+    # JSON
+    # --------------------------------------------------------
+
+    try:
+
+        result = response.json()
+
+    except Exception as e:
+
+        raise RuntimeError(
+            f"Cashera вернула не JSON: {e}"
+        )
+
+    # --------------------------------------------------------
+    # Иногда API может вернуть объект транзакции
+    # внутри transaction.
+    # --------------------------------------------------------
+
+    if isinstance(result, dict):
+
+        transaction = result.get(
+            "transaction"
+        )
+
+        if isinstance(transaction, dict):
+
+            merged = dict(result)
+
+            merged.update(transaction)
+
+            result = merged
+
+    # --------------------------------------------------------
+    # Проверяем UUID
+    # --------------------------------------------------------
+
+    payment_uuid = (
+        result.get("uuid")
+        or result.get("id")
     )
 
-    response.raise_for_status()
+    if not payment_uuid:
 
-    result = response.json()
-
-    if not isinstance(result, dict):
         raise RuntimeError(
-            "Cashera вернула некорректный JSON"
+            f"Cashera не вернула uuid: {result}"
         )
+
+    # --------------------------------------------------------
+    # Проверяем payment_url
+    # --------------------------------------------------------
+
+    payment_url = (
+        result.get("payment_url")
+        or result.get("url")
+    )
+
+    if not payment_url:
+
+        raise RuntimeError(
+            f"Cashera не вернула payment_url: {result}"
+        )
+
+    print(
+        "✅ CASHeRA PAYMENT CREATED"
+    )
+
+    print(
+        "uuid:",
+        payment_uuid
+    )
+
+    print(
+        "payment_url:",
+        payment_url
+    )
 
     return result
