@@ -6,7 +6,6 @@ import hmac
 from urllib.parse import quote
 
 from flask import Flask, request, Response
-
 from aiogram import Bot, Dispatcher
 
 from config import BOT_TOKEN
@@ -34,7 +33,6 @@ from subscription_checker import check_subscriptions
 # =========================================================
 
 app = Flask(__name__)
-
 BOT_LOOP = None
 
 
@@ -44,9 +42,8 @@ BOT_LOOP = None
 
 PUBLIC_SITE_URL = os.getenv(
     "PUBLIC_SITE_URL",
-    "https://orelvpnrailoh-1.onrender.com"
+    "https://orelvpnrailoh.onrender.com"
 ).rstrip("/")
-
 
 SUBSCRIPTION_PREFIX = os.getenv(
     "SUBSCRIPTION_PREFIX",
@@ -63,7 +60,6 @@ CASHERA_API_KEY = os.getenv(
     ""
 ).strip()
 
-
 CASHERA_API_SECRET = os.getenv(
     "CASHERA_API_SECRET",
     ""
@@ -71,7 +67,7 @@ CASHERA_API_SECRET = os.getenv(
 
 
 # =========================================================
-# ПОЛУЧЕНИЕ USER ID ИЗ КРАСИВОГО ТОКЕНА
+# ПОЛУЧЕНИЕ USER ID
 # =========================================================
 
 def get_user_id_from_token(token):
@@ -88,7 +84,6 @@ def get_user_id_from_token(token):
 
     try:
         return int(user_id_text)
-
     except Exception:
         return None
 
@@ -97,10 +92,7 @@ def get_user_id_from_token(token):
 # HTML СТРАНИЦЫ ПОДПИСКИ
 # =========================================================
 
-def subscription_page_html(
-    user_id,
-    subscription_url
-):
+def subscription_page_html(user_id, subscription_url):
 
     happ_url = (
         "happ://add/"
@@ -518,7 +510,6 @@ h1 {{
 
             </div>
 
-
             <div class="step">
 
                 <div class="number">
@@ -533,7 +524,6 @@ h1 {{
                 </div>
 
             </div>
-
 
             <div class="step">
 
@@ -667,12 +657,10 @@ def subscription_page(token):
     )
 
     return Response(
-
         subscription_page_html(
             user_id,
             subscription_url
         ),
-
         mimetype="text/html"
     )
 
@@ -758,22 +746,15 @@ def cashera():
     print("💳 CASHERA WEBHOOK RECEIVED")
     print("========================================")
 
-
-    # =====================================================
-    # ПРОВЕРКА API KEY
-    # =====================================================
-
     received_api_key = request.headers.get(
         "X-Api-Key",
         ""
     ).strip()
 
-
     received_secret = request.headers.get(
         "X-Secret",
         ""
     ).strip()
-
 
     if CASHERA_API_KEY:
 
@@ -791,7 +772,6 @@ def cashera():
                 401
             )
 
-
     if CASHERA_API_SECRET:
 
         if not hmac.compare_digest(
@@ -808,22 +788,12 @@ def cashera():
                 401
             )
 
-
-    # =====================================================
-    # ПОЛУЧАЕМ JSON
-    # =====================================================
-
     data = request.get_json(
         silent=True
     )
 
-
-    print(
-        "💳 CASHERA DATA:"
-    )
-
+    print("💳 CASHERA DATA:")
     print(data)
-
 
     if not data:
 
@@ -833,13 +803,7 @@ def cashera():
 
         return "OK", 200
 
-
-    # =====================================================
-    # ИЩЕМ TRANSACTION
-    # =====================================================
-
     transaction = None
-
 
     if isinstance(
         data,
@@ -847,29 +811,11 @@ def cashera():
     ):
 
         transaction = (
-
-            data.get(
-                "transaction"
-            )
-
-            or
-
-            data.get(
-                "data"
-            )
-
-            or
-
-            data.get(
-                "result"
-            )
-
-            or
-
-            data
-
+            data.get("transaction")
+            or data.get("data")
+            or data.get("result")
+            or data
         )
-
 
     elif isinstance(
         data,
@@ -884,32 +830,14 @@ def cashera():
             ):
                 continue
 
-
             if (
-
-                "transaction"
-                in item
-
-                or
-
-                "status"
-                in item
-
-                or
-
-                "uuid"
-                in item
-
+                "transaction" in item
+                or "status" in item
+                or "uuid" in item
             ):
 
                 transaction = item
-
                 break
-
-
-    # =====================================================
-    # ЕСЛИ TRANSACTION ВЛОЖЕН
-    # =====================================================
 
     if isinstance(
         transaction,
@@ -922,16 +850,12 @@ def cashera():
             )
         )
 
-
         if isinstance(
             nested_transaction,
             dict
         ):
 
-            transaction = (
-                nested_transaction
-            )
-
+            transaction = nested_transaction
 
     if not isinstance(
         transaction,
@@ -944,52 +868,29 @@ def cashera():
 
         return "OK", 200
 
-
-    print(
-        "💳 TRANSACTION:"
-    )
-
+    print("💳 TRANSACTION:")
     print(transaction)
-
-
-    # =====================================================
-    # ПОЛУЧАЕМ ДАННЫЕ
-    # =====================================================
 
     status = transaction.get(
         "status"
     )
 
-
     payment_uuid = (
-
-        transaction.get(
-            "uuid"
-        )
-
-        or
-
-        transaction.get(
-            "id"
-        )
-
+        transaction.get("uuid")
+        or transaction.get("id")
     )
-
 
     external_id = transaction.get(
         "external_id"
     )
 
-
     amount = transaction.get(
         "amount"
     )
 
-
     currency = transaction.get(
         "currency"
     )
-
 
     print(
         f"💳 Статус: {status}"
@@ -1011,9 +912,8 @@ def cashera():
         f"💱 Currency: {currency}"
     )
 
-
     # =====================================================
-    # ОБРАБАТЫВАЕМ ТОЛЬКО PAID
+    # ТОЛЬКО PAID
     # =====================================================
 
     if status != "paid":
@@ -1025,11 +925,6 @@ def cashera():
 
         return "OK", 200
 
-
-    # =====================================================
-    # UUID
-    # =====================================================
-
     if not payment_uuid:
 
         print(
@@ -1038,11 +933,9 @@ def cashera():
 
         return "OK", 200
 
-
     payment_uuid = str(
         payment_uuid
     )
-
 
     # =====================================================
     # ПОИСК ПЛАТЕЖА
@@ -1069,7 +962,6 @@ def cashera():
 
         return "OK", 200
 
-
     if not payment:
 
         print(
@@ -1080,26 +972,16 @@ def cashera():
             f"UUID: {payment_uuid}"
         )
 
-        print(
-            "⚠️ Проверь payment_id "
-            "в таблице payments"
-        )
-
         return "OK", 200
 
-
     # =====================================================
-    # ДАННЫЕ ИЗ БД
+    # ДАННЫЕ ПЛАТЕЖА
     # =====================================================
 
     payment_db_id = payment[0]
-
     user_id = payment[1]
-
     days = payment[3]
-
     old_status = payment[5]
-
 
     print(
         f"🆔 DB PAYMENT ID: "
@@ -1121,9 +1003,8 @@ def cashera():
         f"{old_status}"
     )
 
-
     # =====================================================
-    # ПОВТОРНЫЙ WEBHOOK
+    # ЗАЩИТА ОТ ПОВТОРНОЙ ВЫДАЧИ
     # =====================================================
 
     if old_status == "paid":
@@ -1135,9 +1016,8 @@ def cashera():
 
         return "OK", 200
 
-
     # =====================================================
-    # ПРОВЕРКА DAYS
+    # DAYS
     # =====================================================
 
     if not days:
@@ -1147,7 +1027,6 @@ def cashera():
         )
 
         return "OK", 200
-
 
     try:
 
@@ -1161,7 +1040,6 @@ def cashera():
 
         return "OK", 200
 
-
     if days <= 0:
 
         print(
@@ -1170,9 +1048,8 @@ def cashera():
 
         return "OK", 200
 
-
     # =====================================================
-    # ПРОВЕРКА ВАЛЮТЫ
+    # ВАЛЮТА
     # =====================================================
 
     if currency:
@@ -1188,14 +1065,20 @@ def cashera():
 
             return "OK", 200
 
-
     # =====================================================
     # ПРОВЕРКА СУММЫ
+    #
+    # ВАЖНО:
+    # Cashera передаёт amount в КОПЕЙКАХ.
+    #
+    # 1 ₽ = 100
+    # 379 ₽ = 37900
     # =====================================================
 
     expected_amounts = {
 
-        30: 12900,
+        # ТЕСТ
+        30: 100,
 
         90: 37900,
 
@@ -1205,13 +1088,11 @@ def cashera():
 
     }
 
-
     expected_amount = (
         expected_amounts.get(
             days
         )
     )
-
 
     if expected_amount is not None:
 
@@ -1225,7 +1106,6 @@ def cashera():
 
             received_amount = None
 
-
         if received_amount is None:
 
             print(
@@ -1235,6 +1115,15 @@ def cashera():
 
             return "OK", 200
 
+        print(
+            f"💰 Ожидалось: "
+            f"{expected_amount}"
+        )
+
+        print(
+            f"💰 Получено: "
+            f"{received_amount}"
+        )
 
         if (
             received_amount
@@ -1245,23 +1134,11 @@ def cashera():
                 "❌ НЕСОВПАДЕНИЕ СУММЫ!"
             )
 
-            print(
-                f"Ожидалось: "
-                f"{expected_amount}"
-            )
-
-            print(
-                f"Получено: "
-                f"{received_amount}"
-            )
-
             return "OK", 200
-
 
         print(
             "✅ Сумма платежа совпадает"
         )
-
 
     # =====================================================
     # ВЫДАЧА ПОДПИСКИ
@@ -1273,7 +1150,6 @@ def cashera():
             "🎫 Начинаем выдачу подписки..."
         )
 
-
         # -------------------------------------------------
         # ПРОДЛЕВАЕМ ПОДПИСКУ
         # -------------------------------------------------
@@ -1283,19 +1159,16 @@ def cashera():
             days
         )
 
-
         print(
             f"🎫 Подписка продлена: "
             f"{user_id} "
             f"+{days} дней"
         )
 
-
         print(
             f"📅 Новая дата: "
             f"{new_date}"
         )
-
 
         # -------------------------------------------------
         # ОБНОВЛЯЕМ GITHUB / HAPP
@@ -1306,12 +1179,10 @@ def cashera():
             new_date
         )
 
-
         print(
             f"☂️ Subscription file "
             f"обновлён: {user_id}"
         )
-
 
         # -------------------------------------------------
         # ПОМЕЧАЕМ ПЛАТЁЖ PAID
@@ -1322,16 +1193,14 @@ def cashera():
             "paid"
         )
 
-
         print(
             f"✅ Платёж "
             f"{payment_uuid} "
             f"помечен как paid"
         )
 
-
         # -------------------------------------------------
-        # УВЕДОМЛЕНИЕ ПОЛЬЗОВАТЕЛЮ
+        # УВЕДОМЛЕНИЕ
         # -------------------------------------------------
 
         if BOT_LOOP:
@@ -1357,7 +1226,6 @@ def cashera():
 Спасибо за покупку! ❤️
 """
 
-
             asyncio.run_coroutine_threadsafe(
 
                 bot.send_message(
@@ -1369,19 +1237,16 @@ def cashera():
 
             )
 
-
             print(
                 f"📨 Уведомление отправлено: "
                 f"{user_id}"
             )
-
 
         else:
 
             print(
                 "⚠️ BOT_LOOP ещё не запущен"
             )
-
 
     except Exception as e:
 
@@ -1395,7 +1260,6 @@ def cashera():
 
         return "OK", 200
 
-
     print(
         "========================================"
     )
@@ -1407,7 +1271,6 @@ def cashera():
     print(
         "========================================"
     )
-
 
     return "OK", 200
 
@@ -1426,14 +1289,12 @@ def add_days_api():
         silent=True
     )
 
-
     if not data:
 
         return {
             "status": "error",
             "message": "no json"
         }, 400
-
 
     user_id = data.get(
         "user_id"
@@ -1442,7 +1303,6 @@ def add_days_api():
     days = data.get(
         "days"
     )
-
 
     if (
         user_id is None
@@ -1454,7 +1314,6 @@ def add_days_api():
             "message": "missing data"
         }, 400
 
-
     try:
 
         user_id = int(
@@ -1465,7 +1324,6 @@ def add_days_api():
             days
         )
 
-
         if days <= 0:
 
             return {
@@ -1474,24 +1332,20 @@ def add_days_api():
                     "days must be greater than 0"
             }, 400
 
-
         new_date = extend_subscription(
             user_id,
             days
         )
-
 
         update_subscription_file(
             user_id,
             new_date
         )
 
-
         print(
             f"☂️ ixxycodes +{days} дней "
             f"пользователю {user_id}"
         )
-
 
         return {
 
@@ -1506,14 +1360,12 @@ def add_days_api():
 
         }
 
-
     except Exception as e:
 
         print(
             "❌ ADD DAYS ERROR:",
             e
         )
-
 
         return {
 
@@ -1537,15 +1389,10 @@ def run_webhook():
         )
     )
 
-
     app.run(
-
         host="0.0.0.0",
-
         port=port,
-
         threaded=True
-
     )
 
 
@@ -1692,16 +1539,13 @@ async def main():
 
     global BOT_LOOP
 
-
     BOT_LOOP = (
         asyncio.get_running_loop()
     )
 
-
     print(
         "☂️ Запуск ixxy VPN..."
     )
-
 
     # =====================================================
     # DATABASE
@@ -1709,11 +1553,9 @@ async def main():
 
     create_table()
 
-
     print(
         "💾 База данных инициализирована"
     )
-
 
     # =====================================================
     # ПРОВЕРКА ПРОСРОЧЕННЫХ
@@ -1723,11 +1565,9 @@ async def main():
 
         check_expired_subscriptions()
 
-
         print(
             "✅ Просроченные подписки проверены"
         )
-
 
     except Exception as e:
 
@@ -1735,7 +1575,6 @@ async def main():
             "❌ Ошибка проверки подписок:",
             e
         )
-
 
     # =====================================================
     # СИНХРОНИЗАЦИЯ
@@ -1745,11 +1584,9 @@ async def main():
 
         sync_all_active_users()
 
-
         print(
             "✅ Серверы синхронизированы"
         )
-
 
     except Exception as e:
 
@@ -1757,7 +1594,6 @@ async def main():
             "❌ Ошибка синхронизации серверов:",
             e
         )
-
 
     # =====================================================
     # АВТОПРОВЕРКА
@@ -1769,12 +1605,10 @@ async def main():
             check_subscriptions(bot)
         )
 
-
         print(
             "🔄 Автоматическая проверка "
             "подписок запущена"
         )
-
 
     except Exception as e:
 
@@ -1783,7 +1617,6 @@ async def main():
             e
         )
 
-
     # =====================================================
     # BOT
     # =====================================================
@@ -1791,7 +1624,6 @@ async def main():
     print(
         "☂️ ixxy VPN бот запущен"
     )
-
 
     try:
 
@@ -1814,7 +1646,6 @@ if __name__ == "__main__":
         target=run_webhook,
         daemon=True
     ).start()
-
 
     asyncio.run(
         main()
