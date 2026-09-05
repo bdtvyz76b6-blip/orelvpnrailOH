@@ -15,6 +15,8 @@ import os
 
 from config import ADMIN_IDS
 
+from keyboards import admin_menu
+
 from database import (
     get_all_users,
     get_user,
@@ -179,7 +181,7 @@ def format_date(value):
 
 
 # ============================================================
-# СОЗДАНИЕ КНОПКИ С URL
+# КНОПКА URL
 # ============================================================
 
 def add_url_button(
@@ -200,6 +202,45 @@ def add_url_button(
                 )
             ]
         )
+
+
+# ============================================================
+# НАЗАД В ГЛАВНОЕ МЕНЮ
+# ============================================================
+
+@router.callback_query(
+    F.data == "admin_back"
+)
+async def admin_back(
+    call: CallbackQuery,
+):
+
+    if not is_admin(
+        call.from_user.id
+    ):
+
+        await call.answer(
+            "❌ Нет доступа",
+            show_alert=True,
+        )
+
+        return
+
+    try:
+
+        await call.message.edit_text(
+            "🛠 <b>Админ-панель ixxy</b>\n\n"
+            "Выбери нужный раздел:",
+            reply_markup=admin_menu(),
+            parse_mode="HTML",
+        )
+
+    except TelegramBadRequest as e:
+
+        if "message is not modified" not in str(e):
+            raise
+
+    await call.answer()
 
 
 # ============================================================
@@ -629,7 +670,17 @@ async def admin_search_cancel(
     await state.clear()
 
     await call.message.answer(
-        "❌ Поиск отменён."
+        "❌ Поиск отменён.",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="🛠 Админ-панель",
+                        callback_data="admin_back",
+                    )
+                ]
+            ]
+        ),
     )
 
     await call.answer()
@@ -733,6 +784,12 @@ async def admin_search_query(
                         callback_data="admin_users",
                     )
                 ],
+                [
+                    InlineKeyboardButton(
+                        text="⬅️ Назад",
+                        callback_data="admin_back",
+                    )
+                ],
             ]
         )
 
@@ -813,6 +870,15 @@ async def admin_search_query(
             InlineKeyboardButton(
                 text="👥 Пользователи",
                 callback_data="admin_users",
+            )
+        ]
+    )
+
+    buttons.append(
+        [
+            InlineKeyboardButton(
+                text="⬅️ Назад",
+                callback_data="admin_back",
             )
         ]
     )
@@ -906,10 +972,6 @@ async def user_profile(
 
         return
 
-    # ========================================================
-    # ДАННЫЕ
-    # ========================================================
-
     username = (
         user[1]
         or "нет"
@@ -931,10 +993,6 @@ async def user_profile(
     )
 
     created_at = user[11]
-
-    # ========================================================
-    # ССЫЛКИ
-    # ========================================================
 
     site_url, subscription_url = (
         get_user_urls(
@@ -959,10 +1017,6 @@ async def user_profile(
 
     if saved_link:
         subscription_url = saved_link
-
-    # ========================================================
-    # СТАТУС
-    # ========================================================
 
     status, days = (
         get_subscription_status(
@@ -1008,10 +1062,6 @@ async def user_profile(
                 created_at
             )
 
-    # ========================================================
-    # ПЛАТЕЖИ
-    # ========================================================
-
     try:
 
         user_payments = get_user_payments(
@@ -1041,10 +1091,6 @@ async def user_profile(
         payment_count = 0
         paid_count = 0
 
-    # ========================================================
-    # ОСТАЛОСЬ
-    # ========================================================
-
     if days > 0:
 
         days_text = (
@@ -1057,10 +1103,6 @@ async def user_profile(
         days_text = (
             "⏳ <b>Осталось:</b> 0 д."
         )
-
-    # ========================================================
-    # ПРОФИЛЬ
-    # ========================================================
 
     text = (
         "👤 <b>Пользователь</b>\n"
@@ -1099,10 +1141,6 @@ async def user_profile(
         f"📆 <b>Создан:</b> "
         f"{h(created_text)}"
     )
-
-    # ========================================================
-    # КНОПКИ
-    # ========================================================
 
     buttons = []
 
@@ -1289,15 +1327,6 @@ async def admin_user_payments(
 
         for payment in payments[:15]:
 
-            # payments:
-            # 0 id
-            # 1 user_id
-            # 2 photo
-            # 3 days
-            # 4 payment_id
-            # 5 status
-            # 6 created_at
-
             payment_id = (
                 payment[0]
                 if len(payment) > 0
@@ -1408,6 +1437,12 @@ async def admin_user_payments(
                 InlineKeyboardButton(
                     text="👥 Пользователи",
                     callback_data="admin_users",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🏠 Админ-панель",
+                    callback_data="admin_back",
                 )
             ],
         ]
@@ -1591,19 +1626,11 @@ async def confirm_disable_subscription(
 
         return
 
-    # ========================================================
-    # URL
-    # ========================================================
-
     site_url, subscription_url = (
         get_user_urls(
             user_id
         )
     )
-
-    # ========================================================
-    # ПРОФИЛЬ
-    # ========================================================
 
     user = get_user(
         user_id
@@ -1684,6 +1711,15 @@ async def confirm_disable_subscription(
             InlineKeyboardButton(
                 text="⬅️ Пользователи",
                 callback_data="admin_users",
+            )
+        ]
+    )
+
+    buttons.append(
+        [
+            InlineKeyboardButton(
+                text="🏠 Админ-панель",
+                callback_data="admin_back",
             )
         ]
     )
@@ -1786,6 +1822,7 @@ async def admin_stats(
 
             if days > 0:
                 trial_users += 1
+
             elif status == "⛔ Истёк":
                 expired_users += 1
 
@@ -1841,6 +1878,9 @@ async def admin_stats(
 
         "📅 <b>Оформлено дней:</b> "
         f"<b>{total_days_paid}</b>\n\n"
+
+        "📡 <b>Трафик:</b> "
+        "<b>нет данных</b>\n\n"
 
         "━━━━━━━━━━━━━━━━━━\n"
         f"🕐 Обновлено: "
