@@ -1,14 +1,17 @@
 from aiogram import Router, F
-
 from aiogram.types import (
     CallbackQuery,
     InlineKeyboardMarkup,
     InlineKeyboardButton,
+    Message,
 )
-
 from aiogram.exceptions import TelegramBadRequest
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import StatesGroup, State
 
 from datetime import datetime
+from html import escape
+import os
 
 from config import ADMIN_IDS
 
@@ -16,6 +19,8 @@ from database import (
     get_all_users,
     get_user,
     get_subscription_link,
+    get_user_payments,
+    get_payments,
     disable_subscription,
 )
 
@@ -23,26 +28,33 @@ from github_update import (
     sync_servers_update,
 )
 
-import os
-
 
 router = Router()
 
 
 # ============================================================
-# НАСТРОЙКИ САЙТА
+# НАСТРОЙКИ
 # ============================================================
 
 PUBLIC_SITE_URL = os.getenv(
     "PUBLIC_SITE_URL",
-    "https://orelvpnrailoh-1.onrender.com",
-).rstrip("/")
-
+    "",
+).strip().rstrip("/")
 
 SUBSCRIPTION_PREFIX = os.getenv(
     "SUBSCRIPTION_PREFIX",
     "2ix847xy",
 ).strip()
+
+USERS_PER_PAGE = 15
+
+
+# ============================================================
+# ПОИСК
+# ============================================================
+
+class AdminSearch(StatesGroup):
+    waiting_query = State()
 
 
 # ============================================================
@@ -50,7 +62,6 @@ SUBSCRIPTION_PREFIX = os.getenv(
 # ============================================================
 
 def is_admin(user_id: int) -> bool:
-
     return user_id in ADMIN_IDS
 
 
@@ -58,29 +69,25 @@ def is_admin(user_id: int) -> bool:
 # URL ПОЛЬЗОВАТЕЛЯ
 # ============================================================
 
-def get_user_urls(
-    user_id: int,
-):
+def get_user_urls(user_id: int):
 
-    token = (
-        f"{SUBSCRIPTION_PREFIX}"
-        f"{user_id}"
-    )
+    token = f"{SUBSCRIPTION_PREFIX}{user_id}"
 
-    site_url = (
-        f"{PUBLIC_SITE_URL}"
-        f"/s/{token}"
-    )
+    if not PUBLIC_SITE_URL:
+        return "", ""
 
-    subscription_url = (
-        f"{PUBLIC_SITE_URL}"
-        f"/sub/{token}"
-    )
+    site_url = f"{PUBLIC_SITE_URL}/s/{token}"
+    subscription_url = f"{PUBLIC_SITE_URL}/sub/{token}"
 
-    return (
-        site_url,
-        subscription_url,
-    )
+    return site_url, subscription_url
+
+
+# ============================================================
+# БЕЗОПАСНЫЙ HTML
+# ============================================================
+
+def h(value) -> str:
+    return escape(str(value or ""))
 
 
 # ============================================================
@@ -92,36 +99,16 @@ def get_subscription_status(
     subscription_until,
 ):
 
-    # --------------------------------------------------------
-    # Нет подписки
-    # --------------------------------------------------------
-
     if subscription in (
         None,
         "",
         "none",
         "expired",
     ):
-
-        return (
-            "🔴 Неактивен",
-            0,
-        )
-
-    # --------------------------------------------------------
-    # Нет даты
-    # --------------------------------------------------------
+        return "🔴 Неактивен", 0
 
     if not subscription_until:
-
-        return (
-            "🔴 Неактивен",
-            0,
-        )
-
-    # --------------------------------------------------------
-    # Дата
-    # --------------------------------------------------------
+        return "🔴 Неактивен", 0
 
     try:
 
@@ -132,53 +119,31 @@ def get_subscription_status(
 
     except Exception:
 
-        return (
-            "⚠️ Ошибка даты",
-            0,
-        )
+        return "⚠️ Ошибка даты", 0
 
     today = datetime.now().date()
 
-    # --------------------------------------------------------
-    # Истёк
-    # --------------------------------------------------------
-
     if expire_date < today:
+        return "⛔ Истёк", 0
 
-        return (
-            "⛔ Истёк",
-            0,
-        )
+    days = (expire_date - today).days
 
-    # --------------------------------------------------------
-    # Осталось
-    # --------------------------------------------------------
-
-    days = (
-        expire_date
-        - today
-    ).days
-
-    return (
-        "🟢 Активен",
-        days,
-    )
+    return "🟢 Активен", days
 
 
 # ============================================================
 # ТАРИФ
 # ============================================================
 
-def get_tariff_name(
-    subscription,
-):
+def get_tariff_name(subscription):
+
+    if subscription == "vip":
+        return "☂️ ixxy VIP"
 
     if subscription == "ixxy":
-
         return "☂️ ixxy"
 
     if subscription == "trial":
-
         return "🎁 Пробный период"
 
     if subscription in (
@@ -187,20 +152,319 @@ def get_tariff_name(
         "none",
         "expired",
     ):
-
         return "❌ Нет подписки"
 
-    # --------------------------------------------------------
-    # Если в БД встретится другое значение
-    # --------------------------------------------------------
+    return str(subscription)
 
-    return str(
-        subscription
-    )
+
+# ============================================================
+# ДАТА
+# ============================================================
+
+def format_date(value):
+
+    if not value:
+        return "нет"
+
+    try:
+
+        return datetime.strptime(
+            str(value),
+            "%Y-%m-%d",
+        ).strftime("%d.%m.%Y")
+
+    except Exception:
+
+        return str(value)
+
+
+# ============================================================
+# СОЗДАНИЕ КНОПКИ С URL
+# ============================================================
+
+def add_url_button(
+    buttons,
+    text,
+    url,
+):
+
+    if url and url.startswith(
+        ("http://", "https://")
+    ):
+
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    text=text,
+                    url=url,
+                )
+            ]
+        )
 
 
 # ============================================================
 # СПИСОК ПОЛЬЗОВАТЕЛЕЙ
+# ============================================================
+
+def build_users_keyboard(
+    users,
+    page=0,
+):
+
+    total = len(users)
+
+    total_pages = max(
+        1,
+        (total + USERS_PER_PAGE - 1)
+        // USERS_PER_PAGE,
+    )
+
+    page = max(
+        0,
+        min(page, total_pages - 1),
+    )
+
+    start = page * USERS_PER_PAGE
+    end = start + USERS_PER_PAGE
+
+    page_users = users[start:end]
+
+    buttons = []
+
+    for user in page_users:
+
+        user_id = user[0]
+
+        username = (
+            user[1]
+            or f"ID {user_id}"
+        )
+
+        subscription = user[3]
+        subscription_until = user[4]
+
+        status, days = (
+            get_subscription_status(
+                subscription,
+                subscription_until,
+            )
+        )
+
+        if days > 0:
+
+            status_text = f"🟢 {days}д."
+
+        elif status == "⛔ Истёк":
+
+            status_text = "⛔ истёк"
+
+        elif status == "⚠️ Ошибка даты":
+
+            status_text = "⚠️ дата"
+
+        else:
+
+            status_text = "🔴 нет"
+
+        username = str(username)
+
+        if len(username) > 22:
+            username = username[:21] + "…"
+
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    text=(
+                        f"👤 {username} "
+                        f"• {status_text}"
+                    ),
+                    callback_data=(
+                        f"admin_user_{user_id}"
+                    ),
+                )
+            ]
+        )
+
+    # ========================================================
+    # ПАГИНАЦИЯ
+    # ========================================================
+
+    navigation = []
+
+    if page > 0:
+
+        navigation.append(
+            InlineKeyboardButton(
+                text="◀️",
+                callback_data=(
+                    f"admin_users_page_{page - 1}"
+                ),
+            )
+        )
+
+    navigation.append(
+        InlineKeyboardButton(
+            text=f"{page + 1}/{total_pages}",
+            callback_data="admin_users_noop",
+        )
+    )
+
+    if page < total_pages - 1:
+
+        navigation.append(
+            InlineKeyboardButton(
+                text="▶️",
+                callback_data=(
+                    f"admin_users_page_{page + 1}"
+                ),
+            )
+        )
+
+    buttons.append(navigation)
+
+    # ========================================================
+    # ДЕЙСТВИЯ
+    # ========================================================
+
+    buttons.append(
+        [
+            InlineKeyboardButton(
+                text="🔎 Найти пользователя",
+                callback_data="admin_search",
+            )
+        ]
+    )
+
+    buttons.append(
+        [
+            InlineKeyboardButton(
+                text="📊 Статистика",
+                callback_data="admin_stats",
+            )
+        ]
+    )
+
+    buttons.append(
+        [
+            InlineKeyboardButton(
+                text="⬅️ Назад",
+                callback_data="admin_back",
+            )
+        ]
+    )
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=buttons
+    ), page, total_pages
+
+
+# ============================================================
+# ПОКАЗ ПОЛЬЗОВАТЕЛЕЙ
+# ============================================================
+
+async def render_users(
+    call: CallbackQuery,
+    page=0,
+):
+
+    try:
+
+        users = get_all_users()
+
+    except Exception as e:
+
+        print(
+            f"❌ ADMIN USERS ERROR: {e}"
+        )
+
+        await call.answer(
+            "❌ Ошибка базы данных",
+            show_alert=True,
+        )
+
+        return
+
+    if not users:
+
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="🔎 Найти пользователя",
+                        callback_data="admin_search",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="⬅️ Назад",
+                        callback_data="admin_back",
+                    )
+                ],
+            ]
+        )
+
+        try:
+
+            await call.message.edit_text(
+                "👥 <b>Пользователи</b>\n\n"
+                "Пока пользователей нет.",
+                reply_markup=keyboard,
+                parse_mode="HTML",
+            )
+
+        except TelegramBadRequest:
+
+            pass
+
+        await call.answer()
+
+        return
+
+    keyboard, page, total_pages = (
+        build_users_keyboard(
+            users,
+            page,
+        )
+    )
+
+    start_number = (
+        page * USERS_PER_PAGE + 1
+    )
+
+    end_number = min(
+        (page + 1) * USERS_PER_PAGE,
+        len(users),
+    )
+
+    text = (
+        "👥 <b>Пользователи</b>\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
+        f"👤 Всего: <b>{len(users)}</b>\n"
+        f"📄 Показаны: "
+        f"<b>{start_number}–{end_number}</b>\n"
+        f"📑 Страница: "
+        f"<b>{page + 1}/{total_pages}</b>\n\n"
+        "Выбери пользователя:"
+    )
+
+    try:
+
+        await call.message.edit_text(
+            text,
+            reply_markup=keyboard,
+            parse_mode="HTML",
+        )
+
+    except TelegramBadRequest as e:
+
+        if "message is not modified" not in str(e):
+            raise
+
+    await call.answer()
+
+
+# ============================================================
+# USERS
 # ============================================================
 
 @router.callback_query(
@@ -221,6 +485,188 @@ async def show_users(
 
         return
 
+    await render_users(
+        call,
+        0,
+    )
+
+
+# ============================================================
+# ПАГИНАЦИЯ
+# ============================================================
+
+@router.callback_query(
+    F.data.startswith("admin_users_page_")
+)
+async def users_page(
+    call: CallbackQuery,
+):
+
+    if not is_admin(
+        call.from_user.id
+    ):
+
+        await call.answer(
+            "❌ Нет доступа",
+            show_alert=True,
+        )
+
+        return
+
+    try:
+
+        page = int(
+            call.data.replace(
+                "admin_users_page_",
+                "",
+            )
+        )
+
+    except ValueError:
+
+        await call.answer(
+            "❌ Неверная страница",
+            show_alert=True,
+        )
+
+        return
+
+    await render_users(
+        call,
+        page,
+    )
+
+
+# ============================================================
+# NOOP
+# ============================================================
+
+@router.callback_query(
+    F.data == "admin_users_noop"
+)
+async def users_noop(
+    call: CallbackQuery,
+):
+
+    await call.answer()
+
+
+# ============================================================
+# ПОИСК
+# ============================================================
+
+@router.callback_query(
+    F.data == "admin_search"
+)
+async def admin_search(
+    call: CallbackQuery,
+    state: FSMContext,
+):
+
+    if not is_admin(
+        call.from_user.id
+    ):
+
+        await call.answer(
+            "❌ Нет доступа",
+            show_alert=True,
+        )
+
+        return
+
+    await state.set_state(
+        AdminSearch.waiting_query
+    )
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="❌ Отмена",
+                    callback_data="admin_search_cancel",
+                )
+            ]
+        ]
+    )
+
+    await call.message.answer(
+        "🔎 <b>Поиск пользователя</b>\n\n"
+        "Отправь:\n"
+        "• Telegram ID\n"
+        "• @username\n"
+        "• username\n"
+        "• имя пользователя",
+        reply_markup=keyboard,
+        parse_mode="HTML",
+    )
+
+    await call.answer()
+
+
+# ============================================================
+# ОТМЕНА ПОИСКА
+# ============================================================
+
+@router.callback_query(
+    F.data == "admin_search_cancel"
+)
+async def admin_search_cancel(
+    call: CallbackQuery,
+    state: FSMContext,
+):
+
+    if not is_admin(
+        call.from_user.id
+    ):
+
+        await call.answer(
+            "❌ Нет доступа",
+            show_alert=True,
+        )
+
+        return
+
+    await state.clear()
+
+    await call.message.answer(
+        "❌ Поиск отменён."
+    )
+
+    await call.answer()
+
+
+# ============================================================
+# ОБРАБОТКА ПОИСКА
+# ============================================================
+
+@router.message(
+    AdminSearch.waiting_query
+)
+async def admin_search_query(
+    message: Message,
+    state: FSMContext,
+):
+
+    if not is_admin(
+        message.from_user.id
+    ):
+
+        return
+
+    query = (
+        (message.text or "")
+        .strip()
+        .lower()
+    )
+
+    if not query:
+
+        await message.answer(
+            "❌ Введи ID, username или имя."
+        )
+
+        return
+
     try:
 
         users = get_all_users()
@@ -228,51 +674,96 @@ async def show_users(
     except Exception as e:
 
         print(
-            f"❌ Ошибка получения пользователей: {e}"
+            f"❌ ADMIN SEARCH ERROR: {e}"
         )
 
-        await call.answer(
-            "❌ Ошибка базы данных",
-            show_alert=True,
+        await state.clear()
+
+        await message.answer(
+            "❌ Ошибка базы данных."
         )
 
         return
 
-    if not users:
+    normalized_query = query.lstrip("@")
 
-        try:
+    found = []
 
-            await call.message.edit_text(
-                "👥 <b>Пользователи</b>\n\n"
-                "Пользователей пока нет.",
-                parse_mode="HTML",
-            )
+    for user in users:
 
-        except TelegramBadRequest:
+        user_id = str(
+            user[0]
+        ).lower()
 
-            pass
+        username = str(
+            user[1] or ""
+        ).lower().lstrip("@")
 
-        await call.answer()
+        first_name = str(
+            user[2] or ""
+        ).lower()
+
+        if (
+            normalized_query in user_id
+            or normalized_query in username
+            or normalized_query in first_name
+        ):
+
+            found.append(user)
+
+    await state.clear()
+
+    # ========================================================
+    # НЕ НАЙДЕНО
+    # ========================================================
+
+    if not found:
+
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="🔎 Искать снова",
+                        callback_data="admin_search",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="👥 Пользователи",
+                        callback_data="admin_users",
+                    )
+                ],
+            ]
+        )
+
+        await message.answer(
+            "🔎 <b>Результат поиска</b>\n\n"
+            f"По запросу "
+            f"<code>{h(query)}</code> "
+            "ничего не найдено.",
+            reply_markup=keyboard,
+            parse_mode="HTML",
+        )
 
         return
+
+    # ========================================================
+    # РЕЗУЛЬТАТЫ
+    # ========================================================
 
     buttons = []
 
-    # --------------------------------------------------------
-    # Первые 20 пользователей
-    # --------------------------------------------------------
-
-    for user in users[:20]:
+    for user in found[:30]:
 
         user_id = user[0]
 
         username = (
             user[1]
-            or "без username"
+            or user[2]
+            or f"ID {user_id}"
         )
 
         subscription = user[3]
-
         subscription_until = user[4]
 
         status, days = (
@@ -282,42 +773,25 @@ async def show_users(
             )
         )
 
-        # ----------------------------------------------------
-        # Активный
-        # ----------------------------------------------------
-
         if days > 0:
 
-            text = (
-                f"👤 {username} "
-                f"• 🟢 {days} д."
-            )
-
-        # ----------------------------------------------------
-        # Истёк
-        # ----------------------------------------------------
+            state_text = f"🟢 {days}д."
 
         elif status == "⛔ Истёк":
 
-            text = (
-                f"👤 {username} "
-                f"• ⛔ Истёк"
-            )
-
-        # ----------------------------------------------------
-        # Неактивен
-        # ----------------------------------------------------
+            state_text = "⛔ истёк"
 
         else:
 
-            text = (
-                f"👤 {username}"
-            )
+            state_text = "🔴 нет"
 
         buttons.append(
             [
                 InlineKeyboardButton(
-                    text=text,
+                    text=(
+                        f"👤 {username} "
+                        f"• {state_text}"
+                    ),
                     callback_data=(
                         f"admin_user_{user_id}"
                     ),
@@ -325,15 +799,20 @@ async def show_users(
             ]
         )
 
-    # --------------------------------------------------------
-    # Назад
-    # --------------------------------------------------------
+    buttons.append(
+        [
+            InlineKeyboardButton(
+                text="🔎 Новый поиск",
+                callback_data="admin_search",
+            )
+        ]
+    )
 
     buttons.append(
         [
             InlineKeyboardButton(
-                text="⬅️ Назад",
-                callback_data="admin_back",
+                text="👥 Пользователи",
+                callback_data="admin_users",
             )
         ]
     )
@@ -342,25 +821,20 @@ async def show_users(
         inline_keyboard=buttons
     )
 
-    try:
+    extra = ""
 
-        await call.message.edit_text(
-            "👥 <b>Пользователи</b>\n\n"
-            "Выбери пользователя:",
-            reply_markup=keyboard,
-            parse_mode="HTML",
-        )
+    if len(found) > 30:
+        extra = "\n\nПоказаны первые 30 результатов."
 
-    except TelegramBadRequest as e:
-
-        if (
-            "message is not modified"
-            not in str(e)
-        ):
-
-            raise
-
-    await call.answer()
+    await message.answer(
+        "🔎 <b>Результаты поиска</b>\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
+        f"Запрос: <code>{h(query)}</code>\n"
+        f"Найдено: <b>{len(found)}</b>"
+        f"{extra}",
+        reply_markup=keyboard,
+        parse_mode="HTML",
+    )
 
 
 # ============================================================
@@ -385,10 +859,6 @@ async def user_profile(
 
         return
 
-    # --------------------------------------------------------
-    # ID
-    # --------------------------------------------------------
-
     try:
 
         user_id = int(
@@ -407,10 +877,6 @@ async def user_profile(
 
         return
 
-    # --------------------------------------------------------
-    # Пользователь
-    # --------------------------------------------------------
-
     try:
 
         user = get_user(
@@ -420,7 +886,7 @@ async def user_profile(
     except Exception as e:
 
         print(
-            f"❌ Ошибка получения пользователя "
+            f"❌ ADMIN PROFILE ERROR "
             f"{user_id}: {e}"
         )
 
@@ -464,6 +930,8 @@ async def user_profile(
         or ""
     )
 
+    created_at = user[11]
+
     # ========================================================
     # ССЫЛКИ
     # ========================================================
@@ -474,10 +942,6 @@ async def user_profile(
         )
     )
 
-    # --------------------------------------------------------
-    # Сохранённая ссылка из БД
-    # --------------------------------------------------------
-
     try:
 
         saved_link = get_subscription_link(
@@ -487,14 +951,13 @@ async def user_profile(
     except Exception as e:
 
         print(
-            f"⚠️ Не удалось получить "
-            f"ссылку пользователя {user_id}: {e}"
+            f"⚠️ SUB LINK ERROR "
+            f"{user_id}: {e}"
         )
 
-        saved_link = None
+        saved_link = ""
 
     if saved_link:
-
         subscription_url = saved_link
 
     # ========================================================
@@ -508,42 +971,75 @@ async def user_profile(
         )
     )
 
-    # ========================================================
-    # ТАРИФ
-    # ========================================================
-
     tariff = get_tariff_name(
         subscription
     )
 
-    # ========================================================
-    # ДАТА
-    # ========================================================
+    date_text = format_date(
+        subscription_until
+    )
 
-    if subscription_until:
+    created_text = "нет"
+
+    if created_at:
 
         try:
 
-            expire_date = datetime.strptime(
-                str(subscription_until),
-                "%Y-%m-%d",
-            )
+            if isinstance(
+                created_at,
+                datetime,
+            ):
 
-            date_text = (
-                expire_date.strftime(
-                    "%d.%m.%Y"
+                created_text = (
+                    created_at.strftime(
+                        "%d.%m.%Y %H:%M"
+                    )
                 )
-            )
+
+            else:
+
+                created_text = str(
+                    created_at
+                )
 
         except Exception:
 
-            date_text = str(
-                subscription_until
+            created_text = str(
+                created_at
             )
 
-    else:
+    # ========================================================
+    # ПЛАТЕЖИ
+    # ========================================================
 
-        date_text = "нет"
+    try:
+
+        user_payments = get_user_payments(
+            user_id
+        )
+
+        payment_count = len(
+            user_payments or []
+        )
+
+        paid_count = sum(
+            1
+            for payment in (
+                user_payments or []
+            )
+            if len(payment) > 5
+            and payment[5] == "paid"
+        )
+
+    except Exception as e:
+
+        print(
+            f"⚠️ USER PAYMENTS ERROR "
+            f"{user_id}: {e}"
+        )
+
+        payment_count = 0
+        paid_count = 0
 
     # ========================================================
     # ОСТАЛОСЬ
@@ -559,8 +1055,7 @@ async def user_profile(
     else:
 
         days_text = (
-            "⏳ <b>Осталось:</b> "
-            "0 д."
+            "⏳ <b>Осталось:</b> 0 д."
         )
 
     # ========================================================
@@ -575,15 +1070,15 @@ async def user_profile(
         f"<code>{user_id}</code>\n"
 
         f"👤 <b>Username:</b> "
-        f"@{username}\n"
+        f"{('@' + h(username)) if username != 'нет' else 'нет'}\n"
 
         f"🧑‍💻 <b>Имя:</b> "
-        f"{first_name}\n\n"
+        f"{h(first_name)}\n\n"
 
         "━━━━━━━━━━━━━━━━━━\n\n"
 
         f"🎫 <b>Тариф:</b> "
-        f"{tariff}\n"
+        f"{h(tariff)}\n"
 
         f"📊 <b>Статус:</b> "
         f"{status}\n"
@@ -593,29 +1088,37 @@ async def user_profile(
 
         f"{days_text}\n\n"
 
-        "━━━━━━━━━━━━━━━━━━"
+        "━━━━━━━━━━━━━━━━━━\n\n"
+
+        f"💳 <b>Платежей:</b> "
+        f"{payment_count}\n"
+
+        f"✅ <b>Оплаченных:</b> "
+        f"{paid_count}\n"
+
+        f"📆 <b>Создан:</b> "
+        f"{h(created_text)}"
     )
 
     # ========================================================
     # КНОПКИ
     # ========================================================
 
-    buttons = [
+    buttons = []
 
-        [
-            InlineKeyboardButton(
-                text="🌐 Открыть сайт",
-                url=site_url,
-            )
-        ],
+    add_url_button(
+        buttons,
+        "🌐 Открыть сайт",
+        site_url,
+    )
 
-        [
-            InlineKeyboardButton(
-                text="🔗 Открыть подписку",
-                url=subscription_url,
-            )
-        ],
+    add_url_button(
+        buttons,
+        "🔗 Открыть подписку",
+        subscription_url,
+    )
 
+    buttons.append(
         [
             InlineKeyboardButton(
                 text="⏳ Продлить",
@@ -623,12 +1126,19 @@ async def user_profile(
                     f"extend_{user_id}"
                 ),
             )
-        ],
-    ]
+        ]
+    )
 
-    # --------------------------------------------------------
-    # Отключение
-    # --------------------------------------------------------
+    buttons.append(
+        [
+            InlineKeyboardButton(
+                text="💳 Платежи",
+                callback_data=(
+                    f"admin_payments_{user_id}"
+                ),
+            )
+        ]
+    )
 
     if (
         subscription not in (
@@ -651,14 +1161,10 @@ async def user_profile(
             ]
         )
 
-    # --------------------------------------------------------
-    # Назад
-    # --------------------------------------------------------
-
     buttons.append(
         [
             InlineKeyboardButton(
-                text="⬅️ Назад",
+                text="⬅️ Пользователи",
                 callback_data="admin_users",
             )
         ]
@@ -667,10 +1173,6 @@ async def user_profile(
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=buttons
     )
-
-    # ========================================================
-    # ПОКАЗ
-    # ========================================================
 
     try:
 
@@ -683,18 +1185,252 @@ async def user_profile(
 
     except TelegramBadRequest as e:
 
-        if (
-            "message is not modified"
-            not in str(e)
-        ):
-
+        if "message is not modified" not in str(e):
             raise
 
     await call.answer()
 
 
 # ============================================================
-# ОТКЛЮЧЕНИЕ ПОДПИСКИ
+# ПЛАТЕЖИ ПОЛЬЗОВАТЕЛЯ
+# ============================================================
+
+@router.callback_query(
+    F.data.startswith("admin_payments_")
+)
+async def admin_user_payments(
+    call: CallbackQuery,
+):
+
+    if not is_admin(
+        call.from_user.id
+    ):
+
+        await call.answer(
+            "❌ Нет доступа",
+            show_alert=True,
+        )
+
+        return
+
+    try:
+
+        user_id = int(
+            call.data.replace(
+                "admin_payments_",
+                "",
+            )
+        )
+
+    except ValueError:
+
+        await call.answer(
+            "❌ Неверный ID",
+            show_alert=True,
+        )
+
+        return
+
+    try:
+
+        user = get_user(
+            user_id
+        )
+
+        payments = get_user_payments(
+            user_id
+        )
+
+    except Exception as e:
+
+        print(
+            f"❌ PAYMENTS ERROR "
+            f"{user_id}: {e}"
+        )
+
+        await call.answer(
+            "❌ Ошибка базы данных",
+            show_alert=True,
+        )
+
+        return
+
+    if not user:
+
+        await call.answer(
+            "❌ Пользователь не найден",
+            show_alert=True,
+        )
+
+        return
+
+    username = (
+        user[1]
+        or user[2]
+        or f"ID {user_id}"
+    )
+
+    payments = payments or []
+
+    text = (
+        "💳 <b>Платежи пользователя</b>\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
+        f"👤 {h(username)}\n"
+        f"🆔 <code>{user_id}</code>\n\n"
+    )
+
+    if not payments:
+
+        text += (
+            "Платежей пока нет."
+        )
+
+    else:
+
+        for payment in payments[:15]:
+
+            # payments:
+            # 0 id
+            # 1 user_id
+            # 2 photo
+            # 3 days
+            # 4 payment_id
+            # 5 status
+            # 6 created_at
+
+            payment_id = (
+                payment[0]
+                if len(payment) > 0
+                else "?"
+            )
+
+            days = (
+                payment[3]
+                if len(payment) > 3
+                else 0
+            )
+
+            external_id = (
+                payment[4]
+                if len(payment) > 4
+                else None
+            )
+
+            status_value = (
+                payment[5]
+                if len(payment) > 5
+                else "unknown"
+            )
+
+            created_at = (
+                payment[6]
+                if len(payment) > 6
+                else ""
+            )
+
+            if status_value == "paid":
+                status_text = "✅ Оплачен"
+
+            elif status_value == "pending":
+                status_text = "⏳ Ожидает"
+
+            elif status_value == "cancelled":
+                status_text = "❌ Отменён"
+
+            else:
+                status_text = (
+                    f"⚪ {status_value}"
+                )
+
+            date_text = ""
+
+            if created_at:
+
+                try:
+
+                    if isinstance(
+                        created_at,
+                        datetime,
+                    ):
+
+                        date_text = (
+                            created_at.strftime(
+                                "%d.%m.%Y %H:%M"
+                            )
+                        )
+
+                    else:
+
+                        date_text = str(
+                            created_at
+                        )
+
+                except Exception:
+
+                    date_text = str(
+                        created_at
+                    )
+
+            text += (
+                f"💳 <b>#{payment_id}</b>\n"
+                f"📅 {h(date_text)}\n"
+                f"⏳ Дней: <b>{days}</b>\n"
+                f"📊 {status_text}\n"
+            )
+
+            if external_id:
+
+                text += (
+                    f"🔖 ID: "
+                    f"<code>{h(external_id)}</code>\n"
+                )
+
+            text += "\n"
+
+        if len(payments) > 15:
+
+            text += (
+                f"Показаны последние 15 "
+                f"из {len(payments)}."
+            )
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="⬅️ К пользователю",
+                    callback_data=(
+                        f"admin_user_{user_id}"
+                    ),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="👥 Пользователи",
+                    callback_data="admin_users",
+                )
+            ],
+        ]
+    )
+
+    try:
+
+        await call.message.edit_text(
+            text,
+            reply_markup=keyboard,
+            parse_mode="HTML",
+        )
+
+    except TelegramBadRequest as e:
+
+        if "message is not modified" not in str(e):
+            raise
+
+    await call.answer()
+
+
+# ============================================================
+# ПОДТВЕРЖДЕНИЕ ОТКЛЮЧЕНИЯ
 # ============================================================
 
 @router.callback_query(
@@ -715,10 +1451,6 @@ async def disable_user_subscription(
 
         return
 
-    # --------------------------------------------------------
-    # ID
-    # --------------------------------------------------------
-
     try:
 
         user_id = int(
@@ -731,35 +1463,15 @@ async def disable_user_subscription(
     except ValueError:
 
         await call.answer(
-            "❌ Неверный ID пользователя",
+            "❌ Неверный ID",
             show_alert=True,
         )
 
         return
 
-    # --------------------------------------------------------
-    # Проверяем пользователя
-    # --------------------------------------------------------
-
-    try:
-
-        user = get_user(
-            user_id
-        )
-
-    except Exception as e:
-
-        print(
-            f"❌ Ошибка получения пользователя "
-            f"{user_id}: {e}"
-        )
-
-        await call.answer(
-            "❌ Ошибка базы данных",
-            show_alert=True,
-        )
-
-        return
+    user = get_user(
+        user_id
+    )
 
     if not user:
 
@@ -770,9 +1482,94 @@ async def disable_user_subscription(
 
         return
 
-    # --------------------------------------------------------
-    # Отключаем
-    # --------------------------------------------------------
+    username = (
+        user[1]
+        or user[2]
+        or f"ID {user_id}"
+    )
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="⚠️ Да, отключить",
+                    callback_data=(
+                        f"confirm_disable_{user_id}"
+                    ),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="↩️ Отмена",
+                    callback_data=(
+                        f"admin_user_{user_id}"
+                    ),
+                )
+            ],
+        ]
+    )
+
+    try:
+
+        await call.message.edit_text(
+            "⚠️ <b>Отключение подписки</b>\n\n"
+            f"👤 Пользователь: "
+            f"<b>{h(username)}</b>\n"
+            f"🆔 ID: <code>{user_id}</code>\n\n"
+            "Подписка будет отключена, "
+            "а сохранённая ссылка удалена.\n\n"
+            "<b>Продолжить?</b>",
+            reply_markup=keyboard,
+            parse_mode="HTML",
+        )
+
+    except TelegramBadRequest as e:
+
+        if "message is not modified" not in str(e):
+            raise
+
+    await call.answer()
+
+
+# ============================================================
+# ПОДТВЕРЖДЁННОЕ ОТКЛЮЧЕНИЕ
+# ============================================================
+
+@router.callback_query(
+    F.data.startswith("confirm_disable_")
+)
+async def confirm_disable_subscription(
+    call: CallbackQuery,
+):
+
+    if not is_admin(
+        call.from_user.id
+    ):
+
+        await call.answer(
+            "❌ Нет доступа",
+            show_alert=True,
+        )
+
+        return
+
+    try:
+
+        user_id = int(
+            call.data.replace(
+                "confirm_disable_",
+                "",
+            )
+        )
+
+    except ValueError:
+
+        await call.answer(
+            "❌ Неверный ID",
+            show_alert=True,
+        )
+
+        return
 
     try:
 
@@ -783,7 +1580,7 @@ async def disable_user_subscription(
     except Exception as e:
 
         print(
-            f"❌ Ошибка отключения "
+            f"❌ DISABLE ERROR "
             f"{user_id}: {e}"
         )
 
@@ -793,20 +1590,6 @@ async def disable_user_subscription(
         )
 
         return
-
-    # ========================================================
-    # ДАННЫЕ
-    # ========================================================
-
-    username = (
-        user[1]
-        or "нет"
-    )
-
-    first_name = (
-        user[2]
-        or "нет"
-    )
 
     # ========================================================
     # URL
@@ -819,8 +1602,27 @@ async def disable_user_subscription(
     )
 
     # ========================================================
-    # ПРОФИЛЬ ПОСЛЕ ОТКЛЮЧЕНИЯ
+    # ПРОФИЛЬ
     # ========================================================
+
+    user = get_user(
+        user_id
+    )
+
+    username = "нет"
+    first_name = "нет"
+
+    if user:
+
+        username = (
+            user[1]
+            or "нет"
+        )
+
+        first_name = (
+            user[2]
+            or "нет"
+        )
 
     text = (
         "👤 <b>Пользователь</b>\n"
@@ -830,10 +1632,10 @@ async def disable_user_subscription(
         f"<code>{user_id}</code>\n"
 
         f"👤 <b>Username:</b> "
-        f"@{username}\n"
+        f"{('@' + h(username)) if username != 'нет' else 'нет'}\n"
 
         f"🧑‍💻 <b>Имя:</b> "
-        f"{first_name}\n\n"
+        f"{h(first_name)}\n\n"
 
         "━━━━━━━━━━━━━━━━━━\n\n"
 
@@ -852,48 +1654,43 @@ async def disable_user_subscription(
         "━━━━━━━━━━━━━━━━━━"
     )
 
-    # ========================================================
-    # КНОПКИ
-    # ========================================================
+    buttons = []
 
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
+    add_url_button(
+        buttons,
+        "🌐 Открыть сайт",
+        site_url,
+    )
 
-            [
-                InlineKeyboardButton(
-                    text="🌐 Открыть сайт",
-                    url=site_url,
-                )
-            ],
+    add_url_button(
+        buttons,
+        "🔗 Открыть подписку",
+        subscription_url,
+    )
 
-            [
-                InlineKeyboardButton(
-                    text="🔗 Открыть подписку",
-                    url=subscription_url,
-                )
-            ],
-
-            [
-                InlineKeyboardButton(
-                    text="⏳ Продлить",
-                    callback_data=(
-                        f"extend_{user_id}"
-                    ),
-                )
-            ],
-
-            [
-                InlineKeyboardButton(
-                    text="⬅️ Назад",
-                    callback_data="admin_users",
-                )
-            ],
+    buttons.append(
+        [
+            InlineKeyboardButton(
+                text="⏳ Продлить",
+                callback_data=(
+                    f"extend_{user_id}"
+                ),
+            )
         ]
     )
 
-    # ========================================================
-    # ОБНОВЛЯЕМ
-    # ========================================================
+    buttons.append(
+        [
+            InlineKeyboardButton(
+                text="⬅️ Пользователи",
+                callback_data="admin_users",
+            )
+        ]
+    )
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=buttons
+    )
 
     try:
 
@@ -906,16 +1703,187 @@ async def disable_user_subscription(
 
     except TelegramBadRequest as e:
 
-        if (
-            "message is not modified"
-            not in str(e)
-        ):
-
+        if "message is not modified" not in str(e):
             raise
 
     await call.answer(
         "✅ Подписка отключена"
     )
+
+
+# ============================================================
+# СТАТИСТИКА
+# ============================================================
+
+@router.callback_query(
+    F.data == "admin_stats"
+)
+async def admin_stats(
+    call: CallbackQuery,
+):
+
+    if not is_admin(
+        call.from_user.id
+    ):
+
+        await call.answer(
+            "❌ Нет доступа",
+            show_alert=True,
+        )
+
+        return
+
+    try:
+
+        users = get_all_users()
+        payments = get_payments()
+
+    except Exception as e:
+
+        print(
+            f"❌ ADMIN STATS ERROR: {e}"
+        )
+
+        await call.answer(
+            "❌ Ошибка базы данных",
+            show_alert=True,
+        )
+
+        return
+
+    users = users or []
+    payments = payments or []
+
+    total_users = len(users)
+
+    active_users = 0
+    expired_users = 0
+    trial_users = 0
+    no_subscription = 0
+
+    for user in users:
+
+        subscription = (
+            user[3]
+            if len(user) > 3
+            else "none"
+        )
+
+        subscription_until = (
+            user[4]
+            if len(user) > 4
+            else ""
+        )
+
+        status, days = (
+            get_subscription_status(
+                subscription,
+                subscription_until,
+            )
+        )
+
+        if subscription == "trial":
+
+            if days > 0:
+                trial_users += 1
+            elif status == "⛔ Истёк":
+                expired_users += 1
+
+        elif days > 0:
+
+            active_users += 1
+
+        elif status == "⛔ Истёк":
+
+            expired_users += 1
+
+        else:
+
+            no_subscription += 1
+
+    paid_payments = sum(
+        1
+        for payment in payments
+        if len(payment) > 5
+        and payment[5] == "paid"
+    )
+
+    pending_payments = sum(
+        1
+        for payment in payments
+        if len(payment) > 5
+        and payment[5] == "pending"
+    )
+
+    total_days_paid = sum(
+        int(payment[3] or 0)
+        for payment in payments
+        if len(payment) > 5
+        and payment[5] == "paid"
+        and payment[3] is not None
+    )
+
+    text = (
+        "📊 <b>Статистика ixxy</b>\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
+
+        "👥 <b>Пользователи</b>\n"
+        f"├ Всего: <b>{total_users}</b>\n"
+        f"├ 🟢 Активных: <b>{active_users}</b>\n"
+        f"├ 🎁 Пробных: <b>{trial_users}</b>\n"
+        f"├ ⛔ Истёкших: <b>{expired_users}</b>\n"
+        f"└ 🔴 Без подписки: <b>{no_subscription}</b>\n\n"
+
+        "💳 <b>Платежи</b>\n"
+        f"├ Всего: <b>{len(payments)}</b>\n"
+        f"├ ✅ Оплачено: <b>{paid_payments}</b>\n"
+        f"└ ⏳ Ожидают: <b>{pending_payments}</b>\n\n"
+
+        "📅 <b>Оформлено дней:</b> "
+        f"<b>{total_days_paid}</b>\n\n"
+
+        "━━━━━━━━━━━━━━━━━━\n"
+        f"🕐 Обновлено: "
+        f"<b>{datetime.now().strftime('%d.%m.%Y %H:%M')}</b>"
+    )
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🔄 Обновить",
+                    callback_data="admin_stats",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="👥 Пользователи",
+                    callback_data="admin_users",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⬅️ Назад",
+                    callback_data="admin_back",
+                )
+            ],
+        ]
+    )
+
+    try:
+
+        await call.message.edit_text(
+            text,
+            reply_markup=keyboard,
+            parse_mode="HTML",
+        )
+
+    except TelegramBadRequest as e:
+
+        if "message is not modified" not in str(e):
+            raise
+
+    await call.answer()
 
 
 # ============================================================
@@ -944,10 +1912,6 @@ async def sync_servers(
         "🔄 Обновление началось..."
     )
 
-    # ========================================================
-    # СООБЩЕНИЕ
-    # ========================================================
-
     status_message = (
         await call.message.answer(
             "🔄 <b>Обновляю серверы...</b>\n\n"
@@ -961,9 +1925,12 @@ async def sync_servers(
 
         result = sync_servers_update()
 
-        # ----------------------------------------------------
-        # Защита от отсутствующих ключей
-        # ----------------------------------------------------
+        if not isinstance(
+            result,
+            dict,
+        ):
+
+            result = {}
 
         updated = result.get(
             "updated",
@@ -985,24 +1952,20 @@ async def sync_servers(
             0,
         )
 
-        # ====================================================
-        # РЕЗУЛЬТАТ
-        # ====================================================
-
         await status_message.edit_text(
             "✅ <b>Синхронизация завершена!</b>\n\n"
 
             f"🟢 Активных обновлено: "
-            f"{updated}\n"
+            f"<b>{updated}</b>\n"
 
             f"⛔ Истёкших обновлено: "
-            f"{expired}\n"
+            f"<b>{expired}</b>\n"
 
             f"⏭ Пропущено: "
-            f"{skipped}\n"
+            f"<b>{skipped}</b>\n"
 
             f"❌ Ошибок: "
-            f"{errors}",
+            f"<b>{errors}</b>",
 
             parse_mode="HTML",
         )
@@ -1010,8 +1973,7 @@ async def sync_servers(
     except Exception as e:
 
         print(
-            f"❌ Ошибка синхронизации: "
-            f"{e}"
+            f"❌ SYNC ERROR: {e}"
         )
 
         try:
@@ -1019,10 +1981,8 @@ async def sync_servers(
             await status_message.edit_text(
                 "❌ <b>Не удалось "
                 "обновить серверы.</b>\n\n"
-
                 f"Ошибка:\n"
-                f"<code>{str(e)}</code>",
-
+                f"<code>{h(str(e))}</code>",
                 parse_mode="HTML",
             )
 
