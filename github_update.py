@@ -37,6 +37,20 @@ PROFILE_UPDATE_INTERVAL = 1
 
 
 # ============================================================
+# HAPP — ТРАФИК
+# ============================================================
+
+# 0 = ♾️ безлимит
+TRAFFIC_TOTAL = 0
+
+# Начальный расход.
+# Реальную статистику можно будет подключить позже
+# через API статистики серверов.
+TRAFFIC_UPLOAD = 0
+TRAFFIC_DOWNLOAD = 0
+
+
+# ============================================================
 # HAPP — СКРЫТИЕ НАСТРОЕК
 # ============================================================
 
@@ -179,21 +193,103 @@ def get_subscription_content_url(user_id):
 
 
 # ============================================================
+# DATE → UNIX TIMESTAMP
+# ============================================================
+
+def date_to_timestamp(date):
+    """
+    YYYY-MM-DD / DD.MM.YYYY → Unix timestamp.
+    """
+
+    if isinstance(date, datetime):
+        return int(date.timestamp())
+
+    value = str(date).strip()
+
+    for fmt in (
+        "%Y-%m-%d",
+        "%d.%m.%Y",
+    ):
+        try:
+            parsed = datetime.strptime(
+                value,
+                fmt,
+            )
+
+            return int(
+                datetime.combine(
+                    parsed.date(),
+                    datetime.min.time(),
+                ).timestamp()
+            )
+
+        except Exception:
+            pass
+
+    return 0
+
+
+# ============================================================
+# HAPP — СТАТИСТИКА ТРАФИКА
+# ============================================================
+
+def build_traffic_header(
+    upload=TRAFFIC_UPLOAD,
+    download=TRAFFIC_DOWNLOAD,
+    total=TRAFFIC_TOTAL,
+    expire=0,
+):
+    """
+    Формат статистики для Happ.
+
+    upload:
+        исходящий трафик в байтах
+
+    download:
+        входящий трафик в байтах
+
+    total:
+        общий лимит в байтах
+
+        0 = ♾️ безлимит
+
+    expire:
+        Unix timestamp окончания подписки
+    """
+
+    return (
+        "#subscription-userinfo: "
+        f"upload={int(upload)}; "
+        f"download={int(download)}; "
+        f"total={int(total)}; "
+        f"expire={int(expire)}\n"
+    )
+
+
+# ============================================================
 # ЗАГОЛОВОК HAPP
 # ============================================================
 
-def build_profile_header(announce):
+def build_profile_header(
+    announce,
+    expire=0,
+    upload=TRAFFIC_UPLOAD,
+    download=TRAFFIC_DOWNLOAD,
+    total=TRAFFIC_TOTAL,
+):
     """
     Служебные строки для Happ.
-
-    Несколько вариантов hide-settings оставлены
-    для совместимости с разными версиями/форками.
     """
 
     return (
         f"#profile-title: {PROFILE_TITLE}\n"
         f"#profile-update-interval: "
         f"{PROFILE_UPDATE_INTERVAL}\n"
+        f"#subscription-userinfo: "
+        f"upload={int(upload)}; "
+        f"download={int(download)}; "
+        f"total={int(total)}; "
+        f"expire={int(expire)}\n"
         f"#hide-settings: true\n"
         f"#happ-hide-settings: true\n"
         f"#hide_server_settings: true\n"
@@ -245,7 +341,11 @@ _NEW_USER_ANNOUNCE = (
 
 NEW_USER_TEMPLATE = (
     build_profile_header(
-        _NEW_USER_ANNOUNCE
+        _NEW_USER_ANNOUNCE,
+        expire=0,
+        upload=0,
+        download=0,
+        total=0,
     )
     +
     "vless://00000000-0000-0000-0000-000000000000"
@@ -314,8 +414,6 @@ def format_subscription_date(date):
             "%d.%m.%Y"
         )
 
-    # datetime.date нельзя импортировать отдельно,
-    # поэтому работаем через strftime если он доступен.
     if hasattr(date, "strftime"):
         try:
             return date.strftime(
@@ -332,9 +430,11 @@ def format_subscription_date(date):
             value,
             "%Y-%m-%d",
         )
+
         return parsed.strftime(
             "%d.%m.%Y"
         )
+
     except Exception:
         pass
 
@@ -344,9 +444,11 @@ def format_subscription_date(date):
             value,
             "%d.%m.%Y",
         )
+
         return parsed.strftime(
             "%d.%m.%Y"
         )
+
     except Exception:
         pass
 
@@ -416,6 +518,10 @@ def activate_subscription_file(
         date
     )
 
+    expire_timestamp = date_to_timestamp(
+        display_date
+    )
+
     announce = (
         f"🟢 Подписка активна • "
         f"до {display_date} • "
@@ -424,7 +530,11 @@ def activate_subscription_file(
 
     content = (
         build_profile_header(
-            announce
+            announce,
+            expire=expire_timestamp,
+            upload=0,
+            download=0,
+            total=0,
         )
         + servers
     )
@@ -437,6 +547,10 @@ def activate_subscription_file(
     print(
         f"🟢 Подписка пользователя {user_id} "
         f"обновлена до {display_date}"
+    )
+
+    print(
+        "📊 Трафик: ♾️ безлимит"
     )
 
     print(
@@ -490,10 +604,6 @@ def update_subscription_file(
             123456789,
             "2026-12-25"
         )
-
-    В результате Happ получает:
-
-        🟢 Подписка активна • до 25.12.2026
     """
 
     display_date = format_subscription_date(
@@ -525,7 +635,11 @@ def expire_subscription(user_id):
 
     content = (
         build_profile_header(
-            announce
+            announce,
+            expire=0,
+            upload=0,
+            download=0,
+            total=0,
         )
         + no_servers
     )
@@ -542,6 +656,10 @@ def expire_subscription(user_id):
     print(
         f"📄 Использован файл: "
         f"{NO_SERVERS_FILE}"
+    )
+
+    print(
+        "📊 Трафик: ♾️"
     )
 
     print(
@@ -629,7 +747,11 @@ def sync_all_active_users():
 
                 content = (
                     build_profile_header(
-                        announce
+                        announce,
+                        expire=0,
+                        upload=0,
+                        download=0,
+                        total=0,
                     )
                     + no_servers
                 )
@@ -661,7 +783,11 @@ def sync_all_active_users():
 
                 content = (
                     build_profile_header(
-                        announce
+                        announce,
+                        expire=0,
+                        upload=0,
+                        download=0,
+                        total=0,
                     )
                     + no_servers
                 )
@@ -705,7 +831,11 @@ def sync_all_active_users():
 
                 content = (
                     build_profile_header(
-                        announce
+                        announce,
+                        expire=0,
+                        upload=0,
+                        download=0,
+                        total=0,
                     )
                     + no_servers
                 )
@@ -732,7 +862,11 @@ def sync_all_active_users():
 
                 content = (
                     build_profile_header(
-                        announce
+                        announce,
+                        expire=0,
+                        upload=0,
+                        download=0,
+                        total=0,
                     )
                     + no_servers
                 )
@@ -759,6 +893,13 @@ def sync_all_active_users():
                 "%d.%m.%Y"
             )
 
+            expire_timestamp = int(
+                datetime.combine(
+                    expire_date,
+                    datetime.min.time(),
+                ).timestamp()
+            )
+
             announce = (
                 f"🟢 Подписка активна • "
                 f"до {display_date} • "
@@ -767,7 +908,11 @@ def sync_all_active_users():
 
             content = (
                 build_profile_header(
-                    announce
+                    announce,
+                    expire=expire_timestamp,
+                    upload=0,
+                    download=0,
+                    total=0,
                 )
                 + servers
             )
@@ -781,7 +926,8 @@ def sync_all_active_users():
 
             print(
                 f"{user_id} — "
-                f"🟢 активна до {display_date}"
+                f"🟢 активна до {display_date} "
+                f"• 📊 трафик ♾️"
             )
 
         except Exception as e:
