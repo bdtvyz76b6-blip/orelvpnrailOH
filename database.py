@@ -2,6 +2,7 @@ import os
 import psycopg2
 from psycopg2 import IntegrityError
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 
 # =========================================================
@@ -13,14 +14,55 @@ DATABASE_URL = os.getenv("DATABASE_URL", "")
 MAX_PROMO_DAYS = 999_999_999_999
 MAX_DATE = datetime(9999, 12, 31)
 
+# =========================================================
+# МОСКОВСКОЕ ВРЕМЯ
+# =========================================================
+
+MSK = ZoneInfo("Europe/Moscow")
+
+
+def now_msk():
+    """
+    Текущее московское время.
+    """
+    return datetime.now(MSK)
+
+
+def today_msk():
+    """
+    Текущая дата по Москве.
+    """
+    return now_msk().date()
+
+
+def today_msk_string():
+    """
+    Текущая дата по Москве в формате YYYY-MM-DD.
+    """
+    return now_msk().strftime("%Y-%m-%d")
+
+
+# =========================================================
+# CONNECTION
+# =========================================================
 
 def connect():
+
     if not DATABASE_URL:
         raise RuntimeError(
             "❌ DATABASE_URL не задана в Environment Variables"
         )
 
-    return psycopg2.connect(DATABASE_URL)
+    conn = psycopg2.connect(DATABASE_URL)
+
+    # Принудительно устанавливаем московское время
+    # для текущей PostgreSQL-сессии.
+    with conn.cursor() as cur:
+        cur.execute(
+            "SET TIME ZONE 'Europe/Moscow'"
+        )
+
+    return conn
 
 
 # =========================================================
@@ -457,7 +499,9 @@ def calculate_subscription_date(
             "Слишком большое количество дней"
         )
 
-    now = datetime.now()
+    # ВАЖНО:
+    # теперь дата считается по Москве
+    now = now_msk()
 
     start_date = now
 
@@ -611,8 +655,11 @@ def activate_trial(
     link
 ):
 
+    # Пробный период также считается
+    # от московского времени.
+
     date = (
-        datetime.now()
+        now_msk()
         + timedelta(days=3)
     ).strftime("%Y-%m-%d")
 
@@ -1368,9 +1415,8 @@ def get_expired_users():
 
     try:
 
-        today = datetime.now().strftime(
-            "%Y-%m-%d"
-        )
+        # Дата определяется по Москве
+        today = today_msk_string()
 
         cur.execute("""
             SELECT *
@@ -1466,7 +1512,8 @@ def subscription_active(
             "%Y-%m-%d"
         ).date()
 
-        today = datetime.now().date()
+        # Московская дата
+        today = today_msk()
 
         return expire_date >= today
 
@@ -1486,9 +1533,8 @@ def check_expired_subscriptions():
 
     try:
 
-        today = datetime.now().strftime(
-            "%Y-%m-%d"
-        )
+        # Московская дата
+        today = today_msk_string()
 
         cur.execute("""
             UPDATE users
@@ -1537,7 +1583,8 @@ def get_days_left(
             "%Y-%m-%d"
         ).date()
 
-        today = datetime.now().date()
+        # Московская дата
+        today = today_msk()
 
         days = (
             expire_date - today
@@ -1575,7 +1622,8 @@ def check_user_subscription(
             "%Y-%m-%d"
         ).date()
 
-        today = datetime.now().date()
+        # Московская дата
+        today = today_msk()
 
         if expire_date < today:
 
