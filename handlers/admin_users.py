@@ -52,6 +52,10 @@ SUBSCRIPTION_PREFIX = os.getenv(
 
 USERS_PER_PAGE = 15
 
+# Максимальное количество дней для ручного продления.
+# Практически неограниченно, но защищаемся от мусорного ввода.
+MAX_CUSTOM_DAYS = 999_999_999
+
 
 # ============================================================
 # ПОИСК
@@ -59,6 +63,14 @@ USERS_PER_PAGE = 15
 
 class AdminSearch(StatesGroup):
     waiting_query = State()
+
+
+# ============================================================
+# СВОЁ КОЛИЧЕСТВО ДНЕЙ
+# ============================================================
+
+class AdminCustomExtend(StatesGroup):
+    waiting_days = State()
 
 
 # ============================================================
@@ -113,10 +125,13 @@ def get_subscription_status(
         return "🔴 Неактивен", 0
 
     try:
-        expire_date = datetime.strptime(
-            str(subscription_until),
-            "%Y-%m-%d",
-        ).date()
+        if isinstance(subscription_until, datetime):
+            expire_date = subscription_until.date()
+        else:
+            expire_date = datetime.strptime(
+                str(subscription_until),
+                "%Y-%m-%d",
+            ).date()
     except Exception:
         return "⚠️ Ошибка даты", 0
 
@@ -167,10 +182,14 @@ def format_date(value):
         return "нет"
 
     try:
+        if isinstance(value, datetime):
+            return value.strftime("%d.%m.%Y")
+
         return datetime.strptime(
             str(value),
             "%Y-%m-%d",
         ).strftime("%d.%m.%Y")
+
     except Exception:
         return str(value)
 
@@ -299,10 +318,6 @@ def build_users_keyboard(
                 )
             ]
         )
-
-    # ========================================================
-    # ПАГИНАЦИЯ
-    # ========================================================
 
     navigation = []
 
@@ -1077,15 +1092,6 @@ async def user_profile(
 # ВЫБОР СРОКА ПРОДЛЕНИЯ
 # ============================================================
 
-# ВАЖНО:
-# Здесь НЕ используем startswith("extend_"),
-# потому что extend_days_ тоже начинается с extend_.
-#
-# Теперь обработчик ловит только:
-# extend_123
-#
-# А extend_days_123_30 обрабатывается ниже.
-
 @router.callback_query(
     F.data.regexp(r"^extend_\d+$")
 )
@@ -1183,6 +1189,14 @@ async def extend_subscription_menu(
             ],
             [
                 InlineKeyboardButton(
+                    text="✏️ Своё количество дней",
+                    callback_data=(
+                        f"custom_extend_{user_id}"
+                    ),
+                )
+            ],
+            [
+                InlineKeyboardButton(
                     text="↩️ Назад",
                     callback_data=(
                         f"admin_user_{user_id}"
@@ -1209,7 +1223,382 @@ async def extend_subscription_menu(
 
 
 # ============================================================
-# ПРОДЛЕНИЕ ПОДПИСКИ
+# ЗАПРОС СВОЕГО КОЛИЧЕСТВА ДНЕЙ
+# ============================================================
+
+@router.callback_query(
+    F.data.regexp(r"^custom_extend_\d+$")
+)
+async def custom_extend_start(
+    call: CallbackQuery,
+    state: FSMContext,
+):
+    if not is_admin(call.from_user.id):
+        await call.answer(
+            "❌ Нет доступа",
+            show_alert=True,
+        )
+        return
+
+    try:
+        user_id = int(
+            call.data.replace(
+                "custom_extend_",
+                "",
+                1,
+            )
+        )
+    except ValueError:
+        await call.answer(
+            "❌ Неверный ID пользователя",
+            show_alert=True,
+        )
+        return
+
+    user = get_user(user_id)
+
+    if not user:
+        await call.answer(
+            "❌ Пользователь не найден",
+            show_alert=True,
+        )
+        return
+
+    await state.update_data(
+        custom_extend_user_id=user_id
+    )
+
+    await state.set_state(
+        AdminCustomExtend.waiting_days
+    )
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="❌ Отмена",
+                    callback_data=(
+                        f"custom_extend_cancel_{user_id}"
+                    ),
+                )
+            ]
+        ]
+    )
+
+    await call.message.answer(
+        "✏️ <b>Своё количество дней</b>\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
+        f"👤 Пользователь: "
+        f"<code>{user_id}</code>\n\n"
+        "Введи количество дней числом.\n\n"
+        "Например:\n"
+        "• <code>7</code>\n"
+        "• <code>45</code>\n"
+        "• <code>180</code>\n"
+        "• <code>1000</code>\n\n"
+        f"Максимум: <b>{MAX_CUSTOM_DAYS:,}</b> дней."
+        .replace(",", " "),
+        reply_markup=keyboard,
+        parse_mode="HTML",
+    )
+
+    await call.answer()
+
+
+# ============================================================
+# ОТМЕНА СВОЕГО ПРОДЛЕНИЯ
+# ============================================================
+
+@router.callback_query(
+    F.data.regexp(r"^custom_extend_cancel_\d+$")
+)
+async def custom_extend_cancel(
+    call: CallbackQuery,
+    state: FSMContext,
+):
+    if not is_admin(call.from_user.id):
+        await call.answer(
+            "❌ Нет доступа",
+            show_alert=True,
+        )
+        return
+
+    try:
+        user_id = int(
+            call.data.replace(
+                "custom_extend_cancel_",
+                "",
+                1,
+            )
+        )
+    except ValueError:
+        await state.clear()
+        await call.answer(
+            "❌ Неверный ID",
+            show_alert=True,
+        )
+        return
+
+    await state.clear()
+
+    try:
+        await call.message.edit_text(
+            "❌ <b>Ввод отменён</b>\n\n"
+            "Можно вернуться к пользователю.",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="👤 К пользователю",
+                            callback_data=(
+                                f"admin_user_{user_id}"
+                            ),
+                        )
+                    ]
+                ]
+            ),
+            parse_mode="HTML",
+        )
+    except TelegramBadRequest:
+        pass
+
+    await call.answer("❌ Отменено")
+
+
+# ============================================================
+# ОБРАБОТКА СВОЕГО КОЛИЧЕСТВА ДНЕЙ
+# ============================================================
+
+@router.message(
+    AdminCustomExtend.waiting_days
+)
+async def custom_extend_days(
+    message: Message,
+    state: FSMContext,
+):
+    if not is_admin(message.from_user.id):
+        return
+
+    raw_days = (
+        (message.text or "")
+        .strip()
+        .replace(" ", "")
+    )
+
+    # Разрешаем только целое положительное число
+    if not raw_days.isdigit():
+        await message.answer(
+            "❌ <b>Неверное количество дней.</b>\n\n"
+            "Введи только целое число.\n"
+            "Например: <code>45</code>",
+            parse_mode="HTML",
+        )
+        return
+
+    try:
+        days = int(raw_days)
+    except ValueError:
+        await message.answer(
+            "❌ Слишком большое число.",
+        )
+        return
+
+    if days < 1:
+        await message.answer(
+            "❌ Количество дней должно быть больше 0."
+        )
+        return
+
+    if days > MAX_CUSTOM_DAYS:
+        await message.answer(
+            "❌ Слишком большое количество дней.\n\n"
+            f"Максимум: "
+            f"<b>{MAX_CUSTOM_DAYS:,}</b> дней."
+            .replace(",", " "),
+            parse_mode="HTML",
+        )
+        return
+
+    data = await state.get_data()
+
+    user_id = data.get(
+        "custom_extend_user_id"
+    )
+
+    if not user_id:
+        await state.clear()
+
+        await message.answer(
+            "❌ Не удалось определить пользователя.\n"
+            "Начни продление заново."
+        )
+        return
+
+    try:
+        user = get_user(user_id)
+    except Exception as e:
+        print(
+            f"❌ CUSTOM EXTEND GET USER ERROR "
+            f"{user_id}: {e}"
+        )
+
+        await state.clear()
+
+        await message.answer(
+            "❌ Ошибка базы данных."
+        )
+        return
+
+    if not user:
+        await state.clear()
+
+        await message.answer(
+            "❌ Пользователь не найден."
+        )
+        return
+
+    username = (
+        user[1]
+        or user[2]
+        or f"ID {user_id}"
+    )
+
+    await state.clear()
+
+    try:
+        # ====================================================
+        # 1. ПРОДЛЕВАЕМ В БАЗЕ
+        # ====================================================
+
+        new_date = extend_subscription(
+            user_id,
+            days,
+        )
+
+        if not new_date:
+            raise RuntimeError(
+                "База данных не вернула новую дату"
+            )
+
+        # ====================================================
+        # 2. ОБНОВЛЯЕМ ФАЙЛ ПОДПИСКИ
+        # ====================================================
+
+        try:
+            update_subscription_file(
+                user_id,
+                new_date,
+            )
+
+        except Exception as github_error:
+            print(
+                f"⚠️ CUSTOM GITHUB ERROR "
+                f"user={user_id}: "
+                f"{github_error}"
+            )
+
+            keyboard = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="👤 К пользователю",
+                            callback_data=(
+                                f"admin_user_{user_id}"
+                            ),
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            text="🔄 Синхронизировать",
+                            callback_data=(
+                                "admin_sync_servers"
+                            ),
+                        )
+                    ],
+                ]
+            )
+
+            await message.answer(
+                "⚠️ <b>Подписка продлена в базе</b>\n\n"
+                f"👤 {h(username)}\n"
+                f"🆔 <code>{user_id}</code>\n\n"
+                f"➕ Добавлено: "
+                f"<b>{days} д.</b>\n"
+                f"📅 Новая дата: "
+                f"<b>{format_date(new_date)}</b>\n\n"
+                "⚠️ Не удалось сразу обновить "
+                "файл подписки.\n"
+                "Нажми «Синхронизировать».",
+                reply_markup=keyboard,
+                parse_mode="HTML",
+            )
+
+            return
+
+        # ====================================================
+        # УСПЕХ
+        # ====================================================
+
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="👤 К пользователю",
+                        callback_data=(
+                            f"admin_user_{user_id}"
+                        ),
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="👥 Пользователи",
+                        callback_data="admin_users",
+                    )
+                ],
+            ]
+        )
+
+        await message.answer(
+            "✅ <b>Подписка успешно продлена!</b>\n"
+            "━━━━━━━━━━━━━━━━━━\n\n"
+            f"👤 Пользователь: "
+            f"<b>{h(username)}</b>\n"
+            f"🆔 ID: <code>{user_id}</code>\n\n"
+            f"➕ Добавлено: "
+            f"<b>{days} дней</b>\n"
+            f"📅 Действует до: "
+            f"<b>{format_date(new_date)}</b>\n\n"
+            "🔄 Файл подписки обновлён.",
+            reply_markup=keyboard,
+            parse_mode="HTML",
+        )
+
+        print(
+            f"✅ ADMIN CUSTOM EXTEND: "
+            f"user={user_id}, "
+            f"days={days}, "
+            f"until={new_date}"
+        )
+
+    except Exception as e:
+        print(
+            f"❌ CUSTOM EXTEND ERROR "
+            f"user={user_id}, "
+            f"days={days}: {e}"
+        )
+
+        await message.answer(
+            "❌ <b>Ошибка продления</b>\n\n"
+            f"👤 {h(username)}\n"
+            f"🆔 <code>{user_id}</code>\n\n"
+            "Ошибка:\n"
+            f"<code>{h(str(e))}</code>",
+            parse_mode="HTML",
+        )
+
+
+# ============================================================
+# ПРОДЛЕНИЕ ПОДПИСКИ — ГОТОВЫЕ СРОКИ
 # ============================================================
 
 @router.callback_query(
@@ -1311,9 +1700,6 @@ async def extend_subscription_admin(
             )
 
         except Exception as github_error:
-            # БД уже обновлена.
-            # Не откатываем продление.
-
             print(
                 f"⚠️ GITHUB UPDATE ERROR "
                 f"user={user_id}: "
@@ -1356,10 +1742,6 @@ async def extend_subscription_admin(
             )
 
             return
-
-        # ====================================================
-        # УСПЕХ
-        # ====================================================
 
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
