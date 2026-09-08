@@ -2167,8 +2167,9 @@ async def sync_servers(
     call: CallbackQuery,
 ):
 
-    if not is_admin(call.from_user.id):
-
+    if not is_admin(
+        call.from_user.id
+    ):
         await call.answer(
             "❌ Нет доступа",
             show_alert=True,
@@ -2179,13 +2180,11 @@ async def sync_servers(
         "🔄 Обновление началось..."
     )
 
-    status_message = (
-        await call.message.answer(
-            "🔄 <b>Обновляю серверы...</b>\n\n"
-            "⏳ Проверяю активные и "
-            "истёкшие подписки...",
-            parse_mode="HTML",
-        )
+    status_message = await call.message.answer(
+        "🔄 <b>Обновляю серверы...</b>\n\n"
+        "⏳ Проверяю активные и "
+        "истёкшие подписки...",
+        parse_mode="HTML",
     )
 
     try:
@@ -2195,41 +2194,17 @@ async def sync_servers(
         if not isinstance(result, dict):
             result = {}
 
-        updated = result.get(
-            "updated",
-            0,
-        )
-
-        expired = result.get(
-            "expired",
-            0,
-        )
-
-        skipped = result.get(
-            "skipped",
-            0,
-        )
-
-        errors = result.get(
-            "errors",
-            0,
-        )
+        updated = result.get("updated", 0)
+        expired = result.get("expired", 0)
+        skipped = result.get("skipped", 0)
+        errors = result.get("errors", 0)
 
         await status_message.edit_text(
             "✅ <b>Синхронизация завершена!</b>\n\n"
-
-            f"🟢 Активных обновлено: "
-            f"<b>{updated}</b>\n"
-
-            f"⛔ Истёкших обновлено: "
-            f"<b>{expired}</b>\n"
-
-            f"⏭ Пропущено: "
-            f"<b>{skipped}</b>\n"
-
-            f"❌ Ошибок: "
-            f"<b>{errors}</b>",
-
+            f"🟢 Активных обновлено: <b>{updated}</b>\n"
+            f"⛔ Истёкших обновлено: <b>{expired}</b>\n"
+            f"⏭ Пропущено: <b>{skipped}</b>\n"
+            f"❌ Ошибок: <b>{errors}</b>",
             parse_mode="HTML",
         )
 
@@ -2244,10 +2219,11 @@ async def sync_servers(
             await status_message.edit_text(
                 "❌ <b>Не удалось "
                 "обновить серверы.</b>\n\n"
-                f"Ошибка:\n"
+                "Ошибка:\n"
                 f"<code>{h(str(e))}</code>",
                 parse_mode="HTML",
             )
 
         except TelegramBadRequest:
+
             pass
