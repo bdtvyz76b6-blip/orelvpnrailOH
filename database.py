@@ -1,8 +1,7 @@
 import os
 import psycopg2
 from psycopg2 import IntegrityError
-from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
+from datetime import datetime, timedelta, timezone, date
 
 
 # =========================================================
@@ -12,34 +11,47 @@ from zoneinfo import ZoneInfo
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 
 MAX_PROMO_DAYS = 999_999_999_999
-MAX_DATE = datetime(9999, 12, 31)
+MAX_DATE = date(9999, 12, 31)
+
 
 # =========================================================
-# МОСКОВСКОЕ ВРЕМЯ
+# ВРЕМЯ
+# =========================================================
+#
+# Москва = UTC+3
+# Москва - 3 часа = UTC+0
+#
+# Поэтому используем UTC.
+# Все даты подписок считаются по этой временной зоне.
 # =========================================================
 
-MSK = ZoneInfo("Europe/Moscow")
+UTC = timezone.utc
 
 
 def now_msk():
     """
-    Текущее московское время.
+    Время проекта:
+    Москва - 3 часа = UTC.
+    Возвращает timezone-aware datetime.
     """
-    return datetime.now(MSK)
+    return datetime.now(UTC)
 
 
 def today_msk():
     """
-    Текущая дата по Москве.
+    Текущая дата проекта.
+
+    Москва - 3 часа = UTC.
+    Возвращает обычный date без timezone.
     """
     return now_msk().date()
 
 
 def today_msk_string():
     """
-    Текущая дата по Москве в формате YYYY-MM-DD.
+    Текущая дата проекта в формате YYYY-MM-DD.
     """
-    return now_msk().strftime("%Y-%m-%d")
+    return today_msk().isoformat()
 
 
 # =========================================================
@@ -55,11 +67,10 @@ def connect():
 
     conn = psycopg2.connect(DATABASE_URL)
 
-    # Принудительно устанавливаем московское время
-    # для текущей PostgreSQL-сессии.
+    # PostgreSQL-сессия тоже работает в UTC.
     with conn.cursor() as cur:
         cur.execute(
-            "SET TIME ZONE 'Europe/Moscow'"
+            "SET TIME ZONE 'UTC'"
         )
 
     return conn
@@ -148,6 +159,18 @@ def create_table():
             )
         """)
 
+        # =====================================================
+        # УНИКАЛЬНЫЙ CASHERA PAYMENT ID
+        # =====================================================
+
+        cur.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS
+            idx_payments_payment_id_unique
+            ON payments(payment_id)
+            WHERE payment_id IS NOT NULL
+              AND payment_id <> ''
+        """)
+
         conn.commit()
 
     finally:
@@ -180,23 +203,13 @@ def add_user(
             VALUES (%s, %s, %s)
 
             ON CONFLICT (user_id)
-            DO NOTHING
+            DO UPDATE SET
+                username=EXCLUDED.username,
+                first_name=EXCLUDED.first_name
         """, (
             user_id,
             username,
             first_name
-        ))
-
-        cur.execute("""
-            UPDATE users
-            SET
-                username=%s,
-                first_name=%s
-            WHERE user_id=%s
-        """, (
-            username,
-            first_name,
-            user_id
         ))
 
         conn.commit()
@@ -479,6 +492,44 @@ def get_subscription_link(user_id):
 
 
 # =========================================================
+# РАЗБОР ДАТЫ ПОДПИСКИ
+# =========================================================
+
+def parse_subscription_date(value):
+    """
+    Безопасно превращает дату подписки в date.
+
+    Поддерживает:
+    - YYYY-MM-DD
+    - datetime
+    - date
+    - None
+    - пустую строку
+    """
+
+    if not value:
+        return None
+
+    if isinstance(value, datetime):
+        return value.date()
+
+    if isinstance(value, date):
+        return value
+
+    try:
+        return datetime.strptime(
+            str(value),
+            "%Y-%m-%d"
+        ).date()
+
+    except (
+        ValueError,
+        TypeError
+    ):
+        return None
+
+
+# =========================================================
 # РАСЧЁТ ДАТЫ ПОДПИСКИ
 # =========================================================
 
@@ -499,37 +550,21 @@ def calculate_subscription_date(
             "Слишком большое количество дней"
         )
 
-    # ВАЖНО:
-    # теперь дата считается по Москве
-    now = now_msk()
+    today = today_msk()
 
-    start_date = now
+    start_date = today
 
-    if current_until:
+    old_date = parse_subscription_date(
+        current_until
+    )
 
-        try:
+    # Если подписка ещё активна,
+    # продолжаем её от старой даты.
+    if old_date and old_date >= today:
+        start_date = old_date
 
-            old_date = datetime.strptime(
-                str(current_until),
-                "%Y-%m-%d"
-            )
-
-            # Если текущая подписка ещё активна,
-            # добавляем дни к её окончанию.
-
-            if old_date.date() >= now.date():
-
-                start_date = old_date
-
-        except Exception:
-
-            start_date = now
-
-    # Огромные значения переводим
-    # на максимальную дату.
-
+    # Защита от огромных значений.
     if days >= 2_900_000:
-
         return "9999-12-31"
 
     try:
@@ -540,12 +575,9 @@ def calculate_subscription_date(
         )
 
         if new_date > MAX_DATE:
-
             return "9999-12-31"
 
-        return new_date.strftime(
-            "%Y-%m-%d"
-        )
+        return new_date.isoformat()
 
     except (
         OverflowError,
@@ -570,8 +602,6 @@ def activate_subscription(
 
     try:
 
-        # Получаем текущую дату окончания
-
         cur.execute("""
             SELECT subscription_until
             FROM users
@@ -586,14 +616,10 @@ def activate_subscription(
             else ""
         )
 
-        # Рассчитываем новую дату
-
-        date = calculate_subscription_date(
+        new_date = calculate_subscription_date(
             current_until,
             days
         )
-
-        # Активируем VIP
 
         cur.execute("""
             UPDATE users
@@ -604,14 +630,14 @@ def activate_subscription(
                 pending_days=0
             WHERE user_id=%s
         """, (
-            date,
+            new_date,
             link,
             user_id
         ))
 
         conn.commit()
 
-        return date
+        return new_date
 
     finally:
 
@@ -620,7 +646,7 @@ def activate_subscription(
 
 
 # =========================================================
-# УДОБНАЯ ФУНКЦИЯ ДЛЯ ПЛАТНОЙ ПОДПИСКИ
+# ПЛАТНАЯ ПОДПИСКА
 # =========================================================
 
 def activate_paid_subscription(
@@ -655,13 +681,10 @@ def activate_trial(
     link
 ):
 
-    # Пробный период также считается
-    # от московского времени.
-
-    date = (
-        now_msk()
+    new_date = (
+        today_msk()
         + timedelta(days=3)
-    ).strftime("%Y-%m-%d")
+    ).isoformat()
 
     conn = connect()
     cur = conn.cursor()
@@ -677,7 +700,7 @@ def activate_trial(
                 trial_used=1
             WHERE user_id=%s
         """, (
-            date,
+            new_date,
             link,
             user_id
         ))
@@ -794,6 +817,10 @@ def save_payment_id(
                 SELECT id
                 FROM payments
                 WHERE user_id=%s
+                  AND (
+                      payment_id IS NULL
+                      OR payment_id=''
+                  )
                 ORDER BY id DESC
                 LIMIT 1
             )
@@ -862,9 +889,7 @@ def payment_already_paid(
             str(payment_id),
         ))
 
-        result = cur.fetchone()
-
-        return result is not None
+        return cur.fetchone() is not None
 
     finally:
 
@@ -892,6 +917,7 @@ def mark_payment_paid(
             UPDATE payments
             SET status='paid'
             WHERE payment_id=%s
+              AND status!='paid'
         """, (
             str(payment_id),
         ))
@@ -901,6 +927,143 @@ def mark_payment_paid(
         conn.commit()
 
         return changed > 0
+
+    finally:
+
+        cur.close()
+        conn.close()
+
+
+# =========================================================
+# БЕЗОПАСНАЯ ОБРАБОТКА ОПЛАЧЕННОГО ПЛАТЕЖА
+# =========================================================
+
+def process_paid_payment(
+    payment_id
+):
+
+    if not payment_id:
+        raise ValueError(
+            "payment_id не указан"
+        )
+
+    conn = connect()
+    cur = conn.cursor()
+
+    try:
+
+        # Блокируем платёж.
+        cur.execute("""
+            SELECT
+                id,
+                user_id,
+                days,
+                status
+            FROM payments
+            WHERE payment_id=%s
+            FOR UPDATE
+        """, (
+            str(payment_id),
+        ))
+
+        payment = cur.fetchone()
+
+        if not payment:
+            raise ValueError(
+                "Платёж не найден"
+            )
+
+        db_payment_id = payment[0]
+        user_id = payment[1]
+        days = int(payment[2] or 0)
+        status = payment[3]
+
+        # Если webhook пришёл повторно,
+        # второй раз подписку не продлеваем.
+        if status == "paid":
+
+            cur.execute("""
+                SELECT subscription_until
+                FROM users
+                WHERE user_id=%s
+            """, (user_id,))
+
+            user = cur.fetchone()
+
+            conn.commit()
+
+            return {
+                "payment_id": db_payment_id,
+                "user_id": user_id,
+                "days": days,
+                "status": "paid",
+                "already_paid": True,
+                "new_date": (
+                    user[0]
+                    if user
+                    else ""
+                )
+            }
+
+        # Блокируем пользователя.
+        cur.execute("""
+            SELECT subscription_until
+            FROM users
+            WHERE user_id=%s
+            FOR UPDATE
+        """, (user_id,))
+
+        user = cur.fetchone()
+
+        if not user:
+            raise ValueError(
+                f"Пользователь {user_id} не найден"
+            )
+
+        current_until = user[0] or ""
+
+        new_date = calculate_subscription_date(
+            current_until,
+            days
+        )
+
+        # Активируем подписку.
+        cur.execute("""
+            UPDATE users
+            SET
+                subscription='vip',
+                subscription_until=%s,
+                pending_days=0
+            WHERE user_id=%s
+        """, (
+            new_date,
+            user_id
+        ))
+
+        # Помечаем платёж оплаченным.
+        cur.execute("""
+            UPDATE payments
+            SET status='paid'
+            WHERE id=%s
+        """, (
+            db_payment_id,
+        ))
+
+        conn.commit()
+
+        return {
+            "payment_id": db_payment_id,
+            "user_id": user_id,
+            "days": days,
+            "status": "paid",
+            "already_paid": False,
+            "new_date": new_date
+        }
+
+    except Exception:
+
+        conn.rollback()
+        raise
 
     finally:
 
@@ -935,7 +1098,7 @@ def add_stars_payment(
         """, (
             user_id,
             days,
-            payment_id,
+            str(payment_id),
             "paid"
         ))
 
@@ -1042,7 +1205,6 @@ def add_promocode(
 ):
 
     code = str(code).strip().upper()
-
     days = int(days)
 
     if (
@@ -1110,6 +1272,7 @@ def get_promocode(
     finally:
 
         cur.close()
+        cur.close() if False else None
         conn.close()
 
 
@@ -1137,6 +1300,7 @@ def use_promocode(
             SELECT subscription_until
             FROM users
             WHERE user_id=%s
+            FOR UPDATE
         """, (user_id,))
 
         user = cur.fetchone()
@@ -1415,7 +1579,6 @@ def get_expired_users():
 
     try:
 
-        # Дата определяется по Москве
         today = today_msk_string()
 
         cur.execute("""
@@ -1451,6 +1614,7 @@ def extend_subscription(
             SELECT subscription_until
             FROM users
             WHERE user_id=%s
+            FOR UPDATE
         """, (user_id,))
 
         result = cur.fetchone()
@@ -1502,24 +1666,16 @@ def subscription_active(
 
     until = user[4]
 
-    if not until:
+    expire_date = parse_subscription_date(
+        until
+    )
+
+    if not expire_date:
         return False
 
-    try:
+    today = today_msk()
 
-        expire_date = datetime.strptime(
-            str(until),
-            "%Y-%m-%d"
-        ).date()
-
-        # Московская дата
-        today = today_msk()
-
-        return expire_date >= today
-
-    except Exception:
-
-        return False
+    return expire_date >= today
 
 
 # =========================================================
@@ -1533,7 +1689,6 @@ def check_expired_subscriptions():
 
     try:
 
-        # Московская дата
         today = today_msk_string()
 
         cur.execute("""
@@ -1573,28 +1728,20 @@ def get_days_left(
 
     until = user[4]
 
-    if not until:
+    expire_date = parse_subscription_date(
+        until
+    )
+
+    if not expire_date:
         return 0
 
-    try:
+    today = today_msk()
 
-        expire_date = datetime.strptime(
-            str(until),
-            "%Y-%m-%d"
-        ).date()
+    days = (
+        expire_date - today
+    ).days
 
-        # Московская дата
-        today = today_msk()
-
-        days = (
-            expire_date - today
-        ).days
-
-        return max(days, 0)
-
-    except Exception:
-
-        return 0
+    return max(days, 0)
 
 
 # =========================================================
@@ -1612,32 +1759,24 @@ def check_user_subscription(
 
     until = user[4]
 
-    if not until:
+    expire_date = parse_subscription_date(
+        until
+    )
+
+    if not expire_date:
         return False
 
-    try:
+    today = today_msk()
 
-        expire_date = datetime.strptime(
-            str(until),
-            "%Y-%m-%d"
-        ).date()
+    if expire_date < today:
 
-        # Московская дата
-        today = today_msk()
-
-        if expire_date < today:
-
-            disable_subscription(
-                user_id
-            )
-
-            return False
-
-        return True
-
-    except Exception:
+        disable_subscription(
+            user_id
+        )
 
         return False
+
+    return True
 
 
 # =========================================================
