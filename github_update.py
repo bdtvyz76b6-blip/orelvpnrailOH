@@ -5,11 +5,16 @@ import requests
 
 from datetime import datetime, timedelta
 
+from dotenv import load_dotenv
+
 from database import (
     save_subscription_link,
     save_subscription_content,
     get_all_users,
 )
+
+
+load_dotenv()
 
 
 # ============================================================
@@ -112,6 +117,24 @@ NO_SERVERS_FILE = "no_servers.txt"
 
 
 # ============================================================
+# GITHUB HEADERS
+# ============================================================
+
+def github_headers():
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "ixxy-vpn-bot",
+    }
+
+    if GITHUB_TOKEN:
+        headers["Authorization"] = (
+            f"Bearer {GITHUB_TOKEN}"
+        )
+
+    return headers
+
+
+# ============================================================
 # RAW GITHUB URL
 # ============================================================
 
@@ -129,6 +152,7 @@ def raw_url(filename):
 def load_github_file(filename):
     response = requests.get(
         raw_url(filename),
+        headers=github_headers(),
         timeout=20,
     )
 
