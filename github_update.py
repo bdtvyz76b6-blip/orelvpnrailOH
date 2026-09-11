@@ -36,9 +36,20 @@ SUBSCRIPTION_PREFIX = os.getenv(
 # НАЗВАНИЕ ПОДПИСКИ
 # ============================================================
 
-PROFILE_TITLE = "𝗦𝗨𝗕 - 𝗜𝗫𝗫𝗬 ☂️"
+PROFILE_TITLE = os.getenv(
+    "PROFILE_TITLE",
+    "𝗦𝗨𝗕 - 𝗜𝗫𝗫𝗬 ☂️",
+).strip()
 
-PROFILE_UPDATE_INTERVAL = 1
+try:
+    PROFILE_UPDATE_INTERVAL = int(
+        os.getenv(
+            "PROFILE_UPDATE_INTERVAL",
+            "1",
+        )
+    )
+except Exception:
+    PROFILE_UPDATE_INTERVAL = 1
 
 
 # ============================================================
@@ -46,20 +57,55 @@ PROFILE_UPDATE_INTERVAL = 1
 # ============================================================
 
 # 0 = ♾️ безлимит
-TRAFFIC_TOTAL = 0
+try:
+    TRAFFIC_TOTAL = int(
+        os.getenv(
+            "TRAFFIC_TOTAL",
+            "0",
+        )
+    )
+except Exception:
+    TRAFFIC_TOTAL = 0
+
 
 # Начальный расход.
 # Реальную статистику можно будет подключить позже
-# через API статистики серверов.
-TRAFFIC_UPLOAD = 0
-TRAFFIC_DOWNLOAD = 0
+# через API статистики серверов
+try:
+    TRAFFIC_UPLOAD = int(
+        os.getenv(
+            "TRAFFIC_UPLOAD",
+            "0",
+        )
+    )
+except Exception:
+    TRAFFIC_UPLOAD = 0
+
+
+try:
+    TRAFFIC_DOWNLOAD = int(
+        os.getenv(
+            "TRAFFIC_DOWNLOAD",
+            "0",
+        )
+    )
+except Exception:
+    TRAFFIC_DOWNLOAD = 0
 
 
 # ============================================================
 # HAPP — СКРЫТИЕ НАСТРОЕК
 # ============================================================
 
-HIDE_SETTINGS = True
+HIDE_SETTINGS = os.getenv(
+    "HIDE_SETTINGS",
+    "1",
+).strip().lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
 
 
 # ============================================================
@@ -111,9 +157,15 @@ BRANCH = os.getenv(
 # ФАЙЛЫ С СЕРВЕРАМИ
 # ============================================================
 
-SERVERS_FILE = "servers.txt"
+SERVERS_FILE = os.getenv(
+    "SERVERS_FILE",
+    "servers.txt",
+).strip()
 
-NO_SERVERS_FILE = "no_servers.txt"
+NO_SERVERS_FILE = os.getenv(
+    "NO_SERVERS_FILE",
+    "no_servers.txt",
+).strip()
 
 
 # ============================================================
@@ -305,6 +357,12 @@ def build_profile_header(
     Служебные строки для Happ.
     """
 
+    hide_settings = (
+        "true"
+        if HIDE_SETTINGS
+        else "false"
+    )
+
     return (
         f"#profile-title: {PROFILE_TITLE}\n"
         f"#profile-update-interval: "
@@ -314,10 +372,10 @@ def build_profile_header(
         f"download={int(download)}; "
         f"total={int(total)}; "
         f"expire={int(expire)}\n"
-        f"#hide-settings: true\n"
-        f"#happ-hide-settings: true\n"
-        f"#hide_server_settings: true\n"
-        f"#hidesettings: true\n"
+        f"#hide-settings: {hide_settings}\n"
+        f"#happ-hide-settings: {hide_settings}\n"
+        f"#hide_server_settings: {hide_settings}\n"
+        f"#hidesettings: {hide_settings}\n"
         f"#announce: {announce}\n\n"
     )
 
