@@ -3,9 +3,8 @@ import threading
 import os
 import hmac
 
-from urllib.parse import quote
+from flask import Flask, request
 
-from flask import Flask, request, Response
 from aiogram import Bot, Dispatcher
 
 from config import BOT_TOKEN
@@ -16,7 +15,6 @@ from database import (
     extend_subscription,
     get_payment_by_payment_id,
     update_payment_status,
-    get_subscription_content,
 )
 
 from github_update import (
@@ -33,22 +31,8 @@ from subscription_checker import check_subscriptions
 # =========================================================
 
 app = Flask(__name__)
+
 BOT_LOOP = None
-
-
-# =========================================================
-# PUBLIC SITE
-# =========================================================
-
-PUBLIC_SITE_URL = os.getenv(
-    "PUBLIC_SITE_URL",
-    "https://orelvpnrailoh.onrender.com"
-).rstrip("/")
-
-SUBSCRIPTION_PREFIX = os.getenv(
-    "SUBSCRIPTION_PREFIX",
-    "2ix847xy"
-).strip()
 
 
 # =========================================================
@@ -57,678 +41,13 @@ SUBSCRIPTION_PREFIX = os.getenv(
 
 CASHERA_API_KEY = os.getenv(
     "CASHERA_API_KEY",
-    ""
+    "",
 ).strip()
 
 CASHERA_API_SECRET = os.getenv(
     "CASHERA_API_SECRET",
-    ""
+    "",
 ).strip()
-
-
-# =========================================================
-# ПОЛУЧЕНИЕ USER ID
-# =========================================================
-
-def get_user_id_from_token(token):
-
-    prefix = SUBSCRIPTION_PREFIX
-
-    if not token.startswith(prefix):
-        return None
-
-    user_id_text = token[len(prefix):]
-
-    if not user_id_text.isdigit():
-        return None
-
-    try:
-        return int(user_id_text)
-    except Exception:
-        return None
-
-
-# =========================================================
-# HTML СТРАНИЦЫ ПОДПИСКИ
-# =========================================================
-
-def subscription_page_html(user_id, subscription_url):
-
-    happ_url = (
-        "happ://add/"
-        + quote(
-            subscription_url,
-            safe=""
-        )
-    )
-
-    incy_url = (
-        "incy://import/"
-        + subscription_url
-    )
-
-    escaped_subscription = (
-        subscription_url
-        .replace("\\", "\\\\")
-        .replace("'", "\\'")
-        .replace('"', '\\"')
-    )
-
-    return f"""
-<!DOCTYPE html>
-
-<html lang="ru">
-
-<head>
-
-<meta charset="UTF-8">
-
-<meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
->
-
-<meta
-    name="theme-color"
-    content="#08080d"
->
-
-<title>
-    ixxy VPN — Подписка
-</title>
-
-<style>
-
-* {{
-    box-sizing: border-box;
-}}
-
-html,
-body {{
-    margin: 0;
-    padding: 0;
-    min-height: 100%;
-}}
-
-body {{
-    font-family:
-        -apple-system,
-        BlinkMacSystemFont,
-        "SF Pro Display",
-        "Segoe UI",
-        sans-serif;
-
-    background:
-        radial-gradient(
-            circle at top,
-            #24213d 0%,
-            #0c0b12 45%,
-            #07070b 100%
-        );
-
-    color: #ffffff;
-
-    display: flex;
-
-    justify-content: center;
-
-    padding:
-        24px
-        16px
-        40px;
-}}
-
-.container {{
-    width: 100%;
-    max-width: 520px;
-}}
-
-.logo {{
-    width: 78px;
-    height: 78px;
-
-    margin:
-        20px auto
-        18px;
-
-    border-radius: 24px;
-
-    background:
-        linear-gradient(
-            135deg,
-            #9b7cff,
-            #6d4aff
-        );
-
-    display: flex;
-
-    align-items: center;
-    justify-content: center;
-
-    font-size: 40px;
-
-    box-shadow:
-        0 18px 60px
-        rgba(119, 80, 255, .35);
-}}
-
-h1 {{
-    text-align: center;
-
-    margin: 0;
-
-    font-size: 32px;
-
-    font-weight: 800;
-
-    letter-spacing: -1px;
-}}
-
-.subtitle {{
-    text-align: center;
-
-    margin:
-        9px
-        0
-        28px;
-
-    color: #a9a7b5;
-
-    font-size: 15px;
-}}
-
-.card {{
-    background:
-        rgba(255,255,255,.065);
-
-    border:
-        1px solid
-        rgba(255,255,255,.09);
-
-    border-radius: 26px;
-
-    padding: 22px;
-
-    backdrop-filter:
-        blur(22px);
-
-    box-shadow:
-        0 25px 80px
-        rgba(0,0,0,.35);
-}}
-
-.title {{
-    font-size: 19px;
-
-    font-weight: 750;
-
-    margin-bottom: 9px;
-}}
-
-.description {{
-    color: #aaa8b6;
-
-    line-height: 1.55;
-
-    font-size: 14px;
-
-    margin-bottom: 20px;
-}}
-
-.button {{
-    display: flex;
-
-    width: 100%;
-
-    min-height: 56px;
-
-    align-items: center;
-
-    justify-content: center;
-
-    border-radius: 17px;
-
-    text-decoration: none;
-
-    font-size: 16px;
-
-    font-weight: 700;
-
-    margin-top: 11px;
-
-    transition:
-        transform .15s ease,
-        opacity .15s ease;
-}}
-
-.button:active {{
-    transform: scale(.98);
-
-    opacity: .8;
-}}
-
-.happ {{
-    background:
-        linear-gradient(
-            135deg,
-            #8e6cff,
-            #6543ff
-        );
-
-    color: white;
-
-    box-shadow:
-        0 12px 35px
-        rgba(103,68,255,.28);
-}}
-
-.incy {{
-    background:
-        rgba(255,255,255,.10);
-
-    border:
-        1px solid
-        rgba(255,255,255,.12);
-
-    color: white;
-}}
-
-.copy {{
-    background:
-        rgba(255,255,255,.055);
-
-    border:
-        1px solid
-        rgba(255,255,255,.09);
-
-    color: #dddce5;
-
-    cursor: pointer;
-}}
-
-.link-box {{
-    margin-top: 20px;
-
-    padding: 14px;
-
-    border-radius: 15px;
-
-    background:
-        rgba(0,0,0,.25);
-
-    border:
-        1px solid
-        rgba(255,255,255,.07);
-
-    word-break: break-all;
-
-    color: #92909e;
-
-    font-size: 12px;
-
-    line-height: 1.5;
-}}
-
-.steps {{
-    margin-top: 18px;
-
-    display: grid;
-
-    gap: 10px;
-}}
-
-.step {{
-    display: flex;
-
-    gap: 12px;
-
-    align-items: flex-start;
-
-    padding: 13px;
-
-    border-radius: 15px;
-
-    background:
-        rgba(255,255,255,.035);
-}}
-
-.number {{
-    width: 27px;
-    height: 27px;
-
-    min-width: 27px;
-
-    border-radius: 9px;
-
-    background: #29233e;
-
-    color: #a98dff;
-
-    display: flex;
-
-    align-items: center;
-    justify-content: center;
-
-    font-weight: 800;
-
-    font-size: 13px;
-}}
-
-.step-text {{
-    color: #aaa8b5;
-
-    font-size: 13px;
-
-    line-height: 1.45;
-}}
-
-.footer {{
-    text-align: center;
-
-    margin-top: 22px;
-
-    color: #666472;
-
-    font-size: 12px;
-}}
-
-</style>
-
-</head>
-
-<body>
-
-<div class="container">
-
-    <div class="logo">
-        ☂️
-    </div>
-
-    <h1>
-        ixxy VPN
-    </h1>
-
-    <div class="subtitle">
-        Ваша персональная подписка
-    </div>
-
-    <div class="card">
-
-        <div class="title">
-            🚀 Добавьте подписку
-        </div>
-
-        <div class="description">
-
-            Выберите приложение ниже.
-
-            После нажатия подписка автоматически
-            откроется в выбранном VPN-клиенте.
-
-        </div>
-
-        <a
-            class="button happ"
-            href="{happ_url}"
-        >
-            🟣 Добавить в Happ
-        </a>
-
-        <a
-            class="button incy"
-            href="{incy_url}"
-        >
-            🟢 Добавить в INCY
-        </a>
-
-        <button
-            class="button copy"
-            onclick="copySubscription()"
-            id="copyButton"
-        >
-            📋 Скопировать ссылку
-        </button>
-
-        <div class="link-box">
-            {subscription_url}
-        </div>
-
-        <div class="steps">
-
-            <div class="step">
-
-                <div class="number">
-                    1
-                </div>
-
-                <div class="step-text">
-
-                    Установите Happ или INCY,
-                    если приложение ещё не установлено.
-
-                </div>
-
-            </div>
-
-            <div class="step">
-
-                <div class="number">
-                    2
-                </div>
-
-                <div class="step-text">
-
-                    Нажмите кнопку
-                    «Добавить подписку».
-
-                </div>
-
-            </div>
-
-            <div class="step">
-
-                <div class="number">
-                    3
-                </div>
-
-                <div class="step-text">
-
-                    Подписка загрузится автоматически.
-
-                    После этого выберите сервер
-                    и подключитесь.
-
-                </div>
-
-            </div>
-
-        </div>
-
-    </div>
-
-    <div class="footer">
-        ixxy VPN • ID {user_id}
-    </div>
-
-</div>
-
-
-<script>
-
-const subscriptionUrl =
-    '{escaped_subscription}';
-
-
-async function copySubscription() {{
-
-    const button =
-        document.getElementById(
-            'copyButton'
-        );
-
-    try {{
-
-        await navigator.clipboard.writeText(
-            subscriptionUrl
-        );
-
-        button.innerText =
-            '✅ Ссылка скопирована';
-
-        setTimeout(() => {{
-
-            button.innerText =
-                '📋 Скопировать ссылку';
-
-        }}, 1800);
-
-    }}
-
-    catch (error) {{
-
-        const textarea =
-            document.createElement(
-                'textarea'
-            );
-
-        textarea.value =
-            subscriptionUrl;
-
-        document.body.appendChild(
-            textarea
-        );
-
-        textarea.select();
-
-        document.execCommand(
-            'copy'
-        );
-
-        textarea.remove();
-
-        button.innerText =
-            '✅ Ссылка скопирована';
-
-        setTimeout(() => {{
-
-            button.innerText =
-                '📋 Скопировать ссылку';
-
-        }}, 1800);
-
-    }}
-
-}}
-
-</script>
-
-</body>
-
-</html>
-"""
-
-
-# =========================================================
-# СТРАНИЦА ПОДПИСКИ
-# =========================================================
-
-@app.route(
-    "/s/<token>",
-    methods=["GET"]
-)
-def subscription_page(token):
-
-    user_id = get_user_id_from_token(
-        token
-    )
-
-    if not user_id:
-
-        return (
-            "<h1>404</h1>"
-            "<p>Неверная ссылка подписки.</p>",
-            404
-        )
-
-    subscription_url = (
-        f"{PUBLIC_SITE_URL}/sub/"
-        f"{SUBSCRIPTION_PREFIX}"
-        f"{user_id}"
-    )
-
-    return Response(
-        subscription_page_html(
-            user_id,
-            subscription_url
-        ),
-        mimetype="text/html"
-    )
-
-
-# =========================================================
-# ЧИСТАЯ ПОДПИСКА
-# =========================================================
-
-@app.route(
-    "/sub/<token>",
-    methods=["GET"]
-)
-def subscription_endpoint(token):
-
-    user_id = get_user_id_from_token(
-        token
-    )
-
-    if not user_id:
-
-        return (
-            "Invalid subscription",
-            404
-        )
-
-    content = get_subscription_content(
-        user_id
-    )
-
-    if not content:
-
-        return (
-            "Subscription not found",
-            404
-        )
-
-    return Response(
-        content,
-        status=200,
-        mimetype="text/plain"
-    )
-
-
-# =========================================================
-# HEALTH CHECK
-# =========================================================
-
-@app.route(
-    "/",
-    methods=["GET"]
-)
-def home():
-
-    return {
-        "service": "ixxy VPN",
-        "status": "ok"
-    }
-
-
-@app.route(
-    "/health",
-    methods=["GET"]
-)
-def health():
-
-    return {
-        "status": "ok"
-    }
 
 
 # =========================================================
@@ -737,7 +56,7 @@ def health():
 
 @app.route(
     "/webhook/cashera",
-    methods=["POST"]
+    methods=["POST"],
 )
 def cashera():
 
@@ -748,19 +67,23 @@ def cashera():
 
     received_api_key = request.headers.get(
         "X-Api-Key",
-        ""
+        "",
     ).strip()
 
     received_secret = request.headers.get(
         "X-Secret",
-        ""
+        "",
     ).strip()
+
+    # =====================================================
+    # API KEY
+    # =====================================================
 
     if CASHERA_API_KEY:
 
         if not hmac.compare_digest(
             received_api_key,
-            CASHERA_API_KEY
+            CASHERA_API_KEY,
         ):
 
             print(
@@ -769,14 +92,18 @@ def cashera():
 
             return (
                 "Unauthorized",
-                401
+                401,
             )
+
+    # =====================================================
+    # SECRET
+    # =====================================================
 
     if CASHERA_API_SECRET:
 
         if not hmac.compare_digest(
             received_secret,
-            CASHERA_API_SECRET
+            CASHERA_API_SECRET,
         ):
 
             print(
@@ -785,11 +112,15 @@ def cashera():
 
             return (
                 "Unauthorized",
-                401
+                401,
             )
 
+    # =====================================================
+    # JSON
+    # =====================================================
+
     data = request.get_json(
-        silent=True
+        silent=True,
     )
 
     print("💳 CASHERA DATA:")
@@ -803,11 +134,15 @@ def cashera():
 
         return "OK", 200
 
+    # =====================================================
+    # ПОИСК TRANSACTION
+    # =====================================================
+
     transaction = None
 
     if isinstance(
         data,
-        dict
+        dict,
     ):
 
         transaction = (
@@ -819,14 +154,14 @@ def cashera():
 
     elif isinstance(
         data,
-        (list, tuple)
+        (list, tuple),
     ):
 
         for item in data:
 
             if not isinstance(
                 item,
-                dict
+                dict,
             ):
                 continue
 
@@ -837,29 +172,32 @@ def cashera():
             ):
 
                 transaction = item
+
                 break
+
+    # =====================================================
+    # NESTED TRANSACTION
+    # =====================================================
 
     if isinstance(
         transaction,
-        dict
+        dict,
     ):
 
-        nested_transaction = (
-            transaction.get(
-                "transaction"
-            )
+        nested_transaction = transaction.get(
+            "transaction"
         )
 
         if isinstance(
             nested_transaction,
-            dict
+            dict,
         ):
 
             transaction = nested_transaction
 
     if not isinstance(
         transaction,
-        dict
+        dict,
     ):
 
         print(
@@ -870,6 +208,10 @@ def cashera():
 
     print("💳 TRANSACTION:")
     print(transaction)
+
+    # =====================================================
+    # ДАННЫЕ
+    # =====================================================
 
     status = transaction.get(
         "status"
@@ -943,10 +285,8 @@ def cashera():
 
     try:
 
-        payment = (
-            get_payment_by_payment_id(
-                payment_uuid
-            )
+        payment = get_payment_by_payment_id(
+            payment_uuid
         )
 
     except Exception as e:
@@ -957,7 +297,7 @@ def cashera():
 
         print(
             type(e).__name__,
-            str(e)
+            str(e),
         )
 
         return "OK", 200
@@ -1068,16 +408,16 @@ def cashera():
     # =====================================================
     # ПРОВЕРКА СУММЫ
     #
-    # ВАЖНО:
-    # Cashera передаёт amount в КОПЕЙКАХ.
+    # Cashera передаёт amount в копейках.
     #
-    # 1 ₽ = 100
-    # 379 ₽ = 37900
+    # 129 ₽  = 12900
+    # 379 ₽  = 37900
+    # 659 ₽  = 65900
+    # 1089 ₽ = 108900
     # =====================================================
 
     expected_amounts = {
 
-        # ТЕСТ
         30: 12900,
 
         90: 37900,
@@ -1088,10 +428,8 @@ def cashera():
 
     }
 
-    expected_amount = (
-        expected_amounts.get(
-            days
-        )
+    expected_amount = expected_amounts.get(
+        days
     )
 
     if expected_amount is not None:
@@ -1125,10 +463,7 @@ def cashera():
             f"{received_amount}"
         )
 
-        if (
-            received_amount
-            != expected_amount
-        ):
+        if received_amount != expected_amount:
 
             print(
                 "❌ НЕСОВПАДЕНИЕ СУММЫ!"
@@ -1156,7 +491,7 @@ def cashera():
 
         new_date = extend_subscription(
             user_id,
-            days
+            days,
         )
 
         print(
@@ -1171,16 +506,16 @@ def cashera():
         )
 
         # -------------------------------------------------
-        # ОБНОВЛЯЕМ GITHUB / HAPP
+        # ОБНОВЛЯЕМ GITHUB
         # -------------------------------------------------
 
         update_subscription_file(
             user_id,
-            new_date
+            new_date,
         )
 
         print(
-            f"☂️ Subscription file "
+            f"☂️ GitHub subscription "
             f"обновлён: {user_id}"
         )
 
@@ -1190,7 +525,7 @@ def cashera():
 
         update_payment_status(
             payment_db_id,
-            "paid"
+            "paid",
         )
 
         print(
@@ -1204,6 +539,12 @@ def cashera():
         # -------------------------------------------------
 
         if BOT_LOOP:
+
+            subscription_link = (
+                make_subscription_link(
+                    user_id
+                )
+            )
 
             message = f"""
 ✅ Оплата успешно получена!
@@ -1221,7 +562,9 @@ def cashera():
 🔄 Подписка обновлена автоматически.
 
 🔗 Ваша подписка:
-{make_subscription_link(user_id)}
+{subscription_link}
+
+Откройте эту ссылку в Happ.
 
 Спасибо за покупку! ❤️
 """
@@ -1230,11 +573,10 @@ def cashera():
 
                 bot.send_message(
                     user_id,
-                    message
+                    message,
                 ),
 
-                BOT_LOOP
-
+                BOT_LOOP,
             )
 
             print(
@@ -1281,7 +623,7 @@ def cashera():
 
 @app.route(
     "/add-days",
-    methods=["POST"]
+    methods=["POST"],
 )
 def add_days_api():
 
@@ -1293,7 +635,7 @@ def add_days_api():
 
         return {
             "status": "error",
-            "message": "no json"
+            "message": "no json",
         }, 400
 
     user_id = data.get(
@@ -1311,7 +653,7 @@ def add_days_api():
 
         return {
             "status": "error",
-            "message": "missing data"
+            "message": "missing data",
         }, 400
 
     try:
@@ -1329,17 +671,23 @@ def add_days_api():
             return {
                 "status": "error",
                 "message":
-                    "days must be greater than 0"
+                    "days must be greater than 0",
             }, 400
 
         new_date = extend_subscription(
             user_id,
-            days
+            days,
         )
 
         update_subscription_file(
             user_id,
-            new_date
+            new_date,
+        )
+
+        subscription_link = (
+            make_subscription_link(
+                user_id
+            )
         )
 
         print(
@@ -1354,9 +702,7 @@ def add_days_api():
             "date": new_date,
 
             "subscription":
-                make_subscription_link(
-                    user_id
-                )
+                subscription_link,
 
         }
 
@@ -1364,20 +710,47 @@ def add_days_api():
 
         print(
             "❌ ADD DAYS ERROR:",
-            e
+            e,
         )
 
         return {
 
             "status": "error",
 
-            "message": str(e)
+            "message": str(e),
 
         }, 500
 
 
 # =========================================================
-# FLASK
+# HEALTH
+# =========================================================
+
+@app.route(
+    "/",
+    methods=["GET"],
+)
+def home():
+
+    return {
+        "service": "ixxy VPN",
+        "status": "ok",
+    }
+
+
+@app.route(
+    "/health",
+    methods=["GET"],
+)
+def health():
+
+    return {
+        "status": "ok",
+    }
+
+
+# =========================================================
+# FLASK / WEBHOOK
 # =========================================================
 
 def run_webhook():
@@ -1385,14 +758,14 @@ def run_webhook():
     port = int(
         os.getenv(
             "PORT",
-            "8080"
+            "8080",
         )
     )
 
     app.run(
         host="0.0.0.0",
         port=port,
-        threaded=True
+        threaded=True,
     )
 
 
@@ -1573,7 +946,7 @@ async def main():
 
         print(
             "❌ Ошибка проверки подписок:",
-            e
+            e,
         )
 
     # =====================================================
@@ -1585,14 +958,14 @@ async def main():
         sync_all_active_users()
 
         print(
-            "✅ Серверы синхронизированы"
+            "✅ GitHub-подписки синхронизированы"
         )
 
     except Exception as e:
 
         print(
-            "❌ Ошибка синхронизации серверов:",
-            e
+            "❌ Ошибка синхронизации:",
+            e,
         )
 
     # =====================================================
@@ -1614,7 +987,7 @@ async def main():
 
         print(
             "❌ Ошибка запуска проверки:",
-            e
+            e,
         )
 
     # =====================================================
@@ -1644,7 +1017,7 @@ if __name__ == "__main__":
 
     threading.Thread(
         target=run_webhook,
-        daemon=True
+        daemon=True,
     ).start()
 
     asyncio.run(
