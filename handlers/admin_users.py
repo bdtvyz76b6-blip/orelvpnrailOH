@@ -11,7 +11,6 @@ from aiogram.fsm.state import StatesGroup, State
 
 from datetime import datetime
 from html import escape
-import os
 
 from config import ADMIN_IDS
 from keyboards import admin_menu
@@ -30,6 +29,7 @@ from database import (
 from github_update import (
     sync_servers_update,
     update_subscription_file,
+    get_subscription_link as get_github_subscription_link,
 )
 
 
@@ -40,20 +40,8 @@ router = Router()
 # НАСТРОЙКИ
 # ============================================================
 
-PUBLIC_SITE_URL = os.getenv(
-    "PUBLIC_SITE_URL",
-    "",
-).strip().rstrip("/")
-
-SUBSCRIPTION_PREFIX = os.getenv(
-    "SUBSCRIPTION_PREFIX",
-    "2ix847xy",
-).strip()
-
 USERS_PER_PAGE = 15
 
-# Максимальное количество дней для ручного продления.
-# Практически неограниченно, но защищаемся от мусорного ввода.
 MAX_CUSTOM_DAYS = 999_999_999
 
 
@@ -82,19 +70,47 @@ def is_admin(user_id: int) -> bool:
 
 
 # ============================================================
-# URL ПОЛЬЗОВАТЕЛЯ
+# ССЫЛКА НА ПОДПИСКУ
 # ============================================================
 
-def get_user_urls(user_id: int):
-    token = f"{SUBSCRIPTION_PREFIX}{user_id}"
+def get_user_subscription_url(user_id: int) -> str:
+    """
+    Прямая GitHub Raw ссылка:
 
-    if not PUBLIC_SITE_URL:
-        return "", ""
+    https://raw.githubusercontent.com/
+    bdtvyz76b6-blip/vpn-sub/main/users/USER_ID.txt
+    """
 
-    site_url = f"{PUBLIC_SITE_URL}/s/{token}"
-    subscription_url = f"{PUBLIC_SITE_URL}/sub/{token}"
+    try:
+        link = get_github_subscription_link(user_id)
 
-    return site_url, subscription_url
+        if link:
+            return str(link).strip()
+
+    except Exception as e:
+        print(
+            f"⚠️ GITHUB SUB LINK ERROR "
+            f"user={user_id}: {e}"
+        )
+
+    # Резервный вариант — ссылка из БД
+    try:
+        link = get_subscription_link(user_id)
+
+        if link:
+            return str(link).strip()
+
+    except Exception as e:
+        print(
+            f"⚠️ DB SUB LINK ERROR "
+            f"user={user_id}: {e}"
+        )
+
+    return (
+        "https://raw.githubusercontent.com/"
+        "bdtvyz76b6-blip/vpn-sub/main/users/"
+        f"{user_id}.txt"
+    )
 
 
 # ============================================================
@@ -132,6 +148,7 @@ def get_subscription_status(
                 str(subscription_until),
                 "%Y-%m-%d",
             ).date()
+
     except Exception:
         return "⚠️ Ошибка даты", 0
 
@@ -217,7 +234,7 @@ def add_url_button(
 
 
 # ============================================================
-# НАЗАД В ГЛАВНОЕ МЕНЮ
+# НАЗАД
 # ============================================================
 
 @router.callback_query(
@@ -240,6 +257,7 @@ async def admin_back(
             reply_markup=admin_menu(),
             parse_mode="HTML",
         )
+
     except TelegramBadRequest as e:
         if "message is not modified" not in str(e):
             raise
@@ -396,6 +414,7 @@ async def render_users(
 ):
     try:
         users = get_all_users()
+
     except Exception as e:
         print(
             f"❌ ADMIN USERS ERROR: {e}"
@@ -432,6 +451,7 @@ async def render_users(
                 reply_markup=keyboard,
                 parse_mode="HTML",
             )
+
         except TelegramBadRequest:
             pass
 
@@ -473,6 +493,7 @@ async def render_users(
             reply_markup=keyboard,
             parse_mode="HTML",
         )
+
     except TelegramBadRequest as e:
         if "message is not modified" not in str(e):
             raise
@@ -524,6 +545,7 @@ async def users_page(
                 "",
             )
         )
+
     except ValueError:
         await call.answer(
             "❌ Неверная страница",
@@ -662,6 +684,7 @@ async def admin_search_query(
 
     try:
         users = get_all_users()
+
     except Exception as e:
         print(
             f"❌ ADMIN SEARCH ERROR: {e}"
@@ -848,6 +871,7 @@ async def user_profile(
                 "",
             )
         )
+
     except ValueError:
         await call.answer(
             "❌ Неверный ID",
@@ -857,6 +881,7 @@ async def user_profile(
 
     try:
         user = get_user(user_id)
+
     except Exception as e:
         print(
             f"❌ ADMIN PROFILE ERROR "
@@ -888,23 +913,15 @@ async def user_profile(
         else None
     )
 
-    site_url, subscription_url = (
-        get_user_urls(user_id)
-    )
+    # ========================================================
+    # ПРЯМАЯ GITHUB ССЫЛКА
+    # ========================================================
 
-    try:
-        saved_link = get_subscription_link(
+    subscription_url = (
+        get_user_subscription_url(
             user_id
         )
-    except Exception as e:
-        print(
-            f"⚠️ SUB LINK ERROR "
-            f"{user_id}: {e}"
-        )
-        saved_link = ""
-
-    if saved_link:
-        subscription_url = saved_link
+    )
 
     status, days = get_subscription_status(
         subscription,
@@ -934,6 +951,7 @@ async def user_profile(
                 )
             else:
                 created_text = str(created_at)
+
         except Exception:
             created_text = str(created_at)
 
@@ -954,6 +972,7 @@ async def user_profile(
             if len(payment) > 5
             and payment[5] == "paid"
         )
+
     except Exception as e:
         print(
             f"⚠️ USER PAYMENTS ERROR "
@@ -1007,12 +1026,7 @@ async def user_profile(
 
     buttons = []
 
-    add_url_button(
-        buttons,
-        "🌐 Открыть сайт",
-        site_url,
-    )
-
+    # Только прямая подписка.
     add_url_button(
         buttons,
         "🔗 Открыть подписку",
@@ -1081,6 +1095,7 @@ async def user_profile(
             parse_mode="HTML",
             disable_web_page_preview=True,
         )
+
     except TelegramBadRequest as e:
         if "message is not modified" not in str(e):
             raise
@@ -1113,6 +1128,7 @@ async def extend_subscription_menu(
                 1,
             )
         )
+
     except ValueError:
         await call.answer(
             "❌ Неверный ID пользователя",
@@ -1122,6 +1138,7 @@ async def extend_subscription_menu(
 
     try:
         user = get_user(user_id)
+
     except Exception as e:
         print(
             f"❌ GET USER ERROR {user_id}: {e}"
@@ -1248,6 +1265,7 @@ async def custom_extend_start(
                 1,
             )
         )
+
     except ValueError:
         await call.answer(
             "❌ Неверный ID пользователя",
@@ -1296,7 +1314,8 @@ async def custom_extend_start(
         "• <code>45</code>\n"
         "• <code>180</code>\n"
         "• <code>1000</code>\n\n"
-        f"Максимум: <b>{MAX_CUSTOM_DAYS:,}</b> дней."
+        f"Максимум: "
+        f"<b>{MAX_CUSTOM_DAYS:,}</b> дней."
         .replace(",", " "),
         reply_markup=keyboard,
         parse_mode="HTML",
@@ -1331,8 +1350,10 @@ async def custom_extend_cancel(
                 1,
             )
         )
+
     except ValueError:
         await state.clear()
+
         await call.answer(
             "❌ Неверный ID",
             show_alert=True,
@@ -1359,6 +1380,7 @@ async def custom_extend_cancel(
             ),
             parse_mode="HTML",
         )
+
     except TelegramBadRequest:
         pass
 
@@ -1385,7 +1407,6 @@ async def custom_extend_days(
         .replace(" ", "")
     )
 
-    # Разрешаем только целое положительное число
     if not raw_days.isdigit():
         await message.answer(
             "❌ <b>Неверное количество дней.</b>\n\n"
@@ -1397,9 +1418,10 @@ async def custom_extend_days(
 
     try:
         days = int(raw_days)
+
     except ValueError:
         await message.answer(
-            "❌ Слишком большое число.",
+            "❌ Слишком большое число."
         )
         return
 
@@ -1436,6 +1458,7 @@ async def custom_extend_days(
 
     try:
         user = get_user(user_id)
+
     except Exception as e:
         print(
             f"❌ CUSTOM EXTEND GET USER ERROR "
@@ -1466,10 +1489,6 @@ async def custom_extend_days(
     await state.clear()
 
     try:
-        # ====================================================
-        # 1. ПРОДЛЕВАЕМ В БАЗЕ
-        # ====================================================
-
         new_date = extend_subscription(
             user_id,
             days,
@@ -1479,10 +1498,6 @@ async def custom_extend_days(
             raise RuntimeError(
                 "База данных не вернула новую дату"
             )
-
-        # ====================================================
-        # 2. ОБНОВЛЯЕМ ФАЙЛ ПОДПИСКИ
-        # ====================================================
 
         try:
             update_subscription_file(
@@ -1534,10 +1549,6 @@ async def custom_extend_days(
             )
 
             return
-
-        # ====================================================
-        # УСПЕХ
-        # ====================================================
 
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
@@ -1598,7 +1609,7 @@ async def custom_extend_days(
 
 
 # ============================================================
-# ПРОДЛЕНИЕ ПОДПИСКИ — ГОТОВЫЕ СРОКИ
+# ПРОДЛЕНИЕ — ГОТОВЫЕ СРОКИ
 # ============================================================
 
 @router.callback_query(
@@ -1617,7 +1628,6 @@ async def extend_subscription_admin(
     try:
         parts = call.data.split("_")
 
-        # extend_days_USERID_DAYS
         if len(parts) != 4:
             raise ValueError
 
@@ -1645,6 +1655,7 @@ async def extend_subscription_admin(
 
     try:
         user = get_user(user_id)
+
     except Exception as e:
         print(
             f"❌ GET USER ERROR "
@@ -1671,14 +1682,10 @@ async def extend_subscription_admin(
     )
 
     await call.answer(
-        "⏳ Продлеваю...",
+        "⏳ Продлеваю..."
     )
 
     try:
-        # ====================================================
-        # 1. ПРОДЛЕВАЕМ В БАЗЕ
-        # ====================================================
-
         new_date = extend_subscription(
             user_id,
             days,
@@ -1688,10 +1695,6 @@ async def extend_subscription_admin(
             raise RuntimeError(
                 "База данных не вернула новую дату"
             )
-
-        # ====================================================
-        # 2. ОБНОВЛЯЕМ ФАЙЛ ПОДПИСКИ
-        # ====================================================
 
         try:
             update_subscription_file(
@@ -1814,6 +1817,7 @@ async def extend_subscription_admin(
                 reply_markup=keyboard,
                 parse_mode="HTML",
             )
+
         except TelegramBadRequest:
             pass
 
@@ -1842,6 +1846,7 @@ async def admin_user_payments(
                 "",
             )
         )
+
     except ValueError:
         await call.answer(
             "❌ Неверный ID",
@@ -1854,6 +1859,7 @@ async def admin_user_payments(
         payments = get_user_payments(
             user_id
         )
+
     except Exception as e:
         print(
             f"❌ PAYMENTS ERROR "
@@ -1893,6 +1899,7 @@ async def admin_user_payments(
 
     else:
         for payment in payments[:15]:
+
             payment_id = (
                 payment[0]
                 if len(payment) > 0
@@ -1954,6 +1961,7 @@ async def admin_user_payments(
                         date_text = str(
                             created_at
                         )
+
                 except Exception:
                     date_text = str(
                         created_at
@@ -2011,6 +2019,7 @@ async def admin_user_payments(
             reply_markup=keyboard,
             parse_mode="HTML",
         )
+
     except TelegramBadRequest as e:
         if "message is not modified" not in str(e):
             raise
@@ -2019,7 +2028,7 @@ async def admin_user_payments(
 
 
 # ============================================================
-# ПОДТВЕРЖДЕНИЕ ОТКЛЮЧЕНИЯ
+# ОТКЛЮЧЕНИЕ
 # ============================================================
 
 @router.callback_query(
@@ -2042,6 +2051,7 @@ async def disable_user_subscription(
                 "",
             )
         )
+
     except ValueError:
         await call.answer(
             "❌ Неверный ID",
@@ -2051,6 +2061,7 @@ async def disable_user_subscription(
 
     try:
         user = get_user(user_id)
+
     except Exception as e:
         print(
             f"❌ GET USER ERROR "
@@ -2103,12 +2114,14 @@ async def disable_user_subscription(
             f"👤 Пользователь: "
             f"<b>{h(username)}</b>\n"
             f"🆔 ID: <code>{user_id}</code>\n\n"
-            "Подписка будет отключена, "
-            "а сохранённая ссылка удалена.\n\n"
+            "Подписка будет отключена.\n"
+            "Файл пользователя будет переведён "
+            "в состояние неактивной подписки.\n\n"
             "<b>Продолжить?</b>",
             reply_markup=keyboard,
             parse_mode="HTML",
         )
+
     except TelegramBadRequest as e:
         if "message is not modified" not in str(e):
             raise
@@ -2140,6 +2153,7 @@ async def confirm_disable_subscription(
                 "",
             )
         )
+
     except ValueError:
         await call.answer(
             "❌ Неверный ID",
@@ -2151,6 +2165,7 @@ async def confirm_disable_subscription(
         disable_subscription(
             user_id
         )
+
     except Exception as e:
         print(
             f"❌ DISABLE ERROR "
@@ -2163,12 +2178,9 @@ async def confirm_disable_subscription(
         )
         return
 
-    site_url, subscription_url = (
-        get_user_urls(user_id)
-    )
-
     try:
         user = get_user(user_id)
+
     except Exception:
         user = None
 
@@ -2178,6 +2190,12 @@ async def confirm_disable_subscription(
     if user:
         username = user[1] or "нет"
         first_name = user[2] or "нет"
+
+    subscription_url = (
+        get_user_subscription_url(
+            user_id
+        )
+    )
 
     text = (
         "👤 <b>Пользователь</b>\n"
@@ -2211,12 +2229,7 @@ async def confirm_disable_subscription(
 
     buttons = []
 
-    add_url_button(
-        buttons,
-        "🌐 Открыть сайт",
-        site_url,
-    )
-
+    # Только прямая GitHub Raw ссылка.
     add_url_button(
         buttons,
         "🔗 Открыть подписку",
@@ -2263,6 +2276,7 @@ async def confirm_disable_subscription(
             parse_mode="HTML",
             disable_web_page_preview=True,
         )
+
     except TelegramBadRequest as e:
         if "message is not modified" not in str(e):
             raise
@@ -2292,6 +2306,7 @@ async def admin_stats(
     try:
         users = get_all_users()
         payments = get_payments()
+
     except Exception as e:
         print(
             f"❌ ADMIN STATS ERROR: {e}"
@@ -2314,6 +2329,7 @@ async def admin_stats(
     no_subscription = 0
 
     for user in users:
+
         subscription = (
             user[3]
             if len(user) > 3
@@ -2332,8 +2348,10 @@ async def admin_stats(
         )
 
         if subscription == "trial":
+
             if days > 0:
                 trial_users += 1
+
             elif status == "⛔ Истёк":
                 expired_users += 1
 
@@ -2372,6 +2390,7 @@ async def admin_stats(
         current_time = datetime.now().strftime(
             "%d.%m.%Y %H:%M"
         )
+
     except Exception:
         current_time = "—"
 
@@ -2433,6 +2452,7 @@ async def admin_stats(
             reply_markup=keyboard,
             parse_mode="HTML",
         )
+
     except TelegramBadRequest as e:
         if "message is not modified" not in str(e):
             raise
@@ -2522,5 +2542,6 @@ async def sync_servers(
                 f"<code>{h(str(e))}</code>",
                 parse_mode="HTML",
             )
+
         except TelegramBadRequest:
             pass
