@@ -41,7 +41,6 @@ router = Router()
 # ============================================================
 
 USERS_PER_PAGE = 15
-
 MAX_CUSTOM_DAYS = 999_999_999
 
 
@@ -74,13 +73,6 @@ def is_admin(user_id: int) -> bool:
 # ============================================================
 
 def get_user_subscription_url(user_id: int) -> str:
-    """
-    Прямая GitHub Raw ссылка:
-
-    https://raw.githubusercontent.com/
-    bdtvyz76b6-blip/vpn-sub/main/users/USER_ID.txt
-    """
-
     try:
         link = get_github_subscription_link(user_id)
 
@@ -93,7 +85,6 @@ def get_user_subscription_url(user_id: int) -> str:
             f"user={user_id}: {e}"
         )
 
-    # Резервный вариант — ссылка из БД
     try:
         link = get_subscription_link(user_id)
 
@@ -250,6 +241,9 @@ async def admin_back(
         )
         return
 
+    # Сначала закрываем callback
+    await call.answer()
+
     try:
         await call.message.edit_text(
             "🛠 <b>Админ-панель ixxy</b>\n\n"
@@ -261,8 +255,6 @@ async def admin_back(
     except TelegramBadRequest as e:
         if "message is not modified" not in str(e):
             raise
-
-    await call.answer()
 
 
 # ============================================================
@@ -420,10 +412,14 @@ async def render_users(
             f"❌ ADMIN USERS ERROR: {e}"
         )
 
-        await call.answer(
-            "❌ Ошибка базы данных",
-            show_alert=True,
-        )
+        try:
+            await call.message.edit_text(
+                "❌ <b>Ошибка базы данных.</b>",
+                parse_mode="HTML",
+            )
+        except TelegramBadRequest:
+            pass
+
         return
 
     if not users:
@@ -452,10 +448,10 @@ async def render_users(
                 parse_mode="HTML",
             )
 
-        except TelegramBadRequest:
-            pass
+        except TelegramBadRequest as e:
+            if "message is not modified" not in str(e):
+                raise
 
-        await call.answer()
         return
 
     (
@@ -498,8 +494,6 @@ async def render_users(
         if "message is not modified" not in str(e):
             raise
 
-    await call.answer()
-
 
 # ============================================================
 # USERS
@@ -518,7 +512,14 @@ async def show_users(
         )
         return
 
-    await render_users(call, 0)
+    # ВАЖНО:
+    # закрываем callback ДО работы с БД
+    await call.answer()
+
+    await render_users(
+        call,
+        0,
+    )
 
 
 # ============================================================
@@ -552,6 +553,10 @@ async def users_page(
             show_alert=True,
         )
         return
+
+    # ВАЖНО:
+    # callback закрываем сразу
+    await call.answer()
 
     await render_users(
         call,
@@ -590,6 +595,8 @@ async def admin_search(
         )
         return
 
+    await call.answer()
+
     await state.set_state(
         AdminSearch.waiting_query
     )
@@ -616,8 +623,6 @@ async def admin_search(
         parse_mode="HTML",
     )
 
-    await call.answer()
-
 
 # ============================================================
 # ОТМЕНА ПОИСКА
@@ -637,6 +642,8 @@ async def admin_search_cancel(
         )
         return
 
+    await call.answer()
+
     await state.clear()
 
     await call.message.answer(
@@ -652,8 +659,6 @@ async def admin_search_cancel(
             ]
         ),
     )
-
-    await call.answer()
 
 
 # ============================================================
@@ -879,6 +884,9 @@ async def user_profile(
         )
         return
 
+    # Закрываем callback до БД
+    await call.answer()
+
     try:
         user = get_user(user_id)
 
@@ -888,16 +896,14 @@ async def user_profile(
             f"{user_id}: {e}"
         )
 
-        await call.answer(
-            "❌ Ошибка базы данных",
-            show_alert=True,
+        await call.message.answer(
+            "❌ Ошибка базы данных."
         )
         return
 
     if not user:
-        await call.answer(
-            "❌ Пользователь не найден",
-            show_alert=True,
+        await call.message.answer(
+            "❌ Пользователь не найден."
         )
         return
 
@@ -912,10 +918,6 @@ async def user_profile(
         if len(user) > 11
         else None
     )
-
-    # ========================================================
-    # ПРЯМАЯ GITHUB ССЫЛКА
-    # ========================================================
 
     subscription_url = (
         get_user_subscription_url(
@@ -982,10 +984,6 @@ async def user_profile(
         payment_count = 0
         paid_count = 0
 
-    days_text = (
-        f"⏳ <b>Осталось:</b> {days} д."
-    )
-
     text = (
         "👤 <b>Пользователь</b>\n"
         "━━━━━━━━━━━━━━━━━━\n\n"
@@ -1010,7 +1008,8 @@ async def user_profile(
         f"📅 <b>До:</b> "
         f"{date_text}\n"
 
-        f"{days_text}\n\n"
+        f"⏳ <b>Осталось:</b> "
+        f"{days} д.\n\n"
 
         "━━━━━━━━━━━━━━━━━━\n\n"
 
@@ -1026,7 +1025,6 @@ async def user_profile(
 
     buttons = []
 
-    # Только прямая подписка.
     add_url_button(
         buttons,
         "🔗 Открыть подписку",
@@ -1100,8 +1098,6 @@ async def user_profile(
         if "message is not modified" not in str(e):
             raise
 
-    await call.answer()
-
 
 # ============================================================
 # ВЫБОР СРОКА ПРОДЛЕНИЯ
@@ -1136,6 +1132,9 @@ async def extend_subscription_menu(
         )
         return
 
+    # Сразу отвечаем Telegram
+    await call.answer()
+
     try:
         user = get_user(user_id)
 
@@ -1144,16 +1143,14 @@ async def extend_subscription_menu(
             f"❌ GET USER ERROR {user_id}: {e}"
         )
 
-        await call.answer(
-            "❌ Ошибка базы данных",
-            show_alert=True,
+        await call.message.answer(
+            "❌ Ошибка базы данных."
         )
         return
 
     if not user:
-        await call.answer(
-            "❌ Пользователь не найден",
-            show_alert=True,
+        await call.message.answer(
+            "❌ Пользователь не найден."
         )
         return
 
@@ -1236,8 +1233,6 @@ async def extend_subscription_menu(
         parse_mode="HTML",
     )
 
-    await call.answer()
-
 
 # ============================================================
 # ЗАПРОС СВОЕГО КОЛИЧЕСТВА ДНЕЙ
@@ -1273,12 +1268,14 @@ async def custom_extend_start(
         )
         return
 
+    # Закрываем callback сразу
+    await call.answer()
+
     user = get_user(user_id)
 
     if not user:
-        await call.answer(
-            "❌ Пользователь не найден",
-            show_alert=True,
+        await call.message.answer(
+            "❌ Пользователь не найден."
         )
         return
 
@@ -1321,8 +1318,6 @@ async def custom_extend_start(
         parse_mode="HTML",
     )
 
-    await call.answer()
-
 
 # ============================================================
 # ОТМЕНА СВОЕГО ПРОДЛЕНИЯ
@@ -1360,6 +1355,8 @@ async def custom_extend_cancel(
         )
         return
 
+    await call.answer("❌ Отменено")
+
     await state.clear()
 
     try:
@@ -1383,8 +1380,6 @@ async def custom_extend_cancel(
 
     except TelegramBadRequest:
         pass
-
-    await call.answer("❌ Отменено")
 
 
 # ============================================================
@@ -1653,6 +1648,11 @@ async def extend_subscription_admin(
         )
         return
 
+    # Закрываем callback ДО БД
+    await call.answer(
+        "⏳ Продлеваю..."
+    )
+
     try:
         user = get_user(user_id)
 
@@ -1662,16 +1662,14 @@ async def extend_subscription_admin(
             f"{user_id}: {e}"
         )
 
-        await call.answer(
-            "❌ Ошибка базы данных",
-            show_alert=True,
+        await call.message.answer(
+            "❌ Ошибка базы данных."
         )
         return
 
     if not user:
-        await call.answer(
-            "❌ Пользователь не найден",
-            show_alert=True,
+        await call.message.answer(
+            "❌ Пользователь не найден."
         )
         return
 
@@ -1679,10 +1677,6 @@ async def extend_subscription_admin(
         user[1]
         or user[2]
         or f"ID {user_id}"
-    )
-
-    await call.answer(
-        "⏳ Продлеваю..."
     )
 
     try:
@@ -1854,6 +1848,9 @@ async def admin_user_payments(
         )
         return
 
+    # Сразу закрываем callback
+    await call.answer()
+
     try:
         user = get_user(user_id)
         payments = get_user_payments(
@@ -1866,16 +1863,14 @@ async def admin_user_payments(
             f"{user_id}: {e}"
         )
 
-        await call.answer(
-            "❌ Ошибка базы данных",
-            show_alert=True,
+        await call.message.answer(
+            "❌ Ошибка базы данных."
         )
         return
 
     if not user:
-        await call.answer(
-            "❌ Пользователь не найден",
-            show_alert=True,
+        await call.message.answer(
+            "❌ Пользователь не найден."
         )
         return
 
@@ -2024,8 +2019,6 @@ async def admin_user_payments(
         if "message is not modified" not in str(e):
             raise
 
-    await call.answer()
-
 
 # ============================================================
 # ОТКЛЮЧЕНИЕ
@@ -2059,6 +2052,8 @@ async def disable_user_subscription(
         )
         return
 
+    await call.answer()
+
     try:
         user = get_user(user_id)
 
@@ -2068,16 +2063,14 @@ async def disable_user_subscription(
             f"{user_id}: {e}"
         )
 
-        await call.answer(
-            "❌ Ошибка базы данных",
-            show_alert=True,
+        await call.message.answer(
+            "❌ Ошибка базы данных."
         )
         return
 
     if not user:
-        await call.answer(
-            "❌ Пользователь не найден",
-            show_alert=True,
+        await call.message.answer(
+            "❌ Пользователь не найден."
         )
         return
 
@@ -2126,8 +2119,6 @@ async def disable_user_subscription(
         if "message is not modified" not in str(e):
             raise
 
-    await call.answer()
-
 
 # ============================================================
 # ПОДТВЕРЖДЁННОЕ ОТКЛЮЧЕНИЕ
@@ -2161,6 +2152,10 @@ async def confirm_disable_subscription(
         )
         return
 
+    await call.answer(
+        "⏳ Отключаю..."
+    )
+
     try:
         disable_subscription(
             user_id
@@ -2172,9 +2167,8 @@ async def confirm_disable_subscription(
             f"{user_id}: {e}"
         )
 
-        await call.answer(
-            "❌ Ошибка при отключении",
-            show_alert=True,
+        await call.message.answer(
+            "❌ Ошибка при отключении."
         )
         return
 
@@ -2229,7 +2223,6 @@ async def confirm_disable_subscription(
 
     buttons = []
 
-    # Только прямая GitHub Raw ссылка.
     add_url_button(
         buttons,
         "🔗 Открыть подписку",
@@ -2281,10 +2274,6 @@ async def confirm_disable_subscription(
         if "message is not modified" not in str(e):
             raise
 
-    await call.answer(
-        "✅ Подписка отключена"
-    )
-
 
 # ============================================================
 # СТАТИСТИКА
@@ -2303,6 +2292,9 @@ async def admin_stats(
         )
         return
 
+    # Сразу закрываем callback
+    await call.answer()
+
     try:
         users = get_all_users()
         payments = get_payments()
@@ -2312,9 +2304,8 @@ async def admin_stats(
             f"❌ ADMIN STATS ERROR: {e}"
         )
 
-        await call.answer(
-            "❌ Ошибка базы данных",
-            show_alert=True,
+        await call.message.answer(
+            "❌ Ошибка базы данных."
         )
         return
 
@@ -2457,8 +2448,6 @@ async def admin_stats(
         if "message is not modified" not in str(e):
             raise
 
-    await call.answer()
-
 
 # ============================================================
 # СИНХРОНИЗАЦИЯ СЕРВЕРОВ
@@ -2479,6 +2468,8 @@ async def sync_servers(
         )
         return
 
+    # КРИТИЧНО:
+    # callback закрывается ДО синхронизации
     await call.answer(
         "🔄 Обновление началось..."
     )
