@@ -1,8 +1,3 @@
-import os
-import shutil
-import subprocess
-from urllib.parse import quote
-
 from aiogram import Router, F
 from aiogram.types import (
     Message,
@@ -36,22 +31,6 @@ router = Router()
 
 
 # ============================================================
-# НАСТРОЙКИ САЙТА
-# ============================================================
-
-PUBLIC_SITE_URL = os.getenv(
-    "PUBLIC_SITE_URL",
-    "https://orelvpnrailoh-1.onrender.com",
-).rstrip("/")
-
-
-SUBSCRIPTION_PREFIX = os.getenv(
-    "SUBSCRIPTION_PREFIX",
-    "2ix847xy",
-).strip()
-
-
-# ============================================================
 # TELEGRAM
 # ============================================================
 
@@ -59,238 +38,24 @@ TELEGRAM_URL = "https://t.me/orelvpntopbot"
 
 
 # ============================================================
-# HPWNR
+# GITHUB RAW — ПРЯМАЯ ССЫЛКА ПОДПИСКИ
 # ============================================================
 
-def find_hpwnr():
+GITHUB_RAW_URL = (
+    "https://raw.githubusercontent.com/"
+    "bdtvyz76b6-blip/vpn-sub/main/users"
+)
+
+
+def get_subscription_url(user_id: int) -> str:
     """
-    Ищет установленный hpwnr.
+    Возвращает постоянную прямую ссылку
+    на персональный файл пользователя GitHub.
     """
 
-    candidates = [
-        shutil.which("hpwnr"),
-
-        os.path.join(
-            os.getcwd(),
-            "bin",
-            "hpwnr",
-        ),
-
-        "/opt/render/project/src/bin/hpwnr",
-
-        "/app/bin/hpwnr",
-
-        "/usr/local/bin/hpwnr",
-    ]
-
-    for path in candidates:
-
-        if not path:
-            continue
-
-        if os.path.isfile(path) and os.access(
-            path,
-            os.X_OK,
-        ):
-            return path
-
-    return None
-
-
-# ============================================================
-# СОЗДАНИЕ HAPP CRYPT4
-# ============================================================
-
-def generate_happ_crypt4(
-    subscription_url: str,
-):
-
-    hpwnr = find_hpwnr()
-
-    if not hpwnr:
-
-        print(
-            "❌ hpwnr не найден"
-        )
-
-        return None
-
-    try:
-
-        result = subprocess.run(
-            [
-                hpwnr,
-                subscription_url,
-                "crypt4",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=20,
-        )
-
-        stdout = (
-            result.stdout or ""
-        ).strip()
-
-        stderr = (
-            result.stderr or ""
-        ).strip()
-
-        print(
-            f"🔐 hpwnr returncode: "
-            f"{result.returncode}"
-        )
-
-        if stderr:
-
-            print(
-                f"⚠️ hpwnr stderr: "
-                f"{stderr}"
-            )
-
-        if result.returncode != 0:
-
-            print(
-                "❌ hpwnr завершился "
-                "с ошибкой"
-            )
-
-            return None
-
-        # ----------------------------------------------------
-        # Ищем непосредственно happ://crypt4/
-        # ----------------------------------------------------
-
-        position = stdout.find(
-            "happ://crypt4/"
-        )
-
-        if position == -1:
-
-            print(
-                "❌ hpwnr не вернул "
-                "happ://crypt4/"
-            )
-
-            print(
-                f"stdout: {stdout}"
-            )
-
-            return None
-
-        encrypted = stdout[
-            position:
-        ].splitlines()[0].strip()
-
-        if not encrypted.startswith(
-            "happ://crypt4/"
-        ):
-
-            print(
-                "❌ Некорректный Crypt4"
-            )
-
-            return None
-
-        # ----------------------------------------------------
-        # Создаём ссылку через Happ Web
-        # ----------------------------------------------------
-
-        happ_web_url = (
-            "https://happ.vpnbypass.click/"
-            "?RAW="
-            + quote(
-                encrypted,
-                safe=":/+=",
-            )
-        )
-
-        return happ_web_url
-
-    except subprocess.TimeoutExpired:
-
-        print(
-            "❌ hpwnr: timeout"
-        )
-
-        return None
-
-    except Exception as e:
-
-        print(
-            f"❌ Ошибка Crypt4: {e}"
-        )
-
-        return None
-
-
-# ============================================================
-# ПЕРСОНАЛЬНЫЙ ТОКЕН
-# ============================================================
-
-def get_subscription_token(
-    user_id: int,
-) -> str:
-
     return (
-        f"{SUBSCRIPTION_PREFIX}"
-        f"{user_id}"
-    )
-
-
-# ============================================================
-# ССЫЛКА СТРАНИЦЫ
-# ============================================================
-
-def get_subscription_page_url(
-    user_id: int,
-) -> str:
-
-    token = get_subscription_token(
-        user_id
-    )
-
-    return (
-        f"{PUBLIC_SITE_URL}"
-        f"/s/{token}"
-    )
-
-
-# ============================================================
-# ПРЯМАЯ ССЫЛКА ПОДПИСКИ
-#
-# Эта ссылка показывается пользователю
-# для подключения в других клиентах.
-# ============================================================
-
-def get_subscription_url(
-    user_id: int,
-) -> str:
-
-    token = get_subscription_token(
-        user_id
-    )
-
-    return (
-        f"{PUBLIC_SITE_URL}"
-        f"/sub/{token}"
-    )
-
-
-# ============================================================
-# CRYPT4 ССЫЛКА ПОЛЬЗОВАТЕЛЯ
-# ============================================================
-
-def get_happ_link(
-    user_id: int,
-):
-
-    subscription_url = get_subscription_url(
-        user_id
-    )
-
-    return generate_happ_crypt4(
-        subscription_url
+        f"{GITHUB_RAW_URL}/"
+        f"{user_id}.txt"
     )
 
 
@@ -299,7 +64,6 @@ def get_happ_link(
 # ============================================================
 
 class PromoState(StatesGroup):
-
     waiting_code = State()
 
 
@@ -437,10 +201,6 @@ async def show_cabinet(
 Выберите действие ниже 👇
 """
 
-    # ========================================================
-    # КНОПКИ
-    # ========================================================
-
     await message.answer(
         text,
         reply_markup=cabinet_keyboard(),
@@ -518,41 +278,12 @@ async def get_link(
         return
 
     # ========================================================
-    # ПРЯМАЯ ССЫЛКА ПОДПИСКИ
+    # ПРЯМАЯ GITHUB RAW ССЫЛКА
     # ========================================================
 
     subscription_url = get_subscription_url(
         user_id
     )
-
-    # ========================================================
-    # ССЫЛКА СТРАНИЦЫ IXYY
-    # ========================================================
-
-    site_url = get_subscription_page_url(
-        user_id
-    )
-
-    # ========================================================
-    # CRYPT4 / HAPP
-    # ========================================================
-
-    happ_link = get_happ_link(
-        user_id
-    )
-
-    # --------------------------------------------------------
-    # Если Crypt4 не создался
-    # --------------------------------------------------------
-
-    if not happ_link:
-
-        await callback.answer(
-            "❌ Не удалось создать ссылку для Happ",
-            show_alert=True,
-        )
-
-        return
 
     # ========================================================
     # КНОПКИ
@@ -563,21 +294,14 @@ async def get_link(
 
             [
                 InlineKeyboardButton(
-                    text="⚡ Подключиться через Happ",
-                    url=happ_link,
+                    text="🔗 Открыть подписку",
+                    url=subscription_url,
                 )
             ],
 
             [
                 InlineKeyboardButton(
-                    text="🌐 Открыть ixxy VPN",
-                    url=site_url,
-                )
-            ],
-
-            [
-                InlineKeyboardButton(
-                    text="📋 Получить Crypt4",
+                    text="📋 Получить ссылку",
                     callback_data="copy_subscription_link",
                 )
             ],
@@ -592,22 +316,21 @@ async def get_link(
     text = f"""
 ⚡ <b>Подключение ixxy VPN</b>
 
-🔗 <b>Ссылка для других клиентов, кроме Happ:</b>
+🔗 <b>Ваша ссылка подписки:</b>
 
 <code>{subscription_url}</code>
 
 ━━━━━━━━━━━━━━━━━━
 
-⚡ <b>Для подключения в Happ</b>
-нажмите на кнопку ниже.
+📲 Скопируйте ссылку и добавьте
+её в VPN-клиент.
 
-🌐 Также можно открыть
-персональную страницу ixxy VPN.
+☂️ Ссылка постоянная и не меняется.
 
-🔒 Серверные настройки
-не отображаются.
+🔄 При обновлении серверов
+ссылка останется прежней.
 
-👇 <b>Выберите способ подключения:</b>
+👇 <b>Выберите действие:</b>
 """
 
     await callback.message.answer(
@@ -621,7 +344,7 @@ async def get_link(
 
 
 # ============================================================
-# КОПИРОВАНИЕ CRYPT4
+# ПОЛУЧИТЬ ССЫЛКУ
 # ============================================================
 
 @router.callback_query(
@@ -662,48 +385,36 @@ async def copy_subscription_link(
         return
 
     # --------------------------------------------------------
-    # Создаём Crypt4
+    # Прямая ссылка
     # --------------------------------------------------------
 
-    happ_link = get_happ_link(
+    subscription_url = get_subscription_url(
         user_id
     )
 
-    if not happ_link:
-
-        await callback.answer(
-            "❌ Не удалось создать Crypt4",
-            show_alert=True,
-        )
-
-        return
-
     # --------------------------------------------------------
-    # Отправляем Crypt4
+    # Отправляем ссылку
     # --------------------------------------------------------
 
     await callback.message.answer(
         f"""
-🔐 <b>Ваша защищённая ссылка</b>
+🔗 <b>Ваша ссылка подписки</b>
 
-<code>{happ_link}</code>
+<code>{subscription_url}</code>
 
 ━━━━━━━━━━━━━━━━━━
 
-📲 Скопируйте её и используйте
-для подключения к ixxy VPN.
+📲 Скопируйте ссылку и добавьте
+её в VPN-клиент.
 
-🔒 Обычная ссылка подписки
-для других клиентов:
-
-<code>{get_subscription_url(user_id)}</code>
+☂️ Ссылка постоянная.
 """,
         parse_mode="HTML",
         disable_web_page_preview=True,
     )
 
     await callback.answer(
-        "📋 Crypt4-ссылка отправлена"
+        "📋 Ссылка отправлена"
     )
 
 
@@ -821,7 +532,7 @@ async def refresh_subscription(
         return
 
     # --------------------------------------------------------
-    # Обновление
+    # Обновление GitHub
     # --------------------------------------------------------
 
     await callback.answer(
@@ -835,13 +546,20 @@ async def refresh_subscription(
             date_text,
         )
 
+        subscription_url = get_subscription_url(
+            user_id
+        )
+
         await callback.message.answer(
-            """
+            f"""
 ✅ <b>Серверы обновлены</b>
 
-Ссылка подключения осталась прежней.
+🔗 Ссылка осталась прежней:
+
+<code>{subscription_url}</code>
 """,
             parse_mode="HTML",
+            disable_web_page_preview=True,
         )
 
     except Exception as e:
@@ -1022,7 +740,7 @@ async def activate_promo(
     )
 
     # --------------------------------------------------------
-    # Обновляем сервер
+    # Обновляем GitHub-файл
     # --------------------------------------------------------
 
     try:
