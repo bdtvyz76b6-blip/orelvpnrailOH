@@ -1,1794 +1,1508 @@
 import os
+import logging
+from datetime import datetime, timedelta, timezone
+from typing import Optional, Any
 import psycopg2
-from psycopg2 import IntegrityError
-from datetime import datetime, timedelta, timezone, date
-
-
-# =========================================================
-# DATABASE
-# =========================================================
-
-DATABASE_URL = os.getenv("DATABASE_URL", "")
-
-MAX_PROMO_DAYS = 999_999_999_999
-MAX_DATE = date(9999, 12, 31)
-
-
-# =========================================================
-# ВРЕМЯ
-# =========================================================
-#
-# Москва = UTC+3
-# Москва - 3 часа = UTC+0
-#
-# Поэтому используем UTC.
-# Все даты подписок считаются по этой временной зоне.
-# =========================================================
-
+from psycopg2.extras import RealDictCursor
+from dotenv import load_dotenv
+load_dotenv()
+logger = logging.getLogger(__name__)
+# ============================================================
+# CONFIG
+# ============================================================
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+MAX_PROMO_DAYS = int(
+    os.getenv(
+        "MAX_PROMO_DAYS",
+        "999999999999",
+    )
+)
 UTC = timezone.utc
-
-
-def now_msk():
-    """
-    Время проекта:
-    Москва - 3 часа = UTC.
-    Возвращает timezone-aware datetime.
-    """
+# ============================================================
+# TIME
+# ============================================================
+def now_utc() -> datetime:
     return datetime.now(UTC)
-
-
-def today_msk():
+def normalize_datetime(value: Any) -> Optional[datetime]:
     """
-    Текущая дата проекта.
-
-    Москва - 3 часа = UTC.
-    Возвращает обычный date без timezone.
+    Приводит datetime из PostgreSQL к timezone-aware UTC.
     """
-    return now_msk().date()
-
-
-def today_msk_string():
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
+    return None
+def format_date(value: Any) -> str:
     """
-    Текущая дата проекта в формате YYYY-MM-DD.
+    Формат даты для Telegram.
     """
-    return today_msk().isoformat()
-
-
-# =========================================================
-# CONNECTION
-# =========================================================
-
+    dt = normalize_datetime(value)
+    if not dt:
+        return "—"
+    return dt.strftime("%d.%m.%Y")
+def subscription_active(subscription_until: Any) -> bool:
+    """
+    Проверяет, действует ли подписка.
+    """
+    dt = normalize_datetime(subscription_until)
+    if not dt:
+        return False
+    return dt > now_utc()
+# ============================================================
+# DATABASE CONNECTION
+# ============================================================
 def connect():
-
+    """
+    Подключение к PostgreSQL.
+    Важно:
+    DATABASE_URL берётся только из .env / окружения.
+    """
     if not DATABASE_URL:
         raise RuntimeError(
-            "❌ DATABASE_URL не задана в Environment Variables"
+            "DATABASE_URL не задан. "
+            "Добавь DATABASE_URL в .env."
         )
-
-    conn = psycopg2.connect(DATABASE_URL)
-
-    # PostgreSQL-сессия тоже работает в UTC.
-    with conn.cursor() as cur:
-        cur.execute(
-            "SET TIME ZONE 'UTC'"
-        )
-
-    return conn
-
-
-# =========================================================
-# СОЗДАНИЕ БАЗЫ
-# =========================================================
-
-def create_table():
-
+    return psycopg2.connect(
+        DATABASE_URL,
+        connect_timeout=10,
+    )
+# ============================================================
+# INIT DATABASE
+# ============================================================
+def init_db():
+    """
+    Создаёт все необходимые таблицы.
+    """
     conn = connect()
-    cur = conn.cursor()
-
     try:
-
-        # =====================================================
-        # USERS
-        # =====================================================
-
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                user_id BIGINT PRIMARY KEY,
-                username TEXT,
-                first_name TEXT,
-                subscription TEXT DEFAULT 'none',
-                subscription_until TEXT DEFAULT '',
-                subscription_link TEXT DEFAULT '',
-                uuid TEXT DEFAULT '',
-                trial_used INTEGER DEFAULT 0,
-                pending_days INTEGER DEFAULT 0,
-                notify INTEGER DEFAULT 1,
-                accepted_terms INTEGER DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                subscription_content TEXT DEFAULT ''
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS users (
+                    user_id BIGINT PRIMARY KEY,
+                    username TEXT,
+                    first_name TEXT,
+                    subscription BOOLEAN NOT NULL DEFAULT FALSE,
+                    subscription_until TIMESTAMPTZ,
+                    subscription_link TEXT,
+                    uuid TEXT,
+                    trial_used BOOLEAN NOT NULL DEFAULT FALSE,
+                    pending_days INTEGER NOT NULL DEFAULT 0,
+                    notify BOOLEAN NOT NULL DEFAULT TRUE,
+                    accepted_terms BOOLEAN NOT NULL DEFAULT FALSE,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    subscription_content TEXT
+                )
+                """
             )
-        """)
-
-        # =====================================================
-        # МИГРАЦИЯ СТАРОЙ БАЗЫ
-        # =====================================================
-
-        cur.execute("""
-            ALTER TABLE users
-            ADD COLUMN IF NOT EXISTS subscription_content TEXT DEFAULT ''
-        """)
-
-        # =====================================================
-        # PAYMENTS
-        # =====================================================
-
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS payments (
-                id BIGSERIAL PRIMARY KEY,
-                user_id BIGINT,
-                photo TEXT,
-                days INTEGER,
-                payment_id TEXT,
-                status TEXT DEFAULT 'pending',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS payments (
+                    id SERIAL PRIMARY KEY,
+                    user_id BIGINT NOT NULL,
+                    payment_id TEXT UNIQUE,
+                    amount INTEGER NOT NULL DEFAULT 0,
+                    days INTEGER NOT NULL DEFAULT 0,
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    provider TEXT,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    paid_at TIMESTAMPTZ
+                )
+                """
             )
-        """)
-
-        # =====================================================
-        # PROMOCODES
-        # =====================================================
-
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS promocodes (
-                code TEXT PRIMARY KEY,
-                days BIGINT
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS promocodes (
+                    code TEXT PRIMARY KEY,
+                    days INTEGER NOT NULL,
+                    max_uses INTEGER NOT NULL DEFAULT 0,
+                    uses INTEGER NOT NULL DEFAULT 0,
+                    active BOOLEAN NOT NULL DEFAULT TRUE,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+                """
             )
-        """)
-
-        # =====================================================
-        # ИСПОЛЬЗОВАННЫЕ ПРОМОКОДЫ
-        # =====================================================
-
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS promocode_uses (
-                id BIGSERIAL PRIMARY KEY,
-                user_id BIGINT NOT NULL,
-                code TEXT NOT NULL,
-                used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(user_id, code)
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS promocode_uses (
+                    id SERIAL PRIMARY KEY,
+                    user_id BIGINT NOT NULL,
+                    code TEXT NOT NULL,
+                    used_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    UNIQUE(user_id, code)
+                )
+                """
             )
-        """)
-
-        # =====================================================
-        # УНИКАЛЬНЫЙ CASHERA PAYMENT ID
-        # =====================================================
-
-        cur.execute("""
-            CREATE UNIQUE INDEX IF NOT EXISTS
-            idx_payments_payment_id_unique
-            ON payments(payment_id)
-            WHERE payment_id IS NOT NULL
-              AND payment_id <> ''
-        """)
-
-        conn.commit()
-
+            conn.commit()
+    except Exception:
+        conn.rollback()
+        logger.exception("Ошибка инициализации PostgreSQL")
+        raise
     finally:
-
-        cur.close()
         conn.close()
-
-
-# =========================================================
-# USERS
-# =========================================================
-
-def add_user(
-    user_id,
-    username=None,
-    first_name=None
+# Совместимость со старым кодом
+create_table = init_db
+# ============================================================
+# USER
+# ============================================================
+def create_user(
+    user_id: int,
+    username: Optional[str] = None,
+    first_name: Optional[str] = None,
 ):
-
+    """
+    Создаёт пользователя, если его ещё нет.
+    """
     conn = connect()
-    cur = conn.cursor()
-
     try:
-
-        cur.execute("""
-            INSERT INTO users (
-                user_id,
-                username,
-                first_name
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO users (
+                    user_id,
+                    username,
+                    first_name
+                )
+                VALUES (%s, %s, %s)
+                ON CONFLICT (user_id)
+                DO UPDATE SET
+                    username = EXCLUDED.username,
+                    first_name = EXCLUDED.first_name
+                """,
+                (
+                    int(user_id),
+                    username,
+                    first_name,
+                ),
             )
-            VALUES (%s, %s, %s)
-
-            ON CONFLICT (user_id)
-            DO UPDATE SET
-                username=EXCLUDED.username,
-                first_name=EXCLUDED.first_name
-        """, (
+            conn.commit()
+    except Exception:
+        conn.rollback()
+        logger.exception(
+            "Ошибка создания пользователя %s",
             user_id,
-            username,
-            first_name
-        ))
-
-        conn.commit()
-
-    finally:
-
-        cur.close()
-        conn.close()
-
-
-def get_user(user_id):
-
-    conn = connect()
-    cur = conn.cursor()
-
-    try:
-
-        cur.execute("""
-            SELECT
-                user_id,
-                username,
-                first_name,
-                subscription,
-                subscription_until,
-                subscription_link,
-                uuid,
-                trial_used,
-                pending_days,
-                notify,
-                accepted_terms,
-                created_at
-            FROM users
-            WHERE user_id=%s
-        """, (user_id,))
-
-        return cur.fetchone()
-
-    finally:
-
-        cur.close()
-        conn.close()
-
-
-def get_all_users():
-
-    conn = connect()
-    cur = conn.cursor()
-
-    try:
-
-        cur.execute("""
-            SELECT
-                user_id,
-                username,
-                first_name,
-                subscription,
-                subscription_until,
-                subscription_link,
-                uuid,
-                trial_used,
-                pending_days,
-                notify,
-                accepted_terms,
-                created_at
-            FROM users
-            ORDER BY created_at DESC
-        """)
-
-        return cur.fetchall()
-
-    finally:
-
-        cur.close()
-        conn.close()
-
-
-# =========================================================
-# SUBSCRIPTION CONTENT
-# =========================================================
-
-def save_subscription_content(
-    user_id,
-    content
-):
-
-    conn = connect()
-    cur = conn.cursor()
-
-    try:
-
-        cur.execute("""
-            UPDATE users
-            SET subscription_content=%s
-            WHERE user_id=%s
-        """, (
-            content,
-            user_id
-        ))
-
-        conn.commit()
-
-    finally:
-
-        cur.close()
-        conn.close()
-
-
-def get_subscription_content(user_id):
-
-    conn = connect()
-    cur = conn.cursor()
-
-    try:
-
-        cur.execute("""
-            SELECT subscription_content
-            FROM users
-            WHERE user_id=%s
-        """, (user_id,))
-
-        result = cur.fetchone()
-
-        if result:
-            return result[0] or ""
-
-        return ""
-
-    finally:
-
-        cur.close()
-        conn.close()
-
-
-# =========================================================
-# TERMS
-# =========================================================
-
-def has_accepted_terms(user_id):
-
-    conn = connect()
-    cur = conn.cursor()
-
-    try:
-
-        cur.execute("""
-            SELECT accepted_terms
-            FROM users
-            WHERE user_id=%s
-        """, (user_id,))
-
-        result = cur.fetchone()
-
-        return bool(
-            result and result[0] == 1
         )
-
+        raise
     finally:
-
-        cur.close()
         conn.close()
-
-
-def accept_terms(user_id):
-
+def get_user(user_id: int) -> Optional[dict]:
+    """
+    Возвращает пользователя как dict.
+    """
     conn = connect()
-    cur = conn.cursor()
-
     try:
-
-        cur.execute("""
-            UPDATE users
-            SET accepted_terms=1
-            WHERE user_id=%s
-        """, (user_id,))
-
-        conn.commit()
-
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT *
+                FROM users
+                WHERE user_id = %s
+                """,
+                (int(user_id),),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            return dict(row)
     finally:
-
-        cur.close()
         conn.close()
-
-
-# =========================================================
-# PENDING DAYS
-# =========================================================
-
-def set_pending_days(
-    user_id,
-    days
+def get_all_users() -> list[dict]:
+    """
+    Возвращает всех пользователей.
+    """
+    conn = connect()
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT *
+                FROM users
+                ORDER BY created_at DESC
+                """
+            )
+            return [dict(row) for row in cur.fetchall()]
+    finally:
+        conn.close()
+def count_users() -> int:
+    conn = connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM users")
+            return int(cur.fetchone()[0])
+    finally:
+        conn.close()
+def update_user(
+    user_id: int,
+    username: Optional[str] = None,
+    first_name: Optional[str] = None,
 ):
-
     conn = connect()
-    cur = conn.cursor()
-
     try:
-
-        cur.execute("""
-            UPDATE users
-            SET pending_days=%s
-            WHERE user_id=%s
-        """, (
-            days,
-            user_id
-        ))
-
-        conn.commit()
-
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE users
+                SET
+                    username = COALESCE(%s, username),
+                    first_name = COALESCE(%s, first_name)
+                WHERE user_id = %s
+                """,
+                (
+                    username,
+                    first_name,
+                    int(user_id),
+                ),
+            )
+            conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
     finally:
-
-        cur.close()
         conn.close()
-
-
-def get_pending_days(user_id):
-
-    conn = connect()
-    cur = conn.cursor()
-
-    try:
-
-        cur.execute("""
-            SELECT pending_days
-            FROM users
-            WHERE user_id=%s
-        """, (user_id,))
-
-        result = cur.fetchone()
-
-        if result:
-            return result[0] or 0
-
-        return 0
-
-    finally:
-
-        cur.close()
-        conn.close()
-
-
-# =========================================================
-# SUBSCRIPTION LINK
-# =========================================================
-
-def save_subscription_link(
-    user_id,
-    link
-):
-
-    conn = connect()
-    cur = conn.cursor()
-
-    try:
-
-        cur.execute("""
-            UPDATE users
-            SET subscription_link=%s
-            WHERE user_id=%s
-        """, (
-            link,
-            user_id
-        ))
-
-        conn.commit()
-
-    finally:
-
-        cur.close()
-        conn.close()
-
-
-def get_subscription_link(user_id):
-
+# ============================================================
+# SUBSCRIPTION
+# ============================================================
+def check_user_subscription(user_id: int) -> bool:
+    """
+    Проверяет активность подписки.
+    """
     user = get_user(user_id)
-
-    if user:
-        return user[5] or ""
-
-    return ""
-
-
-# =========================================================
-# РАЗБОР ДАТЫ ПОДПИСКИ
-# =========================================================
-
-def parse_subscription_date(value):
-    """
-    Безопасно превращает дату подписки в date.
-
-    Поддерживает:
-    - YYYY-MM-DD
-    - datetime
-    - date
-    - None
-    - пустую строку
-    """
-
-    if not value:
+    if not user:
+        return False
+    until = user.get("subscription_until")
+    active = subscription_active(until)
+    if not active and user.get("subscription"):
+        _set_subscription_status(
+            user_id,
+            False,
+        )
+    return active
+def is_subscription_active(user_id: int) -> bool:
+    return check_user_subscription(user_id)
+def get_subscription_until(
+    user_id: int,
+) -> Optional[datetime]:
+    user = get_user(user_id)
+    if not user:
         return None
-
-    if isinstance(value, datetime):
-        return value.date()
-
-    if isinstance(value, date):
-        return value
-
-    try:
-        return datetime.strptime(
-            str(value),
-            "%Y-%m-%d"
-        ).date()
-
-    except (
-        ValueError,
-        TypeError
-    ):
-        return None
-
-
-# =========================================================
-# РАСЧЁТ ДАТЫ ПОДПИСКИ
-# =========================================================
-
-def calculate_subscription_date(
-    current_until,
-    days
+    return normalize_datetime(
+        user.get("subscription_until")
+    )
+def _set_subscription_status(
+    user_id: int,
+    status: bool,
 ):
-
+    conn = connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE users
+                SET subscription = %s
+                WHERE user_id = %s
+                """,
+                (
+                    bool(status),
+                    int(user_id),
+                ),
+            )
+            conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+def extend_subscription(
+    user_id: int,
+    days: int,
+) -> Optional[datetime]:
+    """
+    Продлевает подписку.
+    Если подписка ещё активна:
+        добавляет дни к текущей дате.
+    Если истекла:
+        начинает отсчёт от текущего момента.
+    """
     days = int(days)
-
-    if days < 1:
+    if days <= 0:
         raise ValueError(
             "Количество дней должно быть больше 0"
         )
-
-    if days > MAX_PROMO_DAYS:
-        raise ValueError(
-            "Слишком большое количество дней"
-        )
-
-    today = today_msk()
-
-    start_date = today
-
-    old_date = parse_subscription_date(
-        current_until
-    )
-
-    # Если подписка ещё активна,
-    # продолжаем её от старой даты.
-    if old_date and old_date >= today:
-        start_date = old_date
-
-    # Защита от огромных значений.
-    if days >= 2_900_000:
-        return "9999-12-31"
-
-    try:
-
-        new_date = (
-            start_date +
-            timedelta(days=days)
-        )
-
-        if new_date > MAX_DATE:
-            return "9999-12-31"
-
-        return new_date.isoformat()
-
-    except (
-        OverflowError,
-        ValueError
-    ):
-
-        return "9999-12-31"
-
-
-# =========================================================
-# АКТИВАЦИЯ ПОДПИСКИ
-# =========================================================
-
-def activate_subscription(
-    user_id,
-    link,
-    days
-):
-
-    conn = connect()
-    cur = conn.cursor()
-
-    try:
-
-        cur.execute("""
-            SELECT subscription_until
-            FROM users
-            WHERE user_id=%s
-        """, (user_id,))
-
-        user = cur.fetchone()
-
-        current_until = (
-            user[0]
-            if user
-            else ""
-        )
-
-        new_date = calculate_subscription_date(
-            current_until,
-            days
-        )
-
-        cur.execute("""
-            UPDATE users
-            SET
-                subscription='vip',
-                subscription_until=%s,
-                subscription_link=%s,
-                pending_days=0
-            WHERE user_id=%s
-        """, (
-            new_date,
-            link,
-            user_id
-        ))
-
-        conn.commit()
-
-        return new_date
-
-    finally:
-
-        cur.close()
-        conn.close()
-
-
-# =========================================================
-# ПЛАТНАЯ ПОДПИСКА
-# =========================================================
-
-def activate_paid_subscription(
-    user_id,
-    link,
-    days
-):
-
-    return activate_subscription(
-        user_id=user_id,
-        link=link,
-        days=days
-    )
-
-
-# =========================================================
-# TRIAL
-# =========================================================
-
-def check_trial(user_id):
-
     user = get_user(user_id)
-
     if not user:
-        return False
-
-    return user[7] == 1
-
-
-def activate_trial(
-    user_id,
-    link
-):
-
-    new_date = (
-        today_msk()
-        + timedelta(days=3)
-    ).isoformat()
-
+        create_user(user_id)
+        user = get_user(user_id)
+    current_until = normalize_datetime(
+        user.get("subscription_until")
+    )
+    current_time = now_utc()
+    if current_until and current_until > current_time:
+        base = current_until
+    else:
+        base = current_time
+    new_until = base + timedelta(days=days)
     conn = connect()
-    cur = conn.cursor()
-
     try:
-
-        cur.execute("""
-            UPDATE users
-            SET
-                subscription='trial',
-                subscription_until=%s,
-                subscription_link=%s,
-                trial_used=1
-            WHERE user_id=%s
-        """, (
-            new_date,
-            link,
-            user_id
-        ))
-
-        conn.commit()
-
-    finally:
-
-        cur.close()
-        conn.close()
-
-
-# =========================================================
-# PAYMENTS
-# =========================================================
-
-def add_payment(
-    user_id,
-    photo,
-    days
-):
-
-    conn = connect()
-    cur = conn.cursor()
-
-    try:
-
-        cur.execute("""
-            INSERT INTO payments (
-                user_id,
-                photo,
-                days
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE users
+                SET
+                    subscription = TRUE,
+                    subscription_until = %s
+                WHERE user_id = %s
+                """,
+                (
+                    new_until,
+                    int(user_id),
+                ),
             )
-            VALUES (%s, %s, %s)
-            RETURNING id
-        """, (
-            user_id,
-            photo,
-            days
-        ))
-
-        payment_id = cur.fetchone()[0]
-
-        conn.commit()
-
-        return payment_id
-
-    finally:
-
-        cur.close()
-        conn.close()
-
-
-def get_payment(payment_id):
-
-    conn = connect()
-    cur = conn.cursor()
-
-    try:
-
-        cur.execute("""
-            SELECT *
-            FROM payments
-            WHERE id=%s
-        """, (payment_id,))
-
-        return cur.fetchone()
-
-    finally:
-
-        cur.close()
-        conn.close()
-
-
-def get_payments():
-
-    conn = connect()
-    cur = conn.cursor()
-
-    try:
-
-        cur.execute("""
-            SELECT *
-            FROM payments
-            ORDER BY id DESC
-        """)
-
-        return cur.fetchall()
-
-    finally:
-
-        cur.close()
-        conn.close()
-
-
-# =========================================================
-# CASHERA PAYMENT ID
-# =========================================================
-
-def save_payment_id(
-    user_id,
-    payment_id
-):
-
-    conn = connect()
-    cur = conn.cursor()
-
-    try:
-
-        cur.execute("""
-            UPDATE payments
-            SET payment_id=%s
-            WHERE id=(
-                SELECT id
-                FROM payments
-                WHERE user_id=%s
-                  AND (
-                      payment_id IS NULL
-                      OR payment_id=''
-                  )
-                ORDER BY id DESC
-                LIMIT 1
-            )
-        """, (
-            str(payment_id),
-            user_id
-        ))
-
-        conn.commit()
-
-    finally:
-
-        cur.close()
-        conn.close()
-
-
-def get_payment_by_payment_id(
-    payment_id
-):
-
-    conn = connect()
-    cur = conn.cursor()
-
-    try:
-
-        cur.execute("""
-            SELECT *
-            FROM payments
-            WHERE payment_id=%s
-            LIMIT 1
-        """, (
-            str(payment_id),
-        ))
-
-        return cur.fetchone()
-
-    finally:
-
-        cur.close()
-        conn.close()
-
-
-# =========================================================
-# ПРОВЕРКА ПОВТОРНОГО CASHERA WEBHOOK
-# =========================================================
-
-def payment_already_paid(
-    payment_id
-):
-
-    if not payment_id:
-        return False
-
-    conn = connect()
-    cur = conn.cursor()
-
-    try:
-
-        cur.execute("""
-            SELECT id
-            FROM payments
-            WHERE payment_id=%s
-              AND status='paid'
-            LIMIT 1
-        """, (
-            str(payment_id),
-        ))
-
-        return cur.fetchone() is not None
-
-    finally:
-
-        cur.close()
-        conn.close()
-
-
-# =========================================================
-# ОТМЕТИТЬ CASHERA ПЛАТЁЖ ОПЛАЧЕННЫМ
-# =========================================================
-
-def mark_payment_paid(
-    payment_id
-):
-
-    if not payment_id:
-        return False
-
-    conn = connect()
-    cur = conn.cursor()
-
-    try:
-
-        cur.execute("""
-            UPDATE payments
-            SET status='paid'
-            WHERE payment_id=%s
-              AND status!='paid'
-        """, (
-            str(payment_id),
-        ))
-
-        changed = cur.rowcount
-
-        conn.commit()
-
-        return changed > 0
-
-    finally:
-
-        cur.close()
-        conn.close()
-
-
-# =========================================================
-# БЕЗОПАСНАЯ ОБРАБОТКА ОПЛАЧЕННОГО ПЛАТЕЖА
-# =========================================================
-
-def process_paid_payment(
-    payment_id
-):
-
-    if not payment_id:
-        raise ValueError(
-            "payment_id не указан"
-        )
-
-    conn = connect()
-    cur = conn.cursor()
-
-    try:
-
-        # Блокируем платёж.
-        cur.execute("""
-            SELECT
-                id,
-                user_id,
-                days,
-                status
-            FROM payments
-            WHERE payment_id=%s
-            FOR UPDATE
-        """, (
-            str(payment_id),
-        ))
-
-        payment = cur.fetchone()
-
-        if not payment:
-            raise ValueError(
-                "Платёж не найден"
-            )
-
-        db_payment_id = payment[0]
-        user_id = payment[1]
-        days = int(payment[2] or 0)
-        status = payment[3]
-
-        # Если webhook пришёл повторно,
-        # второй раз подписку не продлеваем.
-        if status == "paid":
-
-            cur.execute("""
-                SELECT subscription_until
-                FROM users
-                WHERE user_id=%s
-            """, (user_id,))
-
-            user = cur.fetchone()
-
             conn.commit()
-
-            return {
-                "payment_id": db_payment_id,
-                "user_id": user_id,
-                "days": days,
-                "status": "paid",
-                "already_paid": True,
-                "new_date": (
-                    user[0]
-                    if user
-                    else ""
-                )
-            }
-
-        # Блокируем пользователя.
-        cur.execute("""
-            SELECT subscription_until
-            FROM users
-            WHERE user_id=%s
-            FOR UPDATE
-        """, (user_id,))
-
-        user = cur.fetchone()
-
-        if not user:
-            raise ValueError(
-                f"Пользователь {user_id} не найден"
-            )
-
-        current_until = user[0] or ""
-
-        new_date = calculate_subscription_date(
-            current_until,
-            days
-        )
-
-        # Активируем подписку.
-        cur.execute("""
-            UPDATE users
-            SET
-                subscription='vip',
-                subscription_until=%s,
-                pending_days=0
-            WHERE user_id=%s
-        """, (
-            new_date,
-            user_id
-        ))
-
-        # Помечаем платёж оплаченным.
-        cur.execute("""
-            UPDATE payments
-            SET status='paid'
-            WHERE id=%s
-        """, (
-            db_payment_id,
-        ))
-
-        conn.commit()
-
-        return {
-            "payment_id": db_payment_id,
-            "user_id": user_id,
-            "days": days,
-            "status": "paid",
-            "already_paid": False,
-            "new_date": new_date
-        }
-
+        return new_until
     except Exception:
-
+        conn.rollback()
+        logger.exception(
+            "Ошибка продления подписки %s",
+            user_id,
+        )
+        raise
+    finally:
+        conn.close()
+def activate_subscription(
+    user_id: int,
+    days: int,
+    subscription_link: Optional[str] = None,
+):
+    """
+    Активирует/продлевает подписку.
+    subscription_link оставлен для совместимости.
+    Фактическая ссылка ixxy сейчас формируется через GitHub Raw.
+    """
+    new_until = extend_subscription(
+        user_id,
+        days,
+    )
+    if subscription_link:
+        save_subscription_link(
+            user_id,
+            subscription_link,
+        )
+    return new_until
+def deactivate_subscription(
+    user_id: int,
+):
+    conn = connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE users
+                SET
+                    subscription = FALSE
+                WHERE user_id = %s
+                """,
+                (int(user_id),),
+            )
+            conn.commit()
+    except Exception:
         conn.rollback()
         raise
-
     finally:
-
-        cur.close()
         conn.close()
-
-
-# =========================================================
-# STARS
-# =========================================================
-
-def add_stars_payment(
-    user_id,
-    amount,
-    days,
-    payment_id
-):
-
+def expire_old_subscriptions() -> int:
+    """
+    Помечает истёкшие подписки как неактивные.
+    Возвращает количество изменённых пользователей.
+    """
     conn = connect()
-    cur = conn.cursor()
-
     try:
-
-        cur.execute("""
-            INSERT INTO payments (
-                user_id,
-                days,
-                payment_id,
-                status
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE users
+                SET subscription = FALSE
+                WHERE subscription = TRUE
+                  AND (
+                      subscription_until IS NULL
+                      OR subscription_until <= NOW()
+                  )
+                """
             )
-            VALUES (%s, %s, %s, %s)
-        """, (
+            changed = cur.rowcount
+            conn.commit()
+            return int(changed)
+    except Exception:
+        conn.rollback()
+        logger.exception(
+            "Ошибка проверки истёкших подписок"
+        )
+        raise
+    finally:
+        conn.close()
+# Совместимость
+check_expired_subscriptions = expire_old_subscriptions
+# ============================================================
+# SUBSCRIPTION CONTENT / LINK
+# ============================================================
+def save_subscription_content(
+    user_id: int,
+    content: str,
+):
+    """
+    Сохраняет содержимое подписки в БД.
+    Основным источником для пользователя сейчас является
+    GitHub Raw, но поле оставлено для совместимости.
+    """
+    conn = connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE users
+                SET subscription_content = %s
+                WHERE user_id = %s
+                """,
+                (
+                    content,
+                    int(user_id),
+                ),
+            )
+            conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+def get_subscription_content(
+    user_id: int,
+) -> Optional[str]:
+    conn = connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT subscription_content
+                FROM users
+                WHERE user_id = %s
+                """,
+                (int(user_id),),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            return row[0]
+    finally:
+        conn.close()
+def save_subscription_link(
+    user_id: int,
+    link: str,
+):
+    """
+    Сохраняет ссылку для совместимости.
+    Для ixxy используется:
+    https://raw.githubusercontent.com/
+    bdtvyz76b6-blip/vpn-sub/main/users/<ID>.txt
+    """
+    conn = connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE users
+                SET subscription_link = %s
+                WHERE user_id = %s
+                """,
+                (
+                    link,
+                    int(user_id),
+                ),
+            )
+            conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+def get_subscription_link(
+    user_id: int,
+) -> Optional[str]:
+    conn = connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT subscription_link
+                FROM users
+                WHERE user_id = %s
+                """,
+                (int(user_id),),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            return row[0]
+    finally:
+        conn.close()
+# ============================================================
+# TRIAL
+# ============================================================
+def use_trial(
+    user_id: int,
+    days: int = 1,
+) -> bool:
+    """
+    Выдаёт пробный период один раз.
+    """
+    days = int(days)
+    if days <= 0:
+        return False
+    conn = connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT trial_used
+                FROM users
+                WHERE user_id = %s
+                FOR UPDATE
+                """,
+                (int(user_id),),
+            )
+            row = cur.fetchone()
+            if not row:
+                cur.execute(
+                    """
+                    INSERT INTO users (
+                        user_id,
+                        trial_used
+                    )
+                    VALUES (%s, FALSE)
+                    ON CONFLICT (user_id) DO NOTHING
+                    """,
+                    (int(user_id),),
+                )
+                cur.execute(
+                    """
+                    SELECT trial_used
+                    FROM users
+                    WHERE user_id = %s
+                    FOR UPDATE
+                    """,
+                    (int(user_id),),
+                )
+                row = cur.fetchone()
+            if row[0]:
+                conn.rollback()
+                return False
+            current_time = now_utc()
+            cur.execute(
+                """
+                SELECT subscription_until
+                FROM users
+                WHERE user_id = %s
+                """,
+                (int(user_id),),
+            )
+            until_row = cur.fetchone()
+            current_until = (
+                normalize_datetime(until_row[0])
+                if until_row
+                else None
+            )
+            if (
+                current_until
+                and current_until > current_time
+            ):
+                new_until = (
+                    current_until
+                    + timedelta(days=days)
+                )
+            else:
+                new_until = (
+                    current_time
+                    + timedelta(days=days)
+                )
+            cur.execute(
+                """
+                UPDATE users
+                SET
+                    trial_used = TRUE,
+                    subscription = TRUE,
+                    subscription_until = %s
+                WHERE user_id = %s
+                """,
+                (
+                    new_until,
+                    int(user_id),
+                ),
+            )
+            conn.commit()
+            return True
+    except Exception:
+        conn.rollback()
+        logger.exception(
+            "Ошибка выдачи пробного периода %s",
             user_id,
-            days,
-            str(payment_id),
-            "paid"
-        ))
-
-        conn.commit()
-
+        )
+        raise
     finally:
-
-        cur.close()
         conn.close()
-
-
-# =========================================================
-# ОТКЛЮЧЕНИЕ
-# =========================================================
-
-def disable_subscription(
-    user_id
-):
-
-    conn = connect()
-    cur = conn.cursor()
-
-    try:
-
-        cur.execute("""
-            UPDATE users
-            SET
-                subscription='none',
-                subscription_until='',
-                subscription_link=''
-            WHERE user_id=%s
-        """, (user_id,))
-
-        conn.commit()
-
-    finally:
-
-        cur.close()
-        conn.close()
-
-
-# =========================================================
-# СТАТУС ПЛАТЕЖА
-# =========================================================
-
-def update_payment_status(
-    payment_id,
-    status
-):
-
-    conn = connect()
-    cur = conn.cursor()
-
-    try:
-
-        cur.execute("""
-            UPDATE payments
-            SET status=%s
-            WHERE id=%s
-        """, (
-            status,
-            payment_id
-        ))
-
-        conn.commit()
-
-    finally:
-
-        cur.close()
-        conn.close()
-
-
-def get_user_payments(
-    user_id
-):
-
-    conn = connect()
-    cur = conn.cursor()
-
-    try:
-
-        cur.execute("""
-            SELECT *
-            FROM payments
-            WHERE user_id=%s
-            ORDER BY id DESC
-        """, (user_id,))
-
-        return cur.fetchall()
-
-    finally:
-
-        cur.close()
-        conn.close()
-
-
-# =========================================================
-# ПРОМОКОДЫ
-# =========================================================
-
-def add_promocode(
-    code,
-    days
-):
-
+def activate_trial(
+    user_id: int,
+    days: int = 1,
+    subscription_link: Optional[str] = None,
+) -> bool:
+    """
+    Совместимость со старым кодом.
+    """
+    result = use_trial(
+        user_id,
+        days,
+    )
+    if result and subscription_link:
+        save_subscription_link(
+            user_id,
+            subscription_link,
+        )
+    return result
+# ============================================================
+# PROMOCODES
+# ============================================================
+def create_promocode(
+    code: str,
+    days: int,
+    max_uses: int = 0,
+) -> bool:
+    """
+    Создаёт промокод.
+    max_uses=0 означает без ограничения.
+    """
     code = str(code).strip().upper()
     days = int(days)
-
-    if (
-        days < 1
-        or days > MAX_PROMO_DAYS
-    ):
-
-        raise ValueError(
-            f"Количество дней должно быть "
-            f"от 1 до {MAX_PROMO_DAYS}"
-        )
-
+    max_uses = int(max_uses)
+    if not code:
+        return False
+    if days <= 0:
+        return False
+    if days > MAX_PROMO_DAYS:
+        days = MAX_PROMO_DAYS
+    if max_uses < 0:
+        max_uses = 0
     conn = connect()
-    cur = conn.cursor()
-
     try:
-
-        cur.execute("""
-            INSERT INTO promocodes (
-                code,
-                days
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO promocodes (
+                    code,
+                    days,
+                    max_uses,
+                    uses,
+                    active
+                )
+                VALUES (%s, %s, %s, 0, TRUE)
+                ON CONFLICT (code)
+                DO UPDATE SET
+                    days = EXCLUDED.days,
+                    max_uses = EXCLUDED.max_uses,
+                    active = TRUE
+                """,
+                (
+                    code,
+                    days,
+                    max_uses,
+                ),
             )
-            VALUES (%s, %s)
-
-            ON CONFLICT (code)
-            DO UPDATE SET
-                days=EXCLUDED.days
-        """, (
+            conn.commit()
+            return True
+    except Exception:
+        conn.rollback()
+        logger.exception(
+            "Ошибка создания промокода %s",
             code,
-            days
-        ))
-
-        conn.commit()
-
+        )
+        raise
     finally:
-
-        cur.close()
         conn.close()
-
-
 def get_promocode(
-    code
-):
-
+    code: str,
+) -> Optional[dict]:
     code = str(code).strip().upper()
-
     conn = connect()
-    cur = conn.cursor()
-
     try:
-
-        cur.execute("""
-            SELECT days
-            FROM promocodes
-            WHERE code=%s
-        """, (code,))
-
-        result = cur.fetchone()
-
-        if result:
-            return result[0]
-
-        return 0
-
-    finally:
-
-        cur.close()
-        cur.close() if False else None
-        conn.close()
-
-
-# =========================================================
-# ПРОМОКОД — 1 РАЗ
-# =========================================================
-
-def use_promocode(
-    user_id,
-    code
-):
-
-    code = str(code).strip().upper()
-
-    conn = connect()
-    cur = conn.cursor()
-
-    try:
-
-        # -------------------------------------------------
-        # Пользователь
-        # -------------------------------------------------
-
-        cur.execute("""
-            SELECT subscription_until
-            FROM users
-            WHERE user_id=%s
-            FOR UPDATE
-        """, (user_id,))
-
-        user = cur.fetchone()
-
-        if not user:
-
-            conn.rollback()
-
-            return {
-                "success": False,
-                "reason": "user_not_found"
-            }
-
-        # -------------------------------------------------
-        # Промокод
-        # -------------------------------------------------
-
-        cur.execute("""
-            SELECT days
-            FROM promocodes
-            WHERE code=%s
-        """, (code,))
-
-        promo = cur.fetchone()
-
-        if not promo:
-
-            conn.rollback()
-
-            return {
-                "success": False,
-                "reason": "not_found"
-            }
-
-        days = int(promo[0])
-
-        # -------------------------------------------------
-        # Проверка дней
-        # -------------------------------------------------
-
-        if (
-            days < 1
-            or days > MAX_PROMO_DAYS
-        ):
-
-            conn.rollback()
-
-            return {
-                "success": False,
-                "reason": "invalid_days"
-            }
-
-        # -------------------------------------------------
-        # Проверяем использование
-        # -------------------------------------------------
-
-        cur.execute("""
-            SELECT id
-            FROM promocode_uses
-            WHERE user_id=%s
-              AND code=%s
-        """, (
-            user_id,
-            code
-        ))
-
-        already_used = cur.fetchone()
-
-        if already_used:
-
-            conn.rollback()
-
-            return {
-                "success": False,
-                "reason": "already_used"
-            }
-
-        # -------------------------------------------------
-        # Новая дата
-        # -------------------------------------------------
-
-        new_date = calculate_subscription_date(
-            user[0],
-            days
-        )
-
-        # -------------------------------------------------
-        # Обновляем подписку
-        # -------------------------------------------------
-
-        cur.execute("""
-            UPDATE users
-            SET
-                subscription='vip',
-                subscription_until=%s
-            WHERE user_id=%s
-        """, (
-            new_date,
-            user_id
-        ))
-
-        # -------------------------------------------------
-        # Записываем использование
-        # -------------------------------------------------
-
-        cur.execute("""
-            INSERT INTO promocode_uses (
-                user_id,
-                code
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT *
+                FROM promocodes
+                WHERE code = %s
+                  AND active = TRUE
+                """,
+                (code,),
             )
-            VALUES (%s, %s)
-        """, (
-            user_id,
-            code
-        ))
-
-        conn.commit()
-
-        return {
-            "success": True,
-            "reason": "success",
-            "days": days,
-            "date": new_date
-        }
-
-    except IntegrityError:
-
-        conn.rollback()
-
-        return {
-            "success": False,
-            "reason": "already_used"
-        }
-
-    except Exception as e:
-
-        conn.rollback()
-
-        print(
-            f"❌ USE PROMO ERROR: {e}"
-        )
-
-        return {
-            "success": False,
-            "reason": "error"
-        }
-
+            row = cur.fetchone()
+            if not row:
+                return None
+            return dict(row)
     finally:
-
-        cur.close()
         conn.close()
-
-
-# =========================================================
-# ВСЕ ПРОМОКОДЫ
-# =========================================================
-
-def get_promocodes():
-
+def get_all_promocodes() -> list[dict]:
     conn = connect()
-    cur = conn.cursor()
-
     try:
-
-        cur.execute("""
-            SELECT code, days
-            FROM promocodes
-            ORDER BY code
-        """)
-
-        return cur.fetchall()
-
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT *
+                FROM promocodes
+                ORDER BY created_at DESC
+                """
+            )
+            return [dict(row) for row in cur.fetchall()]
     finally:
-
-        cur.close()
         conn.close()
-
-
-# =========================================================
-# УДАЛИТЬ ПРОМОКОД
-# =========================================================
-
-def delete_promocode(
-    code
-):
-
+def deactivate_promocode(
+    code: str,
+) -> bool:
     code = str(code).strip().upper()
-
     conn = connect()
-    cur = conn.cursor()
-
     try:
-
-        cur.execute("""
-            DELETE FROM promocodes
-            WHERE code=%s
-        """, (code,))
-
-        conn.commit()
-
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE promocodes
+                SET active = FALSE
+                WHERE code = %s
+                """,
+                (code,),
+            )
+            changed = cur.rowcount
+            conn.commit()
+            return changed > 0
+    except Exception:
+        conn.rollback()
+        raise
     finally:
-
-        cur.close()
         conn.close()
-
-
-# =========================================================
-# ИСПОЛЬЗОВАЛ ЛИ
-# =========================================================
-
-def has_used_promocode(
-    user_id,
-    code
-):
-
+def use_promocode(
+    user_id: int,
+    code: str,
+) -> tuple[bool, str, int]:
+    """
+    Использует промокод.
+    Возвращает:
+        (success, message, days)
+    """
     code = str(code).strip().upper()
-
     conn = connect()
-    cur = conn.cursor()
-
     try:
-
-        cur.execute("""
-            SELECT id
-            FROM promocode_uses
-            WHERE user_id=%s
-              AND code=%s
-        """, (
+        with conn.cursor(
+            cursor_factory=RealDictCursor
+        ) as cur:
+            # Проверяем промокод и блокируем строку
+            cur.execute(
+                """
+                SELECT *
+                FROM promocodes
+                WHERE code = %s
+                  AND active = TRUE
+                FOR UPDATE
+                """,
+                (code,),
+            )
+            promo = cur.fetchone()
+            if not promo:
+                conn.rollback()
+                return (
+                    False,
+                    "Промокод не найден или уже отключён.",
+                    0,
+                )
+            max_uses = int(
+                promo["max_uses"] or 0
+            )
+            uses = int(
+                promo["uses"] or 0
+            )
+            if (
+                max_uses > 0
+                and uses >= max_uses
+            ):
+                conn.rollback()
+                return (
+                    False,
+                    "Лимит использований промокода исчерпан.",
+                    0,
+                )
+            # Проверяем, использовал ли этот пользователь
+            cur.execute(
+                """
+                SELECT id
+                FROM promocode_uses
+                WHERE user_id = %s
+                  AND code = %s
+                """,
+                (
+                    int(user_id),
+                    code,
+                ),
+            )
+            already_used = cur.fetchone()
+            if already_used:
+                conn.rollback()
+                return (
+                    False,
+                    "Вы уже использовали этот промокод.",
+                    0,
+                )
+            days = int(promo["days"])
+            # Получаем текущую дату окончания
+            cur.execute(
+                """
+                SELECT subscription_until
+                FROM users
+                WHERE user_id = %s
+                FOR UPDATE
+                """,
+                (int(user_id),),
+            )
+            user_row = cur.fetchone()
+            if not user_row:
+                cur.execute(
+                    """
+                    INSERT INTO users (
+                        user_id
+                    )
+                    VALUES (%s)
+                    ON CONFLICT (user_id) DO NOTHING
+                    """,
+                    (int(user_id),),
+                )
+                current_until = None
+            else:
+                current_until = normalize_datetime(
+                    user_row["subscription_until"]
+                )
+            current_time = now_utc()
+            if (
+                current_until
+                and current_until > current_time
+            ):
+                new_until = (
+                    current_until
+                    + timedelta(days=days)
+                )
+            else:
+                new_until = (
+                    current_time
+                    + timedelta(days=days)
+                )
+            # Продлеваем подписку
+            cur.execute(
+                """
+                UPDATE users
+                SET
+                    subscription = TRUE,
+                    subscription_until = %s
+                WHERE user_id = %s
+                """,
+                (
+                    new_until,
+                    int(user_id),
+                ),
+            )
+            # Записываем использование
+            cur.execute(
+                """
+                INSERT INTO promocode_uses (
+                    user_id,
+                    code
+                )
+                VALUES (%s, %s)
+                """,
+                (
+                    int(user_id),
+                    code,
+                ),
+            )
+            # Увеличиваем счётчик
+            cur.execute(
+                """
+                UPDATE promocodes
+                SET uses = uses + 1
+                WHERE code = %s
+                """,
+                (code,),
+            )
+            conn.commit()
+            return (
+                True,
+                f"Промокод активирован: +{days} дн.",
+                days,
+            )
+    except psycopg2.errors.UniqueViolation:
+        conn.rollback()
+        return (
+            False,
+            "Вы уже использовали этот промокод.",
+            0,
+        )
+    except Exception:
+        conn.rollback()
+        logger.exception(
+            "Ошибка использования промокода %s пользователем %s",
+            code,
             user_id,
-            code
-        ))
-
-        return cur.fetchone() is not None
-
-    finally:
-
-        cur.close()
-        conn.close()
-
-
-# =========================================================
-# ID ВСЕХ ПОЛЬЗОВАТЕЛЕЙ
-# =========================================================
-
-def get_user_ids():
-
-    conn = connect()
-    cur = conn.cursor()
-
-    try:
-
-        cur.execute("""
-            SELECT user_id
-            FROM users
-        """)
-
-        return [
-            row[0]
-            for row in cur.fetchall()
-        ]
-
-    finally:
-
-        cur.close()
-        conn.close()
-
-
-# =========================================================
-# ПРОСРОЧЕННЫЕ
-# =========================================================
-
-def get_expired_users():
-
-    conn = connect()
-    cur = conn.cursor()
-
-    try:
-
-        today = today_msk_string()
-
-        cur.execute("""
-            SELECT *
-            FROM users
-            WHERE subscription_until != ''
-              AND subscription_until < %s
-        """, (today,))
-
-        return cur.fetchall()
-
-    finally:
-
-        cur.close()
-        conn.close()
-
-
-# =========================================================
-# ПРОДЛЕНИЕ ПОДПИСКИ
-# =========================================================
-
-def extend_subscription(
-    user_id,
-    days
-):
-
-    conn = connect()
-    cur = conn.cursor()
-
-    try:
-
-        cur.execute("""
-            SELECT subscription_until
-            FROM users
-            WHERE user_id=%s
-            FOR UPDATE
-        """, (user_id,))
-
-        result = cur.fetchone()
-
-        current_until = (
-            result[0]
-            if result
-            else ""
         )
-
-        new_date = calculate_subscription_date(
-            current_until,
-            days
-        )
-
-        cur.execute("""
-            UPDATE users
-            SET
-                subscription='vip',
-                subscription_until=%s
-            WHERE user_id=%s
-        """, (
-            new_date,
-            user_id
-        ))
-
-        conn.commit()
-
-        return new_date
-
+        raise
     finally:
-
-        cur.close()
         conn.close()
-
-
-# =========================================================
-# ПРОВЕРКА ПОДПИСКИ
-# =========================================================
-
-def subscription_active(
-    user_id
+# Старое имя, которое может использовать cabinet.py
+def use_promocode_legacy(
+    user_id: int,
+    code: str,
 ):
-
+    return use_promocode(
+        user_id,
+        code,
+    )
+# ============================================================
+# PAYMENTS
+# ============================================================
+def create_payment(
+    user_id: int,
+    payment_id: str,
+    amount: int,
+    days: int,
+    provider: str = "cashera",
+) -> bool:
+    """
+    Создаёт платеж.
+    amount хранится в копейках для CasheRa.
+    """
+    conn = connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO payments (
+                    user_id,
+                    payment_id,
+                    amount,
+                    days,
+                    status,
+                    provider
+                )
+                VALUES (
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    'pending',
+                    %s
+                )
+                ON CONFLICT (payment_id)
+                DO NOTHING
+                """,
+                (
+                    int(user_id),
+                    str(payment_id),
+                    int(amount),
+                    int(days),
+                    provider,
+                ),
+            )
+            created = cur.rowcount > 0
+            conn.commit()
+            return created
+    except Exception:
+        conn.rollback()
+        logger.exception(
+            "Ошибка создания платежа %s",
+            payment_id,
+        )
+        raise
+    finally:
+        conn.close()
+def get_payment(
+    payment_id: str,
+) -> Optional[dict]:
+    conn = connect()
+    try:
+        with conn.cursor(
+            cursor_factory=RealDictCursor
+        ) as cur:
+            cur.execute(
+                """
+                SELECT *
+                FROM payments
+                WHERE payment_id = %s
+                """,
+                (str(payment_id),),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            return dict(row)
+    finally:
+        conn.close()
+def complete_payment(
+    payment_id: str,
+) -> bool:
+    """
+    Просто помечает платёж оплаченным.
+    Фактическое продление выполняется отдельно,
+    чтобы не продлить подписку дважды.
+    """
+    conn = connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE payments
+                SET
+                    status = 'paid',
+                    paid_at = COALESCE(paid_at, NOW())
+                WHERE payment_id = %s
+                  AND status != 'paid'
+                """,
+                (str(payment_id),),
+            )
+            changed = cur.rowcount
+            conn.commit()
+            return changed > 0
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+def update_payment_status(
+    payment_id: str,
+    status: str,
+):
+    conn = connect()
+    try:
+        with conn.cursor() as cur:
+            if status == "paid":
+                cur.execute(
+                    """
+                    UPDATE payments
+                    SET
+                        status = 'paid',
+                        paid_at = COALESCE(
+                            paid_at,
+                            NOW()
+                        )
+                    WHERE payment_id = %s
+                    """,
+                    (str(payment_id),),
+                )
+            else:
+                cur.execute(
+                    """
+                    UPDATE payments
+                    SET status = %s
+                    WHERE payment_id = %s
+                    """,
+                    (
+                        str(status),
+                        str(payment_id),
+                    ),
+                )
+            conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+def get_all_payments(
+    limit: int = 100,
+) -> list[dict]:
+    conn = connect()
+    try:
+        with conn.cursor(
+            cursor_factory=RealDictCursor
+        ) as cur:
+            cur.execute(
+                """
+                SELECT *
+                FROM payments
+                ORDER BY created_at DESC
+                LIMIT %s
+                """,
+                (int(limit),),
+            )
+            return [dict(row) for row in cur.fetchall()]
+    finally:
+        conn.close()
+def process_paid_payment(
+    payment_id: str,
+) -> Optional[dict]:
+    """
+    Безопасная обработка оплаченного платежа.
+    Используется как дополнительная совместимая функция.
+    Важно:
+    один и тот же paid-платёж не продлит подписку повторно.
+    """
+    conn = connect()
+    try:
+        with conn.cursor(
+            cursor_factory=RealDictCursor
+        ) as cur:
+            cur.execute(
+                """
+                SELECT *
+                FROM payments
+                WHERE payment_id = %s
+                FOR UPDATE
+                """,
+                (str(payment_id),),
+            )
+            payment = cur.fetchone()
+            if not payment:
+                conn.rollback()
+                return None
+            if payment["status"] == "paid":
+                conn.rollback()
+                return {
+                    "already_paid": True,
+                    **dict(payment),
+                }
+            days = int(payment["days"])
+            cur.execute(
+                """
+                SELECT subscription_until
+                FROM users
+                WHERE user_id = %s
+                FOR UPDATE
+                """,
+                (int(payment["user_id"]),),
+            )
+            user = cur.fetchone()
+            if not user:
+                cur.execute(
+                    """
+                    INSERT INTO users (
+                        user_id
+                    )
+                    VALUES (%s)
+                    ON CONFLICT (user_id) DO NOTHING
+                    """,
+                    (int(payment["user_id"]),),
+                )
+                current_until = None
+            else:
+                current_until = normalize_datetime(
+                    user["subscription_until"]
+                )
+            current_time = now_utc()
+            if (
+                current_until
+                and current_until > current_time
+            ):
+                new_until = (
+                    current_until
+                    + timedelta(days=days)
+                )
+            else:
+                new_until = (
+                    current_time
+                    + timedelta(days=days)
+                )
+            cur.execute(
+                """
+                UPDATE users
+                SET
+                    subscription = TRUE,
+                    subscription_until = %s
+                WHERE user_id = %s
+                """,
+                (
+                    new_until,
+                    int(payment["user_id"]),
+                ),
+            )
+            cur.execute(
+                """
+                UPDATE payments
+                SET
+                    status = 'paid',
+                    paid_at = NOW()
+                WHERE payment_id = %s
+                """,
+                (str(payment_id),),
+            )
+            conn.commit()
+            return {
+                "already_paid": False,
+                "user_id": int(payment["user_id"]),
+                "days": days,
+                "subscription_until": new_until,
+                "payment_id": str(payment_id),
+            }
+    except Exception:
+        conn.rollback()
+        logger.exception(
+            "Ошибка обработки оплаченного платежа %s",
+            payment_id,
+        )
+        raise
+    finally:
+        conn.close()
+# ============================================================
+# NOTIFICATIONS
+# ============================================================
+def set_notify(
+    user_id: int,
+    enabled: bool,
+):
+    conn = connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE users
+                SET notify = %s
+                WHERE user_id = %s
+                """,
+                (
+                    bool(enabled),
+                    int(user_id),
+                ),
+            )
+            conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+def get_notify(
+    user_id: int,
+) -> bool:
     user = get_user(user_id)
-
+    if not user:
+        return True
+    return bool(
+        user.get("notify", True)
+    )
+# ============================================================
+# TERMS
+# ============================================================
+def set_accepted_terms(
+    user_id: int,
+    accepted: bool = True,
+):
+    conn = connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE users
+                SET accepted_terms = %s
+                WHERE user_id = %s
+                """,
+                (
+                    bool(accepted),
+                    int(user_id),
+                ),
+            )
+            conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+def accepted_terms(
+    user_id: int,
+) -> bool:
+    user = get_user(user_id)
     if not user:
         return False
-
-    until = user[4]
-
-    expire_date = parse_subscription_date(
-        until
+    return bool(
+        user.get("accepted_terms", False)
     )
-
-    if not expire_date:
-        return False
-
-    today = today_msk()
-
-    return expire_date >= today
-
-
-# =========================================================
-# АВТООТКЛЮЧЕНИЕ
-# =========================================================
-
-def check_expired_subscriptions():
-
-    conn = connect()
-    cur = conn.cursor()
-
-    try:
-
-        today = today_msk_string()
-
-        cur.execute("""
-            UPDATE users
-            SET
-                subscription='none',
-                subscription_link=''
-            WHERE subscription_until != ''
-              AND subscription_until < %s
-              AND subscription != 'none'
-        """, (today,))
-
-        changed = cur.rowcount
-
-        conn.commit()
-
-        return changed
-
-    finally:
-
-        cur.close()
-        conn.close()
-
-
-# =========================================================
-# ОСТАТОК ДНЕЙ
-# =========================================================
-
-def get_days_left(
-    user_id
+# ============================================================
+# PENDING DAYS
+# ============================================================
+def set_pending_days(
+    user_id: int,
+    days: int,
 ):
-
+    conn = connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE users
+                SET pending_days = %s
+                WHERE user_id = %s
+                """,
+                (
+                    int(days),
+                    int(user_id),
+                ),
+            )
+            conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+def get_pending_days(
+    user_id: int,
+) -> int:
     user = get_user(user_id)
-
     if not user:
         return 0
-
-    until = user[4]
-
-    expire_date = parse_subscription_date(
-        until
+    return int(
+        user.get("pending_days") or 0
     )
-
-    if not expire_date:
-        return 0
-
-    today = today_msk()
-
-    days = (
-        expire_date - today
-    ).days
-
-    return max(days, 0)
-
-
-# =========================================================
-# ПРОВЕРКА ПРИ ВХОДЕ
-# =========================================================
-
-def check_user_subscription(
-    user_id
+# ============================================================
+# STATISTICS
+# ============================================================
+def get_stats() -> dict:
+    conn = connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT COUNT(*)
+                FROM users
+                """
+            )
+            total_users = int(
+                cur.fetchone()[0]
+            )
+            cur.execute(
+                """
+                SELECT COUNT(*)
+                FROM users
+                WHERE subscription = TRUE
+                  AND subscription_until > NOW()
+                """
+            )
+            active_users = int(
+                cur.fetchone()[0]
+            )
+            cur.execute(
+                """
+                SELECT COUNT(*)
+                FROM users
+                WHERE trial_used = TRUE
+                """
+            )
+            trial_users = int(
+                cur.fetchone()[0]
+            )
+            cur.execute(
+                """
+                SELECT COUNT(*)
+                FROM payments
+                WHERE status = 'paid'
+                """
+            )
+            paid_payments = int(
+                cur.fetchone()[0]
+            )
+            cur.execute(
+                """
+                SELECT COALESCE(SUM(amount), 0)
+                FROM payments
+                WHERE status = 'paid'
+                """
+            )
+            revenue = int(
+                cur.fetchone()[0] or 0
+            )
+            return {
+                "total_users": total_users,
+                "active_users": active_users,
+                "trial_users": trial_users,
+                "paid_payments": paid_payments,
+                "revenue": revenue,
+            }
+    finally:
+        conn.close()
+# ============================================================
+# SEARCH
+# ============================================================
+def search_users(
+    query: str,
+    limit: int = 50,
+) -> list[dict]:
+    """
+    Поиск по Telegram ID, username и имени.
+    """
+    query = str(query).strip()
+    conn = connect()
+    try:
+        with conn.cursor(
+            cursor_factory=RealDictCursor
+        ) as cur:
+            cur.execute(
+                """
+                SELECT *
+                FROM users
+                WHERE
+                    CAST(user_id AS TEXT) ILIKE %s
+                    OR COALESCE(username, '') ILIKE %s
+                    OR COALESCE(first_name, '') ILIKE %s
+                ORDER BY created_at DESC
+                LIMIT %s
+                """,
+                (
+                    f"%{query}%",
+                    f"%{query}%",
+                    f"%{query}%",
+                    int(limit),
+                ),
+            )
+            return [dict(row) for row in cur.fetchall()]
+    finally:
+        conn.close()
+# ============================================================
+# DELETE USER
+# ============================================================
+def delete_user(
+    user_id: int,
 ):
-
-    user = get_user(user_id)
-
-    if not user:
-        return False
-
-    until = user[4]
-
-    expire_date = parse_subscription_date(
-        until
+    conn = connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                DELETE FROM promocode_uses
+                WHERE user_id = %s
+                """,
+                (int(user_id),),
+            )
+            cur.execute(
+                """
+                DELETE FROM payments
+                WHERE user_id = %s
+                """,
+                (int(user_id),),
+            )
+            cur.execute(
+                """
+                DELETE FROM users
+                WHERE user_id = %s
+                """,
+                (int(user_id),),
+            )
+            conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+# ============================================================
+# STARTUP
+# ============================================================
+if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO
     )
-
-    if not expire_date:
-        return False
-
-    today = today_msk()
-
-    if expire_date < today:
-
-        disable_subscription(
-            user_id
-        )
-
-        return False
-
-    return True
-
-
-# =========================================================
-# ИНИЦИАЛИЗАЦИЯ
-# =========================================================
-
-try:
-
-    create_table()
-
-except Exception as e:
-
-    print(
-        f"⚠️ Ошибка создания таблиц: {e}"
-    )
+    init_db()
+    print("PostgreSQL database OK")
