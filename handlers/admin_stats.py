@@ -1,15 +1,18 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from aiogram import Router, F
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import (
+    CallbackQuery,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+)
 
 from config import ADMIN_IDS
 
 from database import (
     get_all_users,
-    get_expired_users,
-    get_promocodes,
-    get_payments,
+    get_all_promocodes,
+    get_all_payments,
 )
 
 router = Router()
@@ -24,59 +27,21 @@ def is_admin(user_id: int) -> bool:
 
 
 # ============================================================
-# БЕЗОПАСНОЕ ПОЛУЧЕНИЕ ПОЛЯ USER
+# ДАТА
 # ============================================================
 
-def user_field(user, index: int, key: str, default=""):
-    if isinstance(user, dict):
-        return user.get(key, default)
-
-    try:
-        return user[index]
-    except (IndexError, TypeError):
-        return default
+UTC = timezone.utc
 
 
-# ============================================================
-# БЕЗОПАСНОЕ ПОЛУЧЕНИЕ ПОЛЯ PAYMENT
-# ============================================================
-
-def payment_field(payment, index: int, key: str, default=""):
-    if isinstance(payment, dict):
-        return payment.get(key, default)
-
-    try:
-        return payment[index]
-    except (IndexError, TypeError):
-        return default
-
-
-# ============================================================
-# ПАРСИНГ ДАТЫ
-# ============================================================
-
-def parse_datetime(value):
-    if not value:
+def normalize_datetime(value):
+    if value is None:
         return None
 
     if isinstance(value, datetime):
-        return value
+        if value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
 
-    value = str(value).strip()
-
-    formats = (
-        "%Y-%m-%d %H:%M:%S",
-        "%Y-%m-%d %H:%M:%S.%f",
-        "%Y-%m-%dT%H:%M:%S",
-        "%Y-%m-%dT%H:%M:%S.%f",
-        "%Y-%m-%d",
-    )
-
-    for fmt in formats:
-        try:
-            return datetime.strptime(value, fmt)
-        except ValueError:
-            continue
+        return value.astimezone(UTC)
 
     return None
 
@@ -91,29 +56,29 @@ def stats_keyboard():
             [
                 InlineKeyboardButton(
                     text="🔄 Обновить",
-                    callback_data="admin_stats"
+                    callback_data="admin_stats",
                 )
             ],
             [
                 InlineKeyboardButton(
                     text="👥 Пользователи",
-                    callback_data="admin_users"
+                    callback_data="admin_users",
                 ),
                 InlineKeyboardButton(
                     text="💳 Платежи",
-                    callback_data="admin_payments"
+                    callback_data="admin_payments",
                 ),
             ],
             [
                 InlineKeyboardButton(
                     text="🎟 Промокоды",
-                    callback_data="admin_promos"
+                    callback_data="admin_promos",
                 ),
             ],
             [
                 InlineKeyboardButton(
                     text="⬅️ Назад",
-                    callback_data="admin_back"
+                    callback_data="admin_back",
                 )
             ],
         ]
@@ -133,75 +98,99 @@ async def admin_stats(call: CallbackQuery):
     if not is_admin(call.from_user.id):
         await call.answer(
             "❌ Нет доступа",
-            show_alert=True
+            show_alert=True,
         )
         return
 
-    # --------------------------------------------------------
+    # ========================================================
     # ПОЛЬЗОВАТЕЛИ
-    # --------------------------------------------------------
+    # ========================================================
 
     try:
         users_list = get_all_users() or []
     except Exception as e:
-        print("Admin stats users error:", repr(e))
+        print(
+            "❌ Admin stats users error:",
+            repr(e),
+        )
         users_list = []
 
     total_users = len(users_list)
 
-    vip_users = 0
-    trial_users = 0
+    active_users = 0
     expired_users = 0
-    none_users = 0
+    no_subscription_users = 0
+    trial_users = 0
 
     users_today = 0
     users_7_days = 0
     users_30_days = 0
 
-    now = datetime.now()
+    now = datetime.now(UTC)
+
     today = now.date()
     week_ago = now - timedelta(days=7)
     month_ago = now - timedelta(days=30)
 
     for user in users_list:
 
-        subscription = str(
-            user_field(
-                user,
-                3,
+        if not isinstance(user, dict):
+            continue
+
+        # ----------------------------------------------------
+        # ПОДПИСКА
+        # ----------------------------------------------------
+
+        subscription = bool(
+            user.get(
                 "subscription",
-                "none"
-            ) or "none"
-        ).lower().strip()
-
-        # ----------------------------------------------------
-        # ТАРИФ
-        # ----------------------------------------------------
-
-        if subscription == "vip":
-            vip_users += 1
-
-        elif subscription == "trial":
-            trial_users += 1
-
-        elif subscription == "expired":
-            expired_users += 1
-
-        else:
-            none_users += 1
-
-        # ----------------------------------------------------
-        # ДАТА РЕГИСТРАЦИИ
-        # ----------------------------------------------------
-
-        created_at = user_field(
-            user,
-            11,
-            "created_at",
-            None
+                False,
+            )
         )
 
-        created_at = parse_datetime(created_at)
+        subscription_until = normalize_datetime(
+            user.get(
+                "subscription_until"
+            )
+        )
+
+        if (
+            subscription
+            and subscription_until
+            and subscription_until > now
+        ):
+            active_users += 1
+
+        elif (
+            subscription_until
+            and subscription_until <= now
+        ):
+            expired_users += 1
+
+        elif not subscription:
+            no_subscription_users += 1
+
+        # ----------------------------------------------------
+        # TRIAL
+        # ----------------------------------------------------
+
+        if bool(
+            user.get(
+                "trial_used",
+                False,
+            )
+        ):
+            trial_users += 1
+
+        # ----------------------------------------------------
+        # РЕГИСТРАЦИЯ
+        # ----------------------------------------------------
+
+        created_at = normalize_datetime(
+            user.get(
+                "created_at"
+            )
+        )
 
         if created_at:
 
@@ -214,45 +203,85 @@ async def admin_stats(call: CallbackQuery):
             if created_at >= month_ago:
                 users_30_days += 1
 
-    # --------------------------------------------------------
+    # ========================================================
     # ПРОМОКОДЫ
-    # --------------------------------------------------------
+    # ========================================================
 
     try:
-        promos_list = get_promocodes() or []
-        promo_count = len(promos_list)
+        promos_list = (
+            get_all_promocodes()
+            or []
+        )
+
+        promo_count = len(
+            promos_list
+        )
+
+        active_promos = sum(
+            1
+            for promo in promos_list
+            if bool(
+                promo.get(
+                    "active",
+                    False,
+                )
+            )
+        )
+
     except Exception as e:
-        print("Admin stats promos error:", repr(e))
+
+        print(
+            "❌ Admin stats promos error:",
+            repr(e),
+        )
+
         promo_count = 0
+        active_promos = 0
 
-    # --------------------------------------------------------
+    # ========================================================
     # ПЛАТЕЖИ
-    # --------------------------------------------------------
+    # ========================================================
 
     try:
-        payments_list = get_payments() or []
+        payments_list = (
+            get_all_payments(10000)
+            or []
+        )
+
     except Exception as e:
-        print("Admin stats payments error:", repr(e))
+
+        print(
+            "❌ Admin stats payments error:",
+            repr(e),
+        )
+
         payments_list = []
 
-    total_payments = len(payments_list)
+    total_payments = len(
+        payments_list
+    )
 
     pending_payments = 0
     successful_payments = 0
     failed_payments = 0
 
+    revenue = 0
+
     for payment in payments_list:
 
+        if not isinstance(payment, dict):
+            continue
+
         status = str(
-            payment_field(
-                payment,
-                5,
+            payment.get(
                 "status",
-                "pending"
-            ) or "pending"
+                "pending",
+            )
+            or "pending"
         ).lower().strip()
 
         if status == "pending":
+
             pending_payments += 1
 
         elif status in (
@@ -262,7 +291,22 @@ async def admin_stats(call: CallbackQuery):
             "completed",
             "approved",
         ):
+
             successful_payments += 1
+
+            try:
+                revenue += int(
+                    payment.get(
+                        "amount",
+                        0,
+                    )
+                    or 0
+                )
+            except (
+                ValueError,
+                TypeError,
+            ):
+                pass
 
         elif status in (
             "failed",
@@ -270,17 +314,12 @@ async def admin_stats(call: CallbackQuery):
             "canceled",
             "rejected",
         ):
+
             failed_payments += 1
 
-    # --------------------------------------------------------
-    # АКТИВНЫЕ
-    # --------------------------------------------------------
-
-    active_users = vip_users + trial_users
-
-    # --------------------------------------------------------
+    # ========================================================
     # ФОРМИРУЕМ ТЕКСТ
-    # --------------------------------------------------------
+    # ========================================================
 
     text = (
         "📊 <b>Статистика ixxy VPN</b>\n"
@@ -288,11 +327,10 @@ async def admin_stats(call: CallbackQuery):
 
         "👥 <b>Пользователи</b>\n"
         f"├ Всего: <b>{total_users}</b>\n"
-        f"├ 👑 VIP: <b>{vip_users}</b>\n"
-        f"├ 🎁 Trial: <b>{trial_users}</b>\n"
         f"├ 🟢 Активных: <b>{active_users}</b>\n"
         f"├ 🔴 Истекших: <b>{expired_users}</b>\n"
-        f"└ ⚪ Без подписки: <b>{none_users}</b>\n"
+        f"├ ⚪ Без подписки: <b>{no_subscription_users}</b>\n"
+        f"└ 🎁 Использовали Trial: <b>{trial_users}</b>\n"
         "\n"
 
         "📈 <b>Регистрации</b>\n"
@@ -309,20 +347,31 @@ async def admin_stats(call: CallbackQuery):
         "\n"
 
         "🎟 <b>Промокоды</b>\n"
-        f"└ Всего: <b>{promo_count}</b>\n"
+        f"├ Всего: <b>{promo_count}</b>\n"
+        f"└ 🟢 Активных: <b>{active_promos}</b>\n"
         "\n"
 
-        "💰 <b>Доход:</b> недоступен\n"
+        f"💰 <b>Доход:</b> {revenue} ₽\n"
         "📡 <b>Трафик:</b> нет телеметрии\n"
     )
 
+    # ========================================================
+    # ОТПРАВКА
+    # ========================================================
+
     try:
+
         await call.message.edit_text(
             text,
             reply_markup=stats_keyboard(),
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
+
     except Exception as e:
-        print("Admin stats message error:", repr(e))
+
+        print(
+            "❌ Admin stats message error:",
+            repr(e),
+        )
 
     await call.answer()
