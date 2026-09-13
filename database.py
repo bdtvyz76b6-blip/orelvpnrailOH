@@ -18,10 +18,7 @@ logger = logging.getLogger(__name__)
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 
 MAX_PROMO_DAYS = int(
-    os.getenv(
-        "MAX_PROMO_DAYS",
-        "999999999999",
-    )
+    os.getenv("MAX_PROMO_DAYS", "999999999999")
 )
 
 UTC = timezone.utc
@@ -36,9 +33,6 @@ def now_utc() -> datetime:
 
 
 def normalize_datetime(value: Any) -> Optional[datetime]:
-    """
-    Приводит datetime из PostgreSQL к timezone-aware UTC.
-    """
     if value is None:
         return None
 
@@ -52,9 +46,6 @@ def normalize_datetime(value: Any) -> Optional[datetime]:
 
 
 def format_date(value: Any) -> str:
-    """
-    Формат даты для Telegram.
-    """
     dt = normalize_datetime(value)
 
     if not dt:
@@ -64,9 +55,6 @@ def format_date(value: Any) -> str:
 
 
 def subscription_active(subscription_until: Any) -> bool:
-    """
-    Проверяет, действует ли подписка.
-    """
     dt = normalize_datetime(subscription_until)
 
     if not dt:
@@ -76,19 +64,13 @@ def subscription_active(subscription_until: Any) -> bool:
 
 
 # ============================================================
-# DATABASE CONNECTION
+# DATABASE
 # ============================================================
 
 def connect():
-    """
-    Подключение к PostgreSQL.
-    DATABASE_URL берётся из .env / окружения.
-    """
-
     if not DATABASE_URL:
         raise RuntimeError(
-            "DATABASE_URL не задан. "
-            "Добавь DATABASE_URL в .env."
+            "DATABASE_URL не задан. Добавь DATABASE_URL в окружение."
         )
 
     return psycopg2.connect(
@@ -97,15 +79,7 @@ def connect():
     )
 
 
-# ============================================================
-# INIT DATABASE
-# ============================================================
-
 def init_db():
-    """
-    Создаёт все необходимые таблицы.
-    """
-
     conn = connect()
 
     try:
@@ -176,18 +150,13 @@ def init_db():
 
     except Exception:
         conn.rollback()
-
-        logger.exception(
-            "Ошибка инициализации PostgreSQL"
-        )
-
+        logger.exception("Ошибка инициализации PostgreSQL")
         raise
 
     finally:
         conn.close()
 
 
-# Совместимость со старым кодом
 create_table = init_db
 
 
@@ -200,15 +169,10 @@ def create_user(
     username: Optional[str] = None,
     first_name: Optional[str] = None,
 ):
-    """
-    Создаёт пользователя, если его ещё нет.
-    """
-
     conn = connect()
 
     try:
         with conn.cursor() as cur:
-
             cur.execute(
                 """
                 INSERT INTO users (
@@ -233,12 +197,10 @@ def create_user(
 
     except Exception:
         conn.rollback()
-
         logger.exception(
             "Ошибка создания пользователя %s",
             user_id,
         )
-
         raise
 
     finally:
@@ -246,10 +208,6 @@ def create_user(
 
 
 def get_user(user_id: int) -> Optional[dict]:
-    """
-    Возвращает пользователя как dict.
-    """
-
     conn = connect()
 
     try:
@@ -268,20 +226,13 @@ def get_user(user_id: int) -> Optional[dict]:
 
             row = cur.fetchone()
 
-            if not row:
-                return None
-
-            return dict(row)
+            return dict(row) if row else None
 
     finally:
         conn.close()
 
 
 def get_all_users() -> list[dict]:
-    """
-    Возвращает всех пользователей.
-    """
-
     conn = connect()
 
     try:
@@ -297,29 +248,22 @@ def get_all_users() -> list[dict]:
                 """
             )
 
-            return [
-                dict(row)
-                for row in cur.fetchall()
-            ]
+            return [dict(row) for row in cur.fetchall()]
 
     finally:
         conn.close()
 
 
 def count_users() -> int:
-
     conn = connect()
 
     try:
         with conn.cursor() as cur:
-
             cur.execute(
                 "SELECT COUNT(*) FROM users"
             )
 
-            return int(
-                cur.fetchone()[0]
-            )
+            return int(cur.fetchone()[0])
 
     finally:
         conn.close()
@@ -330,7 +274,6 @@ def update_user(
     username: Optional[str] = None,
     first_name: Optional[str] = None,
 ):
-
     conn = connect()
 
     try:
@@ -365,37 +308,23 @@ def update_user(
 # SUBSCRIPTION
 # ============================================================
 
-def check_user_subscription(
-    user_id: int,
-) -> bool:
-
+def check_user_subscription(user_id: int) -> bool:
     user = get_user(user_id)
 
     if not user:
         return False
 
-    until = user.get(
-        "subscription_until"
-    )
-
+    until = user.get("subscription_until")
     active = subscription_active(until)
 
     if not active and user.get("subscription"):
-        _set_subscription_status(
-            user_id,
-            False,
-        )
+        _set_subscription_status(user_id, False)
 
     return active
 
 
-def is_subscription_active(
-    user_id: int,
-) -> bool:
-
-    return check_user_subscription(
-        user_id
-    )
+def is_subscription_active(user_id: int) -> bool:
+    return check_user_subscription(user_id)
 
 
 def get_subscription_until(
@@ -416,12 +345,10 @@ def _set_subscription_status(
     user_id: int,
     status: bool,
 ):
-
     conn = connect()
 
     try:
         with conn.cursor() as cur:
-
             cur.execute(
                 """
                 UPDATE users
@@ -448,9 +375,6 @@ def extend_subscription(
     user_id: int,
     days: int,
 ) -> Optional[datetime]:
-    """
-    Продлевает подписку.
-    """
 
     days = int(days)
 
@@ -471,17 +395,12 @@ def extend_subscription(
 
     current_time = now_utc()
 
-    if (
-        current_until
-        and current_until > current_time
-    ):
+    if current_until and current_until > current_time:
         base = current_until
     else:
         base = current_time
 
-    new_until = (
-        base + timedelta(days=days)
-    )
+    new_until = base + timedelta(days=days)
 
     conn = connect()
 
@@ -507,14 +426,11 @@ def extend_subscription(
         return new_until
 
     except Exception:
-
         conn.rollback()
-
         logger.exception(
             "Ошибка продления подписки %s",
             user_id,
         )
-
         raise
 
     finally:
@@ -541,10 +457,7 @@ def activate_subscription(
     return new_until
 
 
-def deactivate_subscription(
-    user_id: int,
-):
-
+def deactivate_subscription(user_id: int):
     conn = connect()
 
     try:
@@ -569,8 +482,23 @@ def deactivate_subscription(
         conn.close()
 
 
-def expire_old_subscriptions() -> int:
+# ============================================================
+# COMPATIBILITY
+# ============================================================
 
+def disable_subscription(user_id: int):
+    """
+    Совместимость с subscription_checker.py.
+    """
+
+    return deactivate_subscription(user_id)
+
+
+# ============================================================
+# EXPIRED SUBSCRIPTIONS
+# ============================================================
+
+def expire_old_subscriptions() -> int:
     conn = connect()
 
     try:
@@ -595,13 +523,10 @@ def expire_old_subscriptions() -> int:
             return int(changed)
 
     except Exception:
-
         conn.rollback()
-
         logger.exception(
             "Ошибка проверки истёкших подписок"
         )
-
         raise
 
     finally:
@@ -613,15 +538,13 @@ check_expired_subscriptions = (
 )
 
 
-# ============================================================
-# EXPIRED USERS
-# ============================================================
-
 def get_expired_users() -> list[dict]:
     """
-    Возвращает пользователей с истёкшей подпиской.
+    Возвращает пользователей,
+    у которых подписка истекла.
 
-    Нужна для subscription_checker.py.
+    Возвращаются dict, поэтому:
+        user["user_id"]
     """
 
     conn = connect()
@@ -655,14 +578,13 @@ def get_expired_users() -> list[dict]:
 
 
 # ============================================================
-# SUBSCRIPTION CONTENT / LINK
+# SUBSCRIPTION CONTENT
 # ============================================================
 
 def save_subscription_content(
     user_id: int,
     content: str,
 ):
-
     conn = connect()
 
     try:
@@ -710,10 +632,7 @@ def get_subscription_content(
 
             row = cur.fetchone()
 
-            if not row:
-                return None
-
-            return row[0]
+            return row[0] if row else None
 
     finally:
         conn.close()
@@ -723,7 +642,6 @@ def save_subscription_link(
     user_id: int,
     link: str,
 ):
-
     conn = connect()
 
     try:
@@ -771,10 +689,7 @@ def get_subscription_link(
 
             row = cur.fetchone()
 
-            if not row:
-                return None
-
-            return row[0]
+            return row[0] if row else None
 
     finally:
         conn.close()
@@ -839,9 +754,7 @@ def use_trial(
                 row = cur.fetchone()
 
             if row[0]:
-
                 conn.rollback()
-
                 return False
 
             current_time = now_utc()
@@ -858,25 +771,20 @@ def use_trial(
             until_row = cur.fetchone()
 
             current_until = (
-                normalize_datetime(
-                    until_row[0]
-                )
+                normalize_datetime(until_row[0])
                 if until_row
                 else None
             )
 
-            if (
-                current_until
-                and current_until > current_time
-            ):
+            if current_until and current_until > current_time:
                 new_until = (
-                    current_until
-                    + timedelta(days=days)
+                    current_until +
+                    timedelta(days=days)
                 )
             else:
                 new_until = (
-                    current_time
-                    + timedelta(days=days)
+                    current_time +
+                    timedelta(days=days)
                 )
 
             cur.execute(
@@ -899,14 +807,11 @@ def use_trial(
             return True
 
     except Exception:
-
         conn.rollback()
-
         logger.exception(
             "Ошибка выдачи пробного периода %s",
             user_id,
         )
-
         raise
 
     finally:
@@ -947,10 +852,7 @@ def create_promocode(
     days = int(days)
     max_uses = int(max_uses)
 
-    if not code:
-        return False
-
-    if days <= 0:
+    if not code or days <= 0:
         return False
 
     if days > MAX_PROMO_DAYS:
@@ -992,14 +894,11 @@ def create_promocode(
             return True
 
     except Exception:
-
         conn.rollback()
-
         logger.exception(
             "Ошибка создания промокода %s",
             code,
         )
-
         raise
 
     finally:
@@ -1031,17 +930,13 @@ def get_promocode(
 
             row = cur.fetchone()
 
-            if not row:
-                return None
-
-            return dict(row)
+            return dict(row) if row else None
 
     finally:
         conn.close()
 
 
 def get_all_promocodes() -> list[dict]:
-
     conn = connect()
 
     try:
@@ -1128,9 +1023,7 @@ def use_promocode(
             promo = cur.fetchone()
 
             if not promo:
-
                 conn.rollback()
-
                 return (
                     False,
                     "Промокод не найден или уже отключён.",
@@ -1145,13 +1038,8 @@ def use_promocode(
                 promo["uses"] or 0
             )
 
-            if (
-                max_uses > 0
-                and uses >= max_uses
-            ):
-
+            if max_uses > 0 and uses >= max_uses:
                 conn.rollback()
-
                 return (
                     False,
                     "Лимит использований промокода исчерпан.",
@@ -1171,21 +1059,15 @@ def use_promocode(
                 ),
             )
 
-            already_used = cur.fetchone()
-
-            if already_used:
-
+            if cur.fetchone():
                 conn.rollback()
-
                 return (
                     False,
                     "Вы уже использовали этот промокод.",
                     0,
                 )
 
-            days = int(
-                promo["days"]
-            )
+            days = int(promo["days"])
 
             cur.execute(
                 """
@@ -1203,9 +1085,7 @@ def use_promocode(
 
                 cur.execute(
                     """
-                    INSERT INTO users (
-                        user_id
-                    )
+                    INSERT INTO users (user_id)
                     VALUES (%s)
                     ON CONFLICT (user_id)
                     DO NOTHING
@@ -1216,25 +1096,21 @@ def use_promocode(
                 current_until = None
 
             else:
-
                 current_until = normalize_datetime(
                     user_row["subscription_until"]
                 )
 
             current_time = now_utc()
 
-            if (
-                current_until
-                and current_until > current_time
-            ):
+            if current_until and current_until > current_time:
                 new_until = (
-                    current_until
-                    + timedelta(days=days)
+                    current_until +
+                    timedelta(days=days)
                 )
             else:
                 new_until = (
-                    current_time
-                    + timedelta(days=days)
+                    current_time +
+                    timedelta(days=days)
                 )
 
             cur.execute(
@@ -1283,7 +1159,6 @@ def use_promocode(
             )
 
     except psycopg2.errors.UniqueViolation:
-
         conn.rollback()
 
         return (
@@ -1293,15 +1168,12 @@ def use_promocode(
         )
 
     except Exception:
-
         conn.rollback()
-
         logger.exception(
             "Ошибка использования промокода %s пользователем %s",
             code,
             user_id,
         )
-
         raise
 
     finally:
@@ -1365,23 +1237,18 @@ def create_payment(
                 ),
             )
 
-            created = (
-                cur.rowcount > 0
-            )
+            created = cur.rowcount > 0
 
             conn.commit()
 
             return created
 
     except Exception:
-
         conn.rollback()
-
         logger.exception(
             "Ошибка создания платежа %s",
             payment_id,
         )
-
         raise
 
     finally:
@@ -1410,29 +1277,17 @@ def get_payment(
 
             row = cur.fetchone()
 
-            if not row:
-                return None
-
-            return dict(row)
+            return dict(row) if row else None
 
     finally:
         conn.close()
 
 
-# ============================================================
-# COMPATIBILITY
-# ============================================================
-
 def get_payment_by_payment_id(
     payment_id: str,
 ) -> Optional[dict]:
-    """
-    Совместимость с bot.py.
-    """
 
-    return get_payment(
-        payment_id
-    )
+    return get_payment(payment_id)
 
 
 def complete_payment(
@@ -1577,13 +1432,10 @@ def process_paid_payment(
             payment = cur.fetchone()
 
             if not payment:
-
                 conn.rollback()
-
                 return None
 
             if payment["status"] == "paid":
-
                 conn.rollback()
 
                 return {
@@ -1591,9 +1443,7 @@ def process_paid_payment(
                     **dict(payment),
                 }
 
-            days = int(
-                payment["days"]
-            )
+            days = int(payment["days"])
 
             cur.execute(
                 """
@@ -1611,9 +1461,7 @@ def process_paid_payment(
 
                 cur.execute(
                     """
-                    INSERT INTO users (
-                        user_id
-                    )
+                    INSERT INTO users (user_id)
                     VALUES (%s)
                     ON CONFLICT (user_id)
                     DO NOTHING
@@ -1624,25 +1472,21 @@ def process_paid_payment(
                 current_until = None
 
             else:
-
                 current_until = normalize_datetime(
                     user["subscription_until"]
                 )
 
             current_time = now_utc()
 
-            if (
-                current_until
-                and current_until > current_time
-            ):
+            if current_until and current_until > current_time:
                 new_until = (
-                    current_until
-                    + timedelta(days=days)
+                    current_until +
+                    timedelta(days=days)
                 )
             else:
                 new_until = (
-                    current_time
-                    + timedelta(days=days)
+                    current_time +
+                    timedelta(days=days)
                 )
 
             cur.execute(
@@ -1674,25 +1518,18 @@ def process_paid_payment(
 
             return {
                 "already_paid": False,
-                "user_id": int(
-                    payment["user_id"]
-                ),
+                "user_id": int(payment["user_id"]),
                 "days": days,
                 "subscription_until": new_until,
-                "payment_id": str(
-                    payment_id
-                ),
+                "payment_id": str(payment_id),
             }
 
     except Exception:
-
         conn.rollback()
-
         logger.exception(
             "Ошибка обработки оплаченного платежа %s",
             payment_id,
         )
-
         raise
 
     finally:
@@ -2043,6 +1880,4 @@ if __name__ == "__main__":
 
     init_db()
 
-    print(
-        "PostgreSQL database OK"
-    )
+    print("PostgreSQL database OK")
