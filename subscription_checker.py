@@ -3,7 +3,7 @@ import asyncio
 from database import (
     get_expired_users,
     disable_subscription,
-    get_user
+    get_user,
 )
 
 from github_update import expire_subscription
@@ -19,8 +19,8 @@ async def check_subscriptions(bot):
 
             for user in expired_users:
 
-                # get_expired_users() возвращает всю строку пользователя
-                user_id = user[0]
+                # get_expired_users() возвращает словарь пользователя
+                user_id = user["user_id"]
 
                 current_user = get_user(user_id)
 
