@@ -614,6 +614,47 @@ check_expired_subscriptions = (
 
 
 # ============================================================
+# EXPIRED USERS
+# ============================================================
+
+def get_expired_users() -> list[dict]:
+    """
+    Возвращает пользователей с истёкшей подпиской.
+
+    Нужна для subscription_checker.py.
+    """
+
+    conn = connect()
+
+    try:
+        with conn.cursor(
+            cursor_factory=RealDictCursor
+        ) as cur:
+
+            cur.execute(
+                """
+                SELECT *
+                FROM users
+                WHERE
+                    subscription = TRUE
+                    AND (
+                        subscription_until IS NULL
+                        OR subscription_until <= NOW()
+                    )
+                ORDER BY subscription_until ASC
+                """
+            )
+
+            return [
+                dict(row)
+                for row in cur.fetchall()
+            ]
+
+    finally:
+        conn.close()
+
+
+# ============================================================
 # SUBSCRIPTION CONTENT / LINK
 # ============================================================
 
@@ -1379,7 +1420,7 @@ def get_payment(
 
 
 # ============================================================
-# FIX ДЛЯ bot.py
+# COMPATIBILITY
 # ============================================================
 
 def get_payment_by_payment_id(
@@ -1387,10 +1428,6 @@ def get_payment_by_payment_id(
 ) -> Optional[dict]:
     """
     Совместимость с bot.py.
-
-    bot.py ожидает функцию
-    get_payment_by_payment_id(),
-    а основная функция называется get_payment().
     """
 
     return get_payment(
