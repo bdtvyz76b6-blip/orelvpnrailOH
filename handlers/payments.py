@@ -9,12 +9,13 @@ from aiogram.types import (
 )
 
 from database import (
-    add_payment,
-    activate_subscription,
+    create_payment,
+    process_paid_payment,
+    get_subscription_link,
 )
 
 from github_update import (
-    get_subscription_link,
+    create_subscription,
     update_subscription_file,
 )
 
@@ -37,21 +38,18 @@ PLANS = {
         "rub": 129,
         "title": "1 месяц",
     },
-
     "90": {
         "days": 90,
         "stars": 190,
         "rub": 379,
         "title": "3 месяца",
     },
-
     "180": {
         "days": 180,
         "stars": 350,
         "rub": 659,
         "title": "6 месяцев",
     },
-
     "365": {
         "days": 365,
         "stars": 700,
@@ -134,22 +132,19 @@ def sbp_keyboard():
 
 
 # ============================================================
-# ⭐ STARS
+# ⭐ STARS — МЕНЮ
 # ============================================================
 
-@router.callback_query(
-    F.data == "pay_stars"
-)
-async def pay_stars(
-    callback: CallbackQuery,
-):
+@router.callback_query(F.data == "pay_stars")
+async def pay_stars(callback: CallbackQuery):
+
+    if not callback.message:
+        await callback.answer()
+        return
 
     await callback.message.answer(
-        """
-⭐ <b>Оплата через Telegram Stars</b>
-
-Выберите тариф:
-""",
+        "⭐ <b>Оплата через Telegram Stars</b>\n\n"
+        "Выберите тариф:",
         reply_markup=stars_keyboard(),
         parse_mode="HTML",
     )
@@ -161,57 +156,44 @@ async def pay_stars(
 # ⭐ STARS — СОЗДАНИЕ СЧЁТА
 # ============================================================
 
-@router.callback_query(
-    F.data.startswith("stars_")
-)
-async def stars_buy(
-    callback: CallbackQuery,
-):
+@router.callback_query(F.data.startswith("stars_"))
+async def stars_buy(callback: CallbackQuery):
 
-    key = callback.data.replace(
-        "stars_",
-        "",
-    )
+    if not callback.message:
+        await callback.answer()
+        return
+
+    key = callback.data.replace("stars_", "", 1)
 
     plan = PLANS.get(key)
 
     if not plan:
-
         await callback.answer(
             "❌ Ошибка тарифа",
             show_alert=True,
         )
-
         return
 
     user_id = callback.from_user.id
 
-    payload = (
-        f"vpn_{key}_{user_id}"
-    )
+    payload = f"ixxy_stars_{user_id}_{key}"
 
     try:
 
         await callback.message.answer_invoice(
-
-            title="☂️ ixxy vpn",
-
+            title="☂️ ixxy VPN",
             description=(
-                f"🎫 Подписка — "
+                f"Подписка ixxy VPN — "
                 f"{plan['title']}"
             ),
-
             payload=payload,
-
             currency="XTR",
-
             prices=[
                 LabeledPrice(
                     label=plan["title"],
                     amount=plan["stars"],
                 )
             ],
-
         )
 
         await callback.answer()
@@ -224,7 +206,7 @@ async def stars_buy(
         )
 
         await callback.answer(
-            "❌ Не удалось создать счёт",
+            "❌ Не удалось создать счёт.",
             show_alert=True,
         )
 
@@ -256,24 +238,24 @@ async def stars_pre_checkout(
 # ⭐ STARS — УСПЕШНАЯ ОПЛАТА
 # ============================================================
 
-@router.message(
-    F.successful_payment
-)
-async def stars_success(
-    message: Message,
-):
+@router.message(F.successful_payment)
+async def stars_success(message: Message):
 
     payment = message.successful_payment
 
     if not payment:
-
         return
+
+    # --------------------------------------------------------
+    # PAYLOAD
+    # --------------------------------------------------------
 
     payload = payment.invoice_payload
 
     parts = payload.split("_")
 
-    if len(parts) != 3:
+    # ixxy_stars_USER_ID_DAYS
+    if len(parts) != 4 or parts[0] != "ixxy" or parts[1] != "stars":
 
         await message.answer(
             "❌ Ошибка данных платежа."
@@ -283,11 +265,8 @@ async def stars_success(
 
     try:
 
-        days_key = parts[1]
-
-        payload_user_id = int(
-            parts[2]
-        )
+        payload_user_id = int(parts[2])
+        days_key = parts[3]
 
     except (
         ValueError,
@@ -300,8 +279,17 @@ async def stars_success(
 
         return
 
-    # Проверяем пользователя
+    # --------------------------------------------------------
+    # ПРОВЕРКА ПОЛЬЗОВАТЕЛЯ
+    # --------------------------------------------------------
+
     if payload_user_id != message.from_user.id:
+
+        print(
+            "❌ STARS USER MISMATCH:",
+            payload_user_id,
+            message.from_user.id,
+        )
 
         await message.answer(
             "❌ Ошибка пользователя платежа."
@@ -309,9 +297,11 @@ async def stars_success(
 
         return
 
-    plan = PLANS.get(
-        days_key
-    )
+    # --------------------------------------------------------
+    # ТАРИФ
+    # --------------------------------------------------------
+
+    plan = PLANS.get(days_key)
 
     if not plan:
 
@@ -322,31 +312,104 @@ async def stars_success(
         return
 
     user_id = message.from_user.id
-
     days = plan["days"]
 
-    try:
+    # --------------------------------------------------------
+    # ID ПЛАТЕЖА
+    # --------------------------------------------------------
 
-        # ----------------------------------------------------
-        # Получаем существующую ссылку
-        # ----------------------------------------------------
+    payment_id = str(
+        payment.telegram_payment_charge_id
+    )
+
+    # --------------------------------------------------------
+    # ССЫЛКА ПОЛЬЗОВАТЕЛЯ
+    # --------------------------------------------------------
+
+    try:
 
         link = get_subscription_link(
             user_id
         )
 
-        # ----------------------------------------------------
-        # Активируем подписку в БД
-        # ----------------------------------------------------
+        if not link:
 
-        new_until = activate_subscription(
-            user_id,
-            link,
-            days,
+            link = create_subscription(
+                user_id,
+                days=days,
+            )
+
+    except Exception as e:
+
+        print(
+            "❌ CREATE SUBSCRIPTION ERROR:",
+            repr(e),
         )
 
+        await message.answer(
+            "⚠️ Оплата получена, но не удалось "
+            "подготовить подписку.\n\n"
+            "Администратор уже уведомлён."
+        )
+
+        return
+
+    # ========================================================
+    # СОХРАНЯЕМ ПЛАТЁЖ
+    # ========================================================
+
+    try:
+
+        create_payment(
+            user_id=user_id,
+            payment_id=payment_id,
+            amount=payment.total_amount,
+            days=days,
+            provider="stars",
+        )
+
+    except Exception as e:
+
+        # Возможная повторная обработка одного
+        # и того же Telegram-платежа
+        print(
+            "❌ STARS CREATE PAYMENT ERROR:",
+            repr(e),
+        )
+
+        # Если платеж уже существует, всё равно
+        # пытаемся корректно обработать его ниже.
+
+    # ========================================================
+    # АКТИВИРУЕМ / ПРОДЛЕВАЕМ ПОДПИСКУ
+    # ========================================================
+
+    try:
+
+        result = process_paid_payment(
+            payment_id
+        )
+
+        if not result:
+
+            raise RuntimeError(
+                "process_paid_payment returned empty result"
+            )
+
+        if result.get("already_paid"):
+
+            new_until = result.get(
+                "subscription_until"
+            )
+
+        else:
+
+            new_until = result.get(
+                "subscription_until"
+            )
+
         # ----------------------------------------------------
-        # Обновляем файл Happ
+        # ОБНОВЛЯЕМ GITHUB
         # ----------------------------------------------------
 
         if new_until:
@@ -356,24 +419,6 @@ async def stars_success(
                 new_until,
             )
 
-        else:
-
-            update_subscription_file(
-                user_id,
-                None,
-            )
-
-        # ----------------------------------------------------
-        # Сохраняем платёж
-        # ----------------------------------------------------
-
-        add_payment(
-            user_id,
-            payment.total_amount,
-            days,
-            payment.telegram_payment_charge_id,
-        )
-
     except Exception as e:
 
         print(
@@ -382,53 +427,69 @@ async def stars_success(
         )
 
         await message.answer(
-            """
-⚠️ Оплата получена.
-
-Но при выдаче подписки произошла ошибка.
-Администратор уже уведомлён.
-"""
+            "⚠️ <b>Оплата получена.</b>\n\n"
+            "Но при активации подписки произошла "
+            "техническая ошибка.\n\n"
+            "Администратор уже уведомлён.",
+            parse_mode="HTML",
         )
 
         return
 
+    # ========================================================
+    # УСПЕШНЫЙ ОТВЕТ
+    # ========================================================
+
+    until_text = ""
+
+    if new_until:
+
+        try:
+            until_text = new_until.strftime(
+                "%d.%m.%Y %H:%M"
+            )
+        except Exception:
+            until_text = str(new_until)
+
+    text = (
+        "🎉 <b>Оплата получена!</b>\n\n"
+        "☂️ <b>ixxy VPN активирован</b>\n\n"
+        f"🎫 Тариф: <b>{plan['title']}</b>\n"
+        f"📅 Добавлено: <b>{days} дней</b>\n"
+    )
+
+    if until_text:
+
+        text += (
+            f"⏰ Действует до: "
+            f"<b>{until_text}</b>\n"
+        )
+
+    text += (
+        "\n🔗 <b>Ваша подписка:</b>\n\n"
+        f"<code>{link}</code>"
+    )
+
     await message.answer(
-f"""
-🎉 <b>Оплата получена!</b>
-
-☂️ ixxy vip активирован
-
-🎫 Тариф:
-{plan['title']}
-
-📅 Срок:
-{days} дней
-
-🔗 <b>Ваша подписка:</b>
-
-{link}
-""",
+        text,
         parse_mode="HTML",
     )
 
 
 # ============================================================
-# 💳 СБП
+# 💳 СБП — МЕНЮ
 # ============================================================
 
-@router.callback_query(
-    F.data == "pay_sbp"
-)
-async def pay_sbp(
-    callback: CallbackQuery,
-):
+@router.callback_query(F.data == "pay_sbp")
+async def pay_sbp(callback: CallbackQuery):
+
+    if not callback.message:
+        await callback.answer()
+        return
 
     await callback.message.answer(
-        """
-💳 <b>Оплата через СБП</b>
-
-Выберите тариф:
-""",
+        "💳 <b>Оплата через СБП</b>\n\n"
+        "Выберите тариф:",
         reply_markup=sbp_keyboard(),
         parse_mode="HTML",
     )
@@ -440,16 +501,17 @@ async def pay_sbp(
 # 💳 СБП — СОЗДАНИЕ ПЛАТЕЖА
 # ============================================================
 
-@router.callback_query(
-    F.data.startswith("sbp_")
-)
-async def sbp_buy(
-    callback: CallbackQuery,
-):
+@router.callback_query(F.data.startswith("sbp_"))
+async def sbp_buy(callback: CallbackQuery):
+
+    if not callback.message:
+        await callback.answer()
+        return
 
     key = callback.data.replace(
         "sbp_",
         "",
+        1,
     )
 
     plan = PLANS.get(key)
@@ -464,14 +526,16 @@ async def sbp_buy(
         return
 
     user_id = callback.from_user.id
-
     amount = plan["rub"]
-
     days = plan["days"]
 
     await callback.answer(
         "⏳ Создаю платёж..."
     )
+
+    # ========================================================
+    # CASHeRA
+    # ========================================================
 
     try:
 
@@ -484,78 +548,62 @@ async def sbp_buy(
     except Exception as e:
 
         print(
-            "❌ CASHeRA CREATE ERROR:",
+            "❌ CASHERA CREATE ERROR:",
             repr(e),
         )
 
         await callback.message.answer(
-            """
-❌ Не удалось создать платёж.
-
-Попробуйте ещё раз.
-"""
+            "❌ <b>Не удалось создать платёж.</b>\n\n"
+            "Попробуйте ещё раз.",
+            parse_mode="HTML",
         )
 
         return
 
     print(
-        "💳 CASHeRA RESPONSE:",
+        "💳 CASHERA RESPONSE:",
         result,
     )
 
-    if not isinstance(
-        result,
-        dict,
-    ):
+    if not isinstance(result, dict):
 
         await callback.message.answer(
-            "❌ Cashera вернул некорректный ответ."
+            "❌ CasheRa вернул некорректный ответ."
         )
 
         return
 
-    # --------------------------------------------------------
+    # ========================================================
     # ID ТРАНЗАКЦИИ
-    # --------------------------------------------------------
+    # ========================================================
 
     payment_uuid = (
-
         result.get("uuid")
-
         or result.get("id")
-
         or result.get("transaction_id")
-
     )
 
-    # --------------------------------------------------------
+    # ========================================================
     # ССЫЛКА НА ОПЛАТУ
-    # --------------------------------------------------------
+    # ========================================================
 
     payment_url = (
-
         result.get("payment_url")
-
         or result.get("url")
-
         or result.get("payment_link")
-
         or result.get("pay_url")
-
     )
 
     if not payment_uuid:
 
         print(
-            "❌ CASHeRA UUID NOT FOUND"
+            "❌ CASHERA UUID NOT FOUND:",
+            result,
         )
 
         await callback.message.answer(
-            """
-❌ Cashera не вернул ID платежа.
-
-Обратитесь в поддержку.
-"""
+            "❌ CasheRa не вернул ID платежа.\n\n"
+            "Обратитесь в поддержку."
         )
 
         return
@@ -563,80 +611,49 @@ async def sbp_buy(
     if not payment_url:
 
         print(
-            "❌ CASHeRA PAYMENT URL NOT FOUND"
+            "❌ CASHERA PAYMENT URL NOT FOUND:",
+            result,
         )
 
         await callback.message.answer(
-            """
-❌ Cashera не вернул ссылку на оплату.
-
-Обратитесь в поддержку.
-"""
+            "❌ CasheRa не вернул ссылку на оплату.\n\n"
+            "Обратитесь в поддержку."
         )
 
         return
 
-    # --------------------------------------------------------
-    # СОХРАНЯЕМ ПЛАТЁЖ
-    # --------------------------------------------------------
+    # ========================================================
+    # СОХРАНЯЕМ ПЛАТЁЖ В POSTGRES
+    # ========================================================
 
     try:
 
-        add_payment(
+        create_payment(
             user_id=user_id,
-            photo="",
+            payment_id=str(payment_uuid),
+            amount=amount * 100,
             days=days,
-        )
-
-    except TypeError:
-
-        try:
-
-            add_payment(
-                user_id,
-                "",
-                days,
-            )
-
-        except Exception as e:
-
-            print(
-                "❌ ADD PAYMENT ERROR:",
-                repr(e),
-            )
-
-    except Exception as e:
-
-        print(
-            "❌ ADD PAYMENT ERROR:",
-            repr(e),
-        )
-
-    # --------------------------------------------------------
-    # СОХРАНЯЕМ ID CASHeRA
-    # --------------------------------------------------------
-
-    try:
-
-        from database import save_payment_id
-
-        save_payment_id(
-            user_id=user_id,
-            payment_id=str(
-                payment_uuid
-            ),
+            provider="cashera",
         )
 
     except Exception as e:
 
         print(
-            "❌ SAVE PAYMENT ID ERROR:",
+            "❌ CASHERA CREATE_PAYMENT ERROR:",
             repr(e),
         )
 
-    # --------------------------------------------------------
+        await callback.message.answer(
+            "❌ Не удалось сохранить платёж.\n\n"
+            "Попробуйте ещё раз или обратитесь "
+            "в поддержку."
+        )
+
+        return
+
+    # ========================================================
     # КНОПКА ОПЛАТЫ
-    # --------------------------------------------------------
+    # ========================================================
 
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -649,25 +666,19 @@ async def sbp_buy(
         ]
     )
 
+    # ========================================================
+    # ОТВЕТ
+    # ========================================================
+
     await callback.message.answer(
-f"""
-💳 <b>Счёт на оплату</b>
-
-☂️ ixxy vip
-
-🎫 Тариф:
-{plan['title']}
-
-📅 Срок:
-{days} дней
-
-💰 Стоимость:
-{amount} ₽
-
-Нажмите кнопку ниже для оплаты.
-
-После успешной оплаты подписка активируется автоматически.
-""",
+        "💳 <b>Счёт на оплату</b>\n\n"
+        "☂️ <b>ixxy VPN</b>\n\n"
+        f"🎫 Тариф: <b>{plan['title']}</b>\n"
+        f"📅 Срок: <b>{days} дней</b>\n"
+        f"💰 Стоимость: <b>{amount} ₽</b>\n\n"
+        "Нажмите кнопку ниже для оплаты.\n\n"
+        "После успешной оплаты подписка "
+        "активируется автоматически.",
         reply_markup=keyboard,
         parse_mode="HTML",
         disable_web_page_preview=True,
