@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from aiogram import Router, F
 from aiogram.types import (
     CallbackQuery,
@@ -9,7 +11,8 @@ from aiogram.exceptions import TelegramBadRequest
 from config import ADMIN_IDS
 
 from database import (
-    get_payments,
+    get_all_payments,
+    get_payment,
     get_user,
 )
 
@@ -33,44 +36,11 @@ def is_admin(user_id: int) -> bool:
 
 
 # ============================================================
-# ПОЛУЧЕНИЕ ПОЛЯ ПЛАТЕЖА
-# ============================================================
-
-def payment_field(payment, index, default=None):
-    try:
-        if isinstance(payment, dict):
-            keys = [
-                "id",
-                "user_id",
-                "days",
-                "photo",
-                "payment_id",
-                "status",
-                "created_at",
-            ]
-
-            if index < len(keys):
-                return payment.get(
-                    keys[index],
-                    default,
-                )
-
-            return default
-
-        return payment[index]
-
-    except (IndexError, KeyError, TypeError):
-        return default
-
-
-# ============================================================
 # СТАТУС ПЛАТЕЖА
 # ============================================================
 
 def format_payment_status(status):
-    status = str(
-        status or "pending"
-    ).lower()
+    status = str(status or "pending").lower()
 
     statuses = {
         "pending": "⏳ Ожидает",
@@ -81,6 +51,7 @@ def format_payment_status(status):
         "failed": "❌ Ошибка",
         "cancelled": "🚫 Отменён",
         "canceled": "🚫 Отменён",
+        "rejected": "🚫 Отклонён",
     }
 
     return statuses.get(
@@ -90,13 +61,80 @@ def format_payment_status(status):
 
 
 # ============================================================
-# КЛАВИАТУРА ПЛАТЕЖЕЙ
+# ФОРМАТ ДАТЫ
 # ============================================================
 
-def payments_keyboard(
-    payments,
-    page,
-):
+def format_datetime(value):
+    if not value:
+        return "нет"
+
+    if isinstance(value, datetime):
+        dt = value
+
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+
+        return dt.astimezone(timezone.utc).strftime(
+            "%d.%m.%Y %H:%M"
+        )
+
+    return str(value)
+
+
+# ============================================================
+# СПОСОБ ОПЛАТЫ
+# ============================================================
+
+def format_provider(provider):
+    provider = str(provider or "").lower()
+
+    if provider == "stars":
+        return "⭐ Telegram Stars"
+
+    if provider in ("cashera", "sbp"):
+        return "💳 СБП / CasheRa"
+
+    if provider:
+        return provider
+
+    return "не указан"
+
+
+# ============================================================
+# СУММА
+# ============================================================
+
+def format_amount(payment):
+    amount = payment.get("amount")
+
+    if amount is None:
+        return "не указана"
+
+    try:
+        amount = int(amount)
+    except (TypeError, ValueError):
+        return str(amount)
+
+    provider = str(
+        payment.get("provider") or ""
+    ).lower()
+
+    # CasheRa хранит сумму в копейках
+    if provider == "cashera":
+        return f"{amount / 100:.2f} ₽"
+
+    # Stars хранится непосредственно в XTR
+    if provider == "stars":
+        return f"{amount} ⭐"
+
+    return str(amount)
+
+
+# ============================================================
+# КЛАВИАТУРА
+# ============================================================
+
+def payments_keyboard(payments, page):
     buttons = []
 
     start = page * PAYMENTS_PER_PAGE
@@ -105,33 +143,12 @@ def payments_keyboard(
     page_payments = payments[start:end]
 
     for payment in page_payments:
-        payment_id = payment_field(
-            payment,
-            0,
-            0,
-        )
+        payment_id = payment.get("id")
 
-        user_id = payment_field(
-            payment,
-            1,
-            0,
-        )
+        days = payment.get("days") or 0
+        status = payment.get("status")
 
-        days = payment_field(
-            payment,
-            2,
-            0,
-        )
-
-        status = payment_field(
-            payment,
-            5,
-            "pending",
-        )
-
-        status_text = format_payment_status(
-            status
-        )
+        status_text = format_payment_status(status)
 
         buttons.append(
             [
@@ -148,9 +165,9 @@ def payments_keyboard(
             ]
         )
 
-    # --------------------------------------------------------
+    # ========================================================
     # ПАГИНАЦИЯ
-    # --------------------------------------------------------
+    # ========================================================
 
     navigation = []
 
@@ -220,7 +237,7 @@ def payments_keyboard(
 
 
 # ============================================================
-# СПИСОК ПЛАТЕЖЕЙ
+# ПОКАЗ ПЛАТЕЖЕЙ
 # ============================================================
 
 async def show_payments(
@@ -228,7 +245,7 @@ async def show_payments(
     page: int = 0,
 ):
     try:
-        payments = get_payments() or []
+        payments = get_all_payments() or []
 
     except Exception as e:
         print(
@@ -237,10 +254,25 @@ async def show_payments(
         )
 
         await call.message.edit_text(
-            "❌ Не удалось получить платежи."
+            "❌ <b>Не удалось получить платежи.</b>",
+            parse_mode="HTML",
         )
 
         return
+
+    # Новые платежи сверху
+    payments = list(payments)
+
+    try:
+        payments.sort(
+            key=lambda x: (
+                x.get("created_at") is not None,
+                x.get("created_at"),
+            ),
+            reverse=True,
+        )
+    except Exception:
+        pass
 
     if page < 0:
         page = 0
@@ -258,32 +290,40 @@ async def show_payments(
     if page >= total_pages:
         page = total_pages - 1
 
-    # --------------------------------------------------------
+    # ========================================================
     # НЕТ ПЛАТЕЖЕЙ
-    # --------------------------------------------------------
+    # ========================================================
 
     if not payments:
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="🔄 Обновить",
+                        callback_data="admin_payments",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="⬅️ Назад",
+                        callback_data="admin_back",
+                    )
+                ],
+            ]
+        )
+
         await call.message.edit_text(
             "💳 <b>История платежей</b>\n\n"
             "Платежей пока нет.",
             parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [
-                        InlineKeyboardButton(
-                            text="⬅️ Назад",
-                            callback_data="admin_back",
-                        )
-                    ]
-                ]
-            ),
+            reply_markup=keyboard,
         )
 
         return
 
-    # --------------------------------------------------------
+    # ========================================================
     # СТАТИСТИКА
-    # --------------------------------------------------------
+    # ========================================================
 
     pending = 0
     successful = 0
@@ -291,12 +331,7 @@ async def show_payments(
 
     for payment in payments:
         status = str(
-            payment_field(
-                payment,
-                5,
-                "pending",
-            )
-            or "pending"
+            payment.get("status") or "pending"
         ).lower()
 
         if status == "pending":
@@ -314,6 +349,7 @@ async def show_payments(
             "failed",
             "cancelled",
             "canceled",
+            "rejected",
         ):
             failed += 1
 
@@ -343,7 +379,7 @@ async def show_payments(
 
 
 # ============================================================
-# ОТКРЫТИЕ ПЛАТЕЖЕЙ
+# ОТКРЫТЬ ПЛАТЕЖИ
 # ============================================================
 
 @router.callback_query(
@@ -447,12 +483,12 @@ async def payment_info(
         )
         return
 
-    # --------------------------------------------------------
-    # ПОЛУЧАЕМ ПЛАТЕЖИ
-    # --------------------------------------------------------
+    # ========================================================
+    # ПОЛУЧАЕМ ПЛАТЁЖ
+    # ========================================================
 
     try:
-        payments = get_payments() or []
+        payment = get_payment(payment_id)
 
     except Exception as e:
         print(
@@ -467,27 +503,6 @@ async def payment_info(
 
         return
 
-    # --------------------------------------------------------
-    # ИЩЕМ ПЛАТЁЖ
-    # --------------------------------------------------------
-
-    payment = None
-
-    for item in payments:
-        item_id = payment_field(
-            item,
-            0,
-            None,
-        )
-
-        try:
-            if int(item_id) == payment_id:
-                payment = item
-                break
-
-        except (ValueError, TypeError):
-            continue
-
     if not payment:
         await call.answer(
             "❌ Платёж не найден.",
@@ -495,54 +510,59 @@ async def payment_info(
         )
         return
 
-    # --------------------------------------------------------
+    # ========================================================
     # ДАННЫЕ ПЛАТЕЖА
-    # --------------------------------------------------------
+    # ========================================================
 
-    user_id = payment_field(
-        payment,
-        1,
-        0,
+    user_id = payment.get("user_id")
+    days = payment.get("days") or 0
+
+    external_id = (
+        payment.get("payment_id")
+        or "нет"
     )
 
-    days = payment_field(
-        payment,
-        2,
-        0,
-    )
-
-    payment_external_id = payment_field(
-        payment,
-        4,
-        "",
-    )
-
-    status = payment_field(
-        payment,
-        5,
+    status = payment.get(
+        "status",
         "pending",
     )
 
-    created_at = payment_field(
-        payment,
-        6,
+    provider = payment.get(
+        "provider",
         "",
+    )
+
+    created_at = payment.get(
+        "created_at"
+    )
+
+    paid_at = payment.get(
+        "paid_at"
     )
 
     status_text = format_payment_status(
         status
     )
 
-    # --------------------------------------------------------
-    # ДАННЫЕ ПОЛЬЗОВАТЕЛЯ
-    # --------------------------------------------------------
+    provider_text = format_provider(
+        provider
+    )
+
+    amount_text = format_amount(
+        payment
+    )
+
+    # ========================================================
+    # ПОЛЬЗОВАТЕЛЬ
+    # ========================================================
 
     user = None
 
     try:
-        user = get_user(
-            int(user_id)
-        )
+        if user_id:
+            user = get_user(
+                int(user_id)
+            )
 
     except Exception as e:
         print(
@@ -553,67 +573,74 @@ async def payment_info(
     username = "нет"
     first_name = "нет"
 
-    if user:
-        try:
-            username = user[1] or "нет"
-        except (IndexError, TypeError):
-            pass
+    if isinstance(user, dict):
+        username = (
+            user.get("username")
+            or "нет"
+        )
 
-        try:
-            first_name = user[2] or "нет"
-        except (IndexError, TypeError):
-            pass
+        first_name = (
+            user.get("first_name")
+            or "нет"
+        )
 
-    # --------------------------------------------------------
-    # ФОРМАТ ДАТЫ
-    # --------------------------------------------------------
+    # ========================================================
+    # USERNAME
+    # ========================================================
 
-    created_text = str(
-        created_at or "нет"
-    )
+    if username != "нет":
+        username_text = f"@{username}"
+    else:
+        username_text = "нет"
 
-    try:
-        if hasattr(created_at, "strftime"):
-            created_text = created_at.strftime(
-                "%d.%m.%Y %H:%M"
-            )
-
-    except Exception:
-        pass
-
-    # --------------------------------------------------------
-    # ID ПЛАТЕЖА
-    # --------------------------------------------------------
-
-    external_id_text = (
-        str(payment_external_id)
-        if payment_external_id
-        else "нет"
-    )
-
-    # --------------------------------------------------------
+    # ========================================================
     # ИНФОРМАЦИЯ
-    # --------------------------------------------------------
+    # ========================================================
 
     text = (
         "💳 <b>Информация о платеже</b>\n\n"
+
         f"🧾 Платёж: <b>#{payment_id}</b>\n"
+
         f"👤 Пользователь: "
         f"<b>{first_name}</b>\n"
-        f"🆔 ID: <code>{user_id}</code>\n"
+
+        f"🆔 Telegram ID: "
+        f"<code>{user_id}</code>\n"
+
         f"🔗 Username: "
-        f"@{username if username != 'нет' else 'нет'}\n\n"
-        f"📦 Срок: <b>{days} дней</b>\n"
-        f"📊 Статус: <b>{status_text}</b>\n"
-        f"🕐 Создан: <b>{created_text}</b>\n"
-        f"🔑 ID оплаты: "
-        f"<code>{external_id_text}</code>\n\n"
-        "💰 Способ: <b>СБП</b>\n"
-        "ℹ️ Сумма: <b>недоступна в текущей БД</b>"
+        f"<b>{username_text}</b>\n\n"
+
+        f"📦 Срок: "
+        f"<b>{days} дней</b>\n"
+
+        f"💰 Сумма: "
+        f"<b>{amount_text}</b>\n"
+
+        f"💳 Способ: "
+        f"<b>{provider_text}</b>\n"
+
+        f"📊 Статус: "
+        f"<b>{status_text}</b>\n\n"
+
+        f"🕐 Создан: "
+        f"<b>{format_datetime(created_at)}</b>\n"
+
+        f"✅ Оплачен: "
+        f"<b>{format_datetime(paid_at)}</b>\n\n"
+
+        f"🔑 ID оплаты:\n"
+        f"<code>{external_id}</code>"
     )
 
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
+    # ========================================================
+    # КНОПКИ
+    # ========================================================
+
+    keyboard_buttons = []
+
+    if user_id:
+        keyboard_buttons.append(
             [
                 InlineKeyboardButton(
                     text="👤 Пользователь",
@@ -621,20 +648,29 @@ async def payment_info(
                         f"admin_user_{user_id}"
                     ),
                 )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="⬅️ К платежам",
-                    callback_data="admin_payments",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="🏠 Админ-панель",
-                    callback_data="admin_back",
-                )
-            ],
+            ]
+        )
+
+    keyboard_buttons.append(
+        [
+            InlineKeyboardButton(
+                text="⬅️ К платежам",
+                callback_data="admin_payments",
+            )
         ]
+    )
+
+    keyboard_buttons.append(
+        [
+            InlineKeyboardButton(
+                text="🏠 Админ-панель",
+                callback_data="admin_back",
+            )
+        ]
+    )
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=keyboard_buttons
     )
 
     try:
@@ -652,7 +688,7 @@ async def payment_info(
 
 
 # ============================================================
-# NO-OP КНОПКА
+# NO-OP
 # ============================================================
 
 @router.callback_query(
