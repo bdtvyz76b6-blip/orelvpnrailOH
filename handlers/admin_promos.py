@@ -12,9 +12,9 @@ from aiogram.exceptions import TelegramBadRequest
 from config import ADMIN_IDS
 
 from database import (
-    add_promocode,
+    create_promocode,
     get_promocodes,
-    delete_promocode,
+    deactivate_promocode,
 )
 
 
@@ -53,33 +53,29 @@ class PromoDelete(StatesGroup):
 
 
 # ============================================================
-# БЕЗОПАСНОЕ ПОЛУЧЕНИЕ ПОЛЯ
+# ПОЛЯ ПРОМОКОДА
 # ============================================================
 
-def promo_field(promo, index, default=None):
+def promo_field(promo, key, default=None):
     try:
         if isinstance(promo, dict):
-            keys = [
-                "code",
-                "days",
-            ]
+            return promo.get(key, default)
 
-            if index < len(keys):
-                return promo.get(
-                    keys[index],
-                    default,
-                )
+        # Совместимость со старым tuple/list форматом
+        if key == "code":
+            return promo[0]
 
-            return default
+        if key == "days":
+            return promo[1]
 
-        return promo[index]
+        return default
 
     except (IndexError, KeyError, TypeError):
         return default
 
 
 # ============================================================
-# КЛАВИАТУРА МЕНЮ
+# МЕНЮ
 # ============================================================
 
 def promo_menu_keyboard():
@@ -118,17 +114,13 @@ def promo_menu_keyboard():
 # ОТКРЫТИЕ РАЗДЕЛА
 # ============================================================
 
-@router.callback_query(
-    F.data == "admin_promos"
-)
+@router.callback_query(F.data == "admin_promos")
 async def promos(
     call: CallbackQuery,
     state: FSMContext,
 ):
 
-    if not call.from_user or not is_admin(
-        call.from_user.id
-    ):
+    if not call.from_user or not is_admin(call.from_user.id):
         await call.answer(
             "❌ Нет доступа.",
             show_alert=True,
@@ -141,14 +133,11 @@ async def promos(
         promo_codes = get_promocodes() or []
         total = len(promo_codes)
     except Exception as e:
-        print(
-            "Admin promos load error:",
-            repr(e),
-        )
+        print("Admin promos load error:", repr(e))
         total = 0
 
     text = (
-        "🎟 <b>Промокоды</b>\n\n"
+        "🎟 <b>Промокоды ixxy VPN</b>\n\n"
         f"📦 Всего активных: <b>{total}</b>\n\n"
         "Выберите действие:"
     )
@@ -167,20 +156,16 @@ async def promos(
 
 
 # ============================================================
-# СОЗДАНИЕ ПРОМОКОДА
+# СОЗДАНИЕ
 # ============================================================
 
-@router.callback_query(
-    F.data == "promo_create"
-)
+@router.callback_query(F.data == "promo_create")
 async def create_start(
     call: CallbackQuery,
     state: FSMContext,
 ):
 
-    if not call.from_user or not is_admin(
-        call.from_user.id
-    ):
+    if not call.from_user or not is_admin(call.from_user.id):
         await call.answer(
             "❌ Нет доступа.",
             show_alert=True,
@@ -188,15 +173,12 @@ async def create_start(
         return
 
     await state.clear()
-
-    await state.set_state(
-        PromoCreate.code
-    )
+    await state.set_state(PromoCreate.code)
 
     await call.message.answer(
         "🎟 <b>Создание промокода</b>\n\n"
         "Введите код промокода.\n\n"
-        "Пример:\n"
+        "Например:\n"
         "<code>IXXY2026</code>",
         parse_mode="HTML",
     )
@@ -205,69 +187,42 @@ async def create_start(
 
 
 # ============================================================
-# ПОЛУЧЕНИЕ КОДА
+# КОД
 # ============================================================
 
-@router.message(
-    PromoCreate.code
-)
+@router.message(PromoCreate.code)
 async def get_code(
     message: Message,
     state: FSMContext,
 ):
 
-    if not message.from_user or not is_admin(
-        message.from_user.id
-    ):
+    if not message.from_user or not is_admin(message.from_user.id):
         await state.clear()
         return
 
     if not message.text:
-
-        await message.answer(
-            "❌ Отправьте текстовый код."
-        )
+        await message.answer("❌ Отправьте текстовый код.")
         return
 
     code = message.text.strip().upper()
 
-    # --------------------------------------------------------
-    # ВАЛИДАЦИЯ
-    # --------------------------------------------------------
-
-    if not code:
-
-        await message.answer(
-            "❌ Код не может быть пустым."
-        )
-        return
-
     if len(code) < 3:
-
         await message.answer(
             "❌ Код слишком короткий.\n"
-            "Минимум: 3 символа."
+            "Минимум — 3 символа."
         )
         return
 
     if len(code) > 32:
-
         await message.answer(
             "❌ Код слишком длинный.\n"
-            "Максимум: 32 символа."
+            "Максимум — 32 символа."
         )
         return
 
-    allowed_chars = (
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        "0123456789_-"
-    )
+    allowed_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"
 
-    if any(
-        char not in allowed_chars
-        for char in code
-    ):
-
+    if any(char not in allowed_chars for char in code):
         await message.answer(
             "❌ Недопустимые символы.\n\n"
             "Разрешены только:\n"
@@ -275,16 +230,11 @@ async def get_code(
         )
         return
 
-    await state.update_data(
-        code=code
-    )
-
-    await state.set_state(
-        PromoCreate.days
-    )
+    await state.update_data(code=code)
+    await state.set_state(PromoCreate.days)
 
     await message.answer(
-        "📅 <b>Сколько дней выдать?</b>\n\n"
+        "📅 <b>Сколько дней выдавать?</b>\n\n"
         f"Минимум: <b>{MIN_PROMO_DAYS}</b>\n"
         f"Максимум: <b>{MAX_PROMO_DAYS}</b>\n\n"
         "Например: <code>30</code>",
@@ -293,38 +243,28 @@ async def get_code(
 
 
 # ============================================================
-# ПОЛУЧЕНИЕ ДНЕЙ
+# ДНИ
 # ============================================================
 
-@router.message(
-    PromoCreate.days
-)
+@router.message(PromoCreate.days)
 async def get_days(
     message: Message,
     state: FSMContext,
 ):
 
-    if not message.from_user or not is_admin(
-        message.from_user.id
-    ):
+    if not message.from_user or not is_admin(message.from_user.id):
         await state.clear()
         return
 
     if not message.text:
-
         await message.answer(
-            "❌ Введите количество дней числом."
+            "❌ Введите количество дней."
         )
         return
 
     try:
-
-        days = int(
-            message.text.strip()
-        )
-
+        days = int(message.text.strip())
     except ValueError:
-
         await message.answer(
             "❌ Нужно ввести целое число.\n\n"
             "Например: <code>30</code>",
@@ -333,62 +273,58 @@ async def get_days(
         return
 
     if days < MIN_PROMO_DAYS:
-
         await message.answer(
             f"❌ Минимум — {MIN_PROMO_DAYS} день."
         )
         return
 
     if days > MAX_PROMO_DAYS:
-
         await message.answer(
             f"❌ Максимум — {MAX_PROMO_DAYS} дней."
         )
         return
 
     data = await state.get_data()
-
-    code = str(
-        data.get(
-            "code",
-            ""
-        )
-    ).upper()
+    code = str(data.get("code", "")).upper()
 
     if not code:
-
         await state.clear()
-
         await message.answer(
             "❌ Сессия создания промокода устарела.\n"
             "Создайте промокод заново."
         )
         return
 
-    # --------------------------------------------------------
-    # СОЗДАНИЕ
-    # --------------------------------------------------------
-
     try:
-
-        result = add_promocode(
-            code,
-            days,
+        create_promocode(
+            code=code,
+            days=days,
         )
+
+    except TypeError:
+        # На случай другой сигнатуры актуальной DB
+        try:
+            create_promocode(code, days)
+        except Exception as e:
+            print("Promo create error:", repr(e))
+
+            await state.clear()
+
+            await message.answer(
+                "❌ Не удалось создать промокод.\n\n"
+                "Возможно, такой код уже существует."
+            )
+            return
 
     except Exception as e:
+        print("Promo create error:", repr(e))
 
-        print(
-            "Promo create error:",
-            repr(e),
-        )
+        await state.clear()
 
         await message.answer(
             "❌ Не удалось создать промокод.\n\n"
             "Возможно, такой код уже существует."
         )
-
-        await state.clear()
         return
 
     await state.clear()
@@ -412,7 +348,7 @@ async def get_days(
 
 
 # ============================================================
-# СПИСОК ПРОМОКОДОВ
+# СПИСОК
 # ============================================================
 
 async def show_promo_list(
@@ -421,15 +357,9 @@ async def show_promo_list(
 ):
 
     try:
-
         promos = get_promocodes() or []
-
     except Exception as e:
-
-        print(
-            "Promo list error:",
-            repr(e),
-        )
+        print("Promo list error:", repr(e))
 
         await call.message.edit_text(
             "❌ Не удалось получить список промокодов.",
@@ -444,11 +374,9 @@ async def show_promo_list(
                 ]
             ),
         )
-
         return
 
     if not promos:
-
         await call.message.edit_text(
             "🎟 <b>Промокоды</b>\n\n"
             "Активных промокодов нет.",
@@ -470,44 +398,24 @@ async def show_promo_list(
                 ]
             ),
         )
-
         return
 
     total = len(promos)
 
     total_pages = max(
         1,
-        (
-            total
-            + PROMOS_PER_PAGE
-            - 1
-        )
+        (total + PROMOS_PER_PAGE - 1)
         // PROMOS_PER_PAGE,
     )
 
-    if page < 0:
-        page = 0
+    page = max(0, min(page, total_pages - 1))
 
-    if page >= total_pages:
-        page = total_pages - 1
+    start = page * PROMOS_PER_PAGE
+    end = start + PROMOS_PER_PAGE
 
-    start = (
-        page
-        * PROMOS_PER_PAGE
-    )
+    page_promos = promos[start:end]
 
-    end = (
-        start
-        + PROMOS_PER_PAGE
-    )
-
-    page_promos = promos[
-        start:end
-    ]
-
-    text = (
-        "🎟 <b>Активные промокоды</b>\n\n"
-    )
+    text = "🎟 <b>Активные промокоды</b>\n\n"
 
     buttons = []
 
@@ -515,13 +423,13 @@ async def show_promo_list(
 
         code = promo_field(
             promo,
-            0,
+            "code",
             "???",
         )
 
         days = promo_field(
             promo,
-            1,
+            "days",
             0,
         )
 
@@ -533,14 +441,8 @@ async def show_promo_list(
         buttons.append(
             [
                 InlineKeyboardButton(
-                    text=(
-                        f"🎟 {code} · "
-                        f"{days} дней"
-                    ),
-                    callback_data=(
-                        f"promo_view_"
-                        f"{str(code)}"
-                    ),
+                    text=f"🎟 {code} · {days} дней",
+                    callback_data=f"promo_view_{code}",
                 )
             ]
         )
@@ -555,45 +457,35 @@ async def show_promo_list(
     navigation = []
 
     if page > 0:
-
         navigation.append(
             InlineKeyboardButton(
                 text="⬅️",
-                callback_data=(
-                    f"promo_list_page_{page - 1}"
-                ),
+                callback_data=f"promo_list_page_{page - 1}",
             )
         )
 
     navigation.append(
         InlineKeyboardButton(
             text=f"{page + 1}/{total_pages}",
-            callback_data="noop",
+            callback_data="promo_noop",
         )
     )
 
     if end < total:
-
         navigation.append(
             InlineKeyboardButton(
                 text="➡️",
-                callback_data=(
-                    f"promo_list_page_{page + 1}"
-                ),
+                callback_data=f"promo_list_page_{page + 1}",
             )
         )
 
-    buttons.append(
-        navigation
-    )
+    buttons.append(navigation)
 
     buttons.append(
         [
             InlineKeyboardButton(
                 text="🔄 Обновить",
-                callback_data=(
-                    f"promo_list_page_{page}"
-                ),
+                callback_data=f"promo_list_page_{page}",
             )
         ]
     )
@@ -617,7 +509,6 @@ async def show_promo_list(
     )
 
     try:
-
         await call.message.edit_text(
             text,
             parse_mode="HTML",
@@ -627,7 +518,6 @@ async def show_promo_list(
         )
 
     except TelegramBadRequest as e:
-
         if "message is not modified" not in str(e):
             raise
 
@@ -636,16 +526,10 @@ async def show_promo_list(
 # ОТКРЫТЬ СПИСОК
 # ============================================================
 
-@router.callback_query(
-    F.data == "promo_list"
-)
-async def promo_list(
-    call: CallbackQuery,
-):
+@router.callback_query(F.data == "promo_list")
+async def promo_list(call: CallbackQuery):
 
-    if not call.from_user or not is_admin(
-        call.from_user.id
-    ):
+    if not call.from_user or not is_admin(call.from_user.id):
         await call.answer(
             "❌ Нет доступа.",
             show_alert=True,
@@ -656,24 +540,20 @@ async def promo_list(
 
     await show_promo_list(
         call,
-        page=0,
+        0,
     )
 
 
 # ============================================================
-# ПАГИНАЦИЯ СПИСКА
+# ПАГИНАЦИЯ
 # ============================================================
 
 @router.callback_query(
     F.data.startswith("promo_list_page_")
 )
-async def promo_list_page(
-    call: CallbackQuery,
-):
+async def promo_list_page(call: CallbackQuery):
 
-    if not call.from_user or not is_admin(
-        call.from_user.id
-    ):
+    if not call.from_user or not is_admin(call.from_user.id):
         await call.answer(
             "❌ Нет доступа.",
             show_alert=True,
@@ -681,7 +561,6 @@ async def promo_list_page(
         return
 
     try:
-
         page = int(
             call.data.replace(
                 "promo_list_page_",
@@ -689,9 +568,7 @@ async def promo_list_page(
                 1,
             )
         )
-
     except (ValueError, AttributeError):
-
         await call.answer(
             "❌ Ошибка страницы.",
             show_alert=True,
@@ -702,24 +579,20 @@ async def promo_list_page(
 
     await show_promo_list(
         call,
-        page=page,
+        page,
     )
 
 
 # ============================================================
-# ПРОСМОТР ПРОМОКОДА
+# ПРОСМОТР
 # ============================================================
 
 @router.callback_query(
     F.data.startswith("promo_view_")
 )
-async def promo_view(
-    call: CallbackQuery,
-):
+async def promo_view(call: CallbackQuery):
 
-    if not call.from_user or not is_admin(
-        call.from_user.id
-    ):
+    if not call.from_user or not is_admin(call.from_user.id):
         await call.answer(
             "❌ Нет доступа.",
             show_alert=True,
@@ -733,15 +606,9 @@ async def promo_view(
     )
 
     try:
-
         promos = get_promocodes() or []
-
     except Exception as e:
-
-        print(
-            "Promo view error:",
-            repr(e),
-        )
+        print("Promo view error:", repr(e))
 
         await call.answer(
             "❌ Ошибка базы данных.",
@@ -756,18 +623,16 @@ async def promo_view(
         item_code = str(
             promo_field(
                 item,
-                0,
+                "code",
                 "",
             )
         ).upper()
 
         if item_code == code.upper():
-
             promo = item
             break
 
     if not promo:
-
         await call.answer(
             "❌ Промокод не найден.",
             show_alert=True,
@@ -776,12 +641,12 @@ async def promo_view(
 
     days = promo_field(
         promo,
-        1,
+        "days",
         0,
     )
 
     text = (
-        "🎟 <b>Промокод</b>\n\n"
+        "🎟 <b>Промокод ixxy VPN</b>\n\n"
         f"🔑 Код: <code>{code}</code>\n"
         f"📅 Выдаёт: <b>{days} дней</b>\n\n"
         "Выберите действие:"
@@ -792,9 +657,7 @@ async def promo_view(
             [
                 InlineKeyboardButton(
                     text="🗑 Удалить",
-                    callback_data=(
-                        f"promo_delete_confirm_{code}"
-                    ),
+                    callback_data=f"promo_delete_confirm_{code}",
                 )
             ],
             [
@@ -807,15 +670,12 @@ async def promo_view(
     )
 
     try:
-
         await call.message.edit_text(
             text,
             parse_mode="HTML",
             reply_markup=keyboard,
         )
-
     except TelegramBadRequest as e:
-
         if "message is not modified" not in str(e):
             raise
 
@@ -823,20 +683,16 @@ async def promo_view(
 
 
 # ============================================================
-# НАЧАЛО УДАЛЕНИЯ
+# УДАЛЕНИЕ
 # ============================================================
 
-@router.callback_query(
-    F.data == "promo_delete"
-)
+@router.callback_query(F.data == "promo_delete")
 async def promo_delete_start(
     call: CallbackQuery,
     state: FSMContext,
 ):
 
-    if not call.from_user or not is_admin(
-        call.from_user.id
-    ):
+    if not call.from_user or not is_admin(call.from_user.id):
         await call.answer(
             "❌ Нет доступа.",
             show_alert=True,
@@ -844,15 +700,12 @@ async def promo_delete_start(
         return
 
     await state.clear()
-
-    await state.set_state(
-        PromoDelete.code
-    )
+    await state.set_state(PromoDelete.code)
 
     await call.message.answer(
         "🗑 <b>Удаление промокода</b>\n\n"
         "Введите код, который нужно удалить.\n\n"
-        "Для отмены отправьте:\n"
+        "Для отмены:\n"
         "<code>/cancel</code>",
         parse_mode="HTML",
     )
@@ -861,25 +714,20 @@ async def promo_delete_start(
 
 
 # ============================================================
-# ПОЛУЧЕНИЕ КОДА ДЛЯ УДАЛЕНИЯ
+# КОД УДАЛЕНИЯ
 # ============================================================
 
-@router.message(
-    PromoDelete.code
-)
+@router.message(PromoDelete.code)
 async def promo_delete_code(
     message: Message,
     state: FSMContext,
 ):
 
-    if not message.from_user or not is_admin(
-        message.from_user.id
-    ):
+    if not message.from_user or not is_admin(message.from_user.id):
         await state.clear()
         return
 
     if not message.text:
-
         await message.answer(
             "❌ Отправьте код текстом."
         )
@@ -888,7 +736,6 @@ async def promo_delete_code(
     code = message.text.strip().upper()
 
     if code == "/CANCEL":
-
         await state.clear()
 
         await message.answer(
@@ -904,33 +751,18 @@ async def promo_delete_code(
                 ]
             ),
         )
-
-        return
-
-    if not code:
-
-        await message.answer(
-            "❌ Код не может быть пустым."
-        )
         return
 
     try:
-
         promos = get_promocodes() or []
-
     except Exception as e:
-
-        print(
-            "Promo delete lookup error:",
-            repr(e),
-        )
+        print("Promo delete lookup error:", repr(e))
 
         await state.clear()
 
         await message.answer(
             "❌ Не удалось проверить промокод."
         )
-
         return
 
     exists = False
@@ -940,18 +772,16 @@ async def promo_delete_code(
         existing_code = str(
             promo_field(
                 promo,
-                0,
+                "code",
                 "",
             )
         ).upper()
 
         if existing_code == code:
-
             exists = True
             break
 
     if not exists:
-
         await message.answer(
             f"❌ Промокод <code>{code}</code> не найден.",
             parse_mode="HTML",
@@ -960,31 +790,27 @@ async def promo_delete_code(
 
     await state.clear()
 
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="🗑 Да, удалить",
-                    callback_data=(
-                        f"promo_delete_confirm_{code}"
-                    ),
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="❌ Отмена",
-                    callback_data="admin_promos",
-                )
-            ],
-        ]
-    )
-
     await message.answer(
         "⚠️ <b>Удаление промокода</b>\n\n"
         f"🎟 Код: <code>{code}</code>\n\n"
         "Удалить его?",
         parse_mode="HTML",
-        reply_markup=keyboard,
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="🗑 Да, удалить",
+                        callback_data=f"promo_delete_confirm_{code}",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="❌ Отмена",
+                        callback_data="admin_promos",
+                    )
+                ],
+            ]
+        ),
     )
 
 
@@ -999,9 +825,7 @@ async def promo_delete_confirm(
     call: CallbackQuery,
 ):
 
-    if not call.from_user or not is_admin(
-        call.from_user.id
-    ):
+    if not call.from_user or not is_admin(call.from_user.id):
         await call.answer(
             "❌ Нет доступа.",
             show_alert=True,
@@ -1012,10 +836,9 @@ async def promo_delete_confirm(
         "promo_delete_confirm_",
         "",
         1,
-    )
+    ).upper()
 
     if not code:
-
         await call.answer(
             "❌ Некорректный код.",
             show_alert=True,
@@ -1023,17 +846,24 @@ async def promo_delete_confirm(
         return
 
     try:
+        deactivate_promocode(code)
 
-        delete_promocode(
-            code
-        )
+    except TypeError:
+        try:
+            deactivate_promocode(
+                code=code
+            )
+        except Exception as e:
+            print("Promo delete error:", repr(e))
+
+            await call.answer(
+                "❌ Не удалось удалить промокод.",
+                show_alert=True,
+            )
+            return
 
     except Exception as e:
-
-        print(
-            "Promo delete error:",
-            repr(e),
-        )
+        print("Promo delete error:", repr(e))
 
         await call.answer(
             "❌ Не удалось удалить промокод.",
@@ -1042,7 +872,6 @@ async def promo_delete_confirm(
         return
 
     try:
-
         await call.message.edit_text(
             "✅ <b>Промокод удалён</b>\n\n"
             f"🎟 <code>{code}</code>",
@@ -1066,29 +895,20 @@ async def promo_delete_confirm(
         )
 
     except TelegramBadRequest as e:
-
         if "message is not modified" not in str(e):
             raise
 
-    await call.answer(
-        "✅ Промокод удалён"
-    )
+    await call.answer("✅ Промокод удалён")
 
 
 # ============================================================
 # NO-OP
 # ============================================================
 
-@router.callback_query(
-    F.data == "noop"
-)
-async def promo_noop(
-    call: CallbackQuery,
-):
+@router.callback_query(F.data == "promo_noop")
+async def promo_noop(call: CallbackQuery):
 
-    if not call.from_user or not is_admin(
-        call.from_user.id
-    ):
+    if not call.from_user or not is_admin(call.from_user.id):
         await call.answer(
             "❌ Нет доступа.",
             show_alert=True,
@@ -1099,20 +919,33 @@ async def promo_noop(
 
 
 # ============================================================
-# ОТМЕНА FSM
+# ОБЩИЙ NO-OP ДЛЯ СОВМЕСТИМОСТИ
 # ============================================================
 
-@router.message(
-    F.text == "/cancel"
-)
+@router.callback_query(F.data == "noop")
+async def noop(call: CallbackQuery):
+
+    if not call.from_user or not is_admin(call.from_user.id):
+        await call.answer(
+            "❌ Нет доступа.",
+            show_alert=True,
+        )
+        return
+
+    await call.answer()
+
+
+# ============================================================
+# CANCEL
+# ============================================================
+
+@router.message(F.text == "/cancel")
 async def promo_cancel(
     message: Message,
     state: FSMContext,
 ):
 
-    if not message.from_user or not is_admin(
-        message.from_user.id
-    ):
+    if not message.from_user or not is_admin(message.from_user.id):
         return
 
     current_state = await state.get_state()
