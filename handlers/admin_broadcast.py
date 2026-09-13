@@ -16,7 +16,7 @@ from aiogram.exceptions import (
 )
 
 from config import ADMIN_IDS, BOT_TOKEN
-from database import get_user_ids
+from database import get_all_users
 
 
 router = Router()
@@ -37,6 +37,25 @@ class Broadcast(StatesGroup):
 
 def is_admin(user_id: int) -> bool:
     return user_id in ADMIN_IDS
+
+
+# ============================================================
+# ПОЛУЧЕНИЕ ID ПОЛЬЗОВАТЕЛЕЙ
+# ============================================================
+
+def get_user_ids_for_broadcast():
+    users = get_all_users() or []
+
+    result = []
+
+    for user in users:
+        if isinstance(user, dict):
+            user_id = user.get("user_id")
+
+            if user_id is not None:
+                result.append(int(user_id))
+
+    return result
 
 
 # ============================================================
@@ -111,10 +130,6 @@ async def prepare_broadcast(
         await state.clear()
         return
 
-    # --------------------------------------------------------
-    # ПРОВЕРЯЕМ ТИП СООБЩЕНИЯ
-    # --------------------------------------------------------
-
     supported = any(
         [
             bool(message.text),
@@ -132,14 +147,15 @@ async def prepare_broadcast(
         return
 
     # --------------------------------------------------------
-    # ПОЛУЧАЕМ СПИСОК ПОЛЬЗОВАТЕЛЕЙ
+    # ПОЛУЧАЕМ ПОЛЬЗОВАТЕЛЕЙ
     # --------------------------------------------------------
 
     try:
-        users = get_user_ids() or []
+        users = get_user_ids_for_broadcast()
+
     except Exception as e:
         print(
-            "Broadcast get_user_ids error:",
+            "❌ Broadcast get users error:",
             repr(e),
         )
 
@@ -211,7 +227,8 @@ async def confirm_broadcast(
     # --------------------------------------------------------
 
     try:
-        users = get_user_ids() or []
+        users = get_user_ids_for_broadcast()
+
     except Exception as e:
         await state.clear()
 
@@ -263,10 +280,6 @@ async def confirm_broadcast(
         parse_mode="HTML",
     )
 
-    # --------------------------------------------------------
-    # BOT
-    # --------------------------------------------------------
-
     bot = Bot(token=BOT_TOKEN)
 
     sent = 0
@@ -274,11 +287,12 @@ async def confirm_broadcast(
     blocked = 0
 
     try:
+
         for index, user_id in enumerate(users, start=1):
 
             try:
                 await bot.copy_message(
-                    chat_id=int(user_id),
+                    chat_id=user_id,
                     from_chat_id=chat_id,
                     message_id=message_id,
                 )
@@ -286,18 +300,19 @@ async def confirm_broadcast(
                 sent += 1
 
             except TelegramRetryAfter as e:
-                # Telegram попросил подождать
+
                 retry_after = int(e.retry_after) + 1
 
                 print(
-                    f"Broadcast rate limit: sleeping {retry_after}s"
+                    f"⚠️ Broadcast rate limit: "
+                    f"sleeping {retry_after}s"
                 )
 
                 await asyncio.sleep(retry_after)
 
                 try:
                     await bot.copy_message(
-                        chat_id=int(user_id),
+                        chat_id=user_id,
                         from_chat_id=chat_id,
                         message_id=message_id,
                     )
@@ -308,43 +323,56 @@ async def confirm_broadcast(
                     failed += 1
                     blocked += 1
 
-                except Exception:
+                except Exception as retry_error:
                     failed += 1
+
+                    print(
+                        "❌ Broadcast retry error:",
+                        repr(retry_error),
+                    )
 
             except TelegramForbiddenError:
                 failed += 1
                 blocked += 1
 
-            except TelegramBadRequest:
+            except TelegramBadRequest as e:
                 failed += 1
+
+                print(
+                    "❌ Broadcast bad request:",
+                    repr(e),
+                )
 
             except Exception as e:
                 failed += 1
 
                 print(
-                    "Broadcast send error:",
+                    "❌ Broadcast send error:",
                     repr(e),
                 )
 
             # ------------------------------------------------
-            # ОБНОВЛЯЕМ ПРОГРЕСС
+            # ПРОГРЕСС
             # ------------------------------------------------
 
             if index % 20 == 0 or index == total:
+
                 try:
                     await status_message.edit_text(
                         "📢 <b>Рассылка выполняется</b>\n\n"
                         f"📨 Обработано: <b>{index}/{total}</b>\n"
-                        f"📊 Прогресс: <b>{index * 100 // total}%</b>\n\n"
+                        f"📊 Прогресс: "
+                        f"<b>{index * 100 // total}%</b>\n\n"
                         f"✅ Отправлено: <b>{sent}</b>\n"
                         f"❌ Ошибок: <b>{failed}</b>\n"
                         f"🚫 Заблокировали: <b>{blocked}</b>",
                         parse_mode="HTML",
                     )
+
                 except Exception:
                     pass
 
-            # Небольшая пауза между отправками
+            # Небольшая пауза
             await asyncio.sleep(0.05)
 
     finally:
@@ -361,6 +389,7 @@ async def confirm_broadcast(
     # --------------------------------------------------------
 
     try:
+
         await status_message.edit_text(
             "📢 <b>Рассылка завершена</b>\n\n"
             f"👥 Всего пользователей: <b>{total}</b>\n\n"
@@ -371,6 +400,7 @@ async def confirm_broadcast(
         )
 
     except Exception:
+
         try:
             await call.message.answer(
                 "📢 <b>Рассылка завершена</b>\n\n"
@@ -380,6 +410,7 @@ async def confirm_broadcast(
                 f"🚫 Заблокировали бота: <b>{blocked}</b>",
                 parse_mode="HTML",
             )
+
         except Exception:
             pass
 
@@ -407,17 +438,19 @@ async def cancel_broadcast(
     )
 
     if call.message:
+
         try:
             await call.message.edit_text(
                 "❌ <b>Рассылка отменена.</b>",
                 parse_mode="HTML",
             )
+
         except TelegramBadRequest:
             pass
 
 
 # ============================================================
-# ОТМЕНА КОМАНДОЙ /cancel
+# ОТМЕНА /cancel
 # ============================================================
 
 @router.message(
