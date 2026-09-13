@@ -9,7 +9,7 @@ from aiogram.types import (
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 
-from datetime import datetime
+from datetime import datetime, date
 
 from database import (
     get_user,
@@ -38,7 +38,7 @@ TELEGRAM_URL = "https://t.me/orelvpntopbot"
 
 
 # ============================================================
-# GITHUB RAW — ПРЯМАЯ ССЫЛКА ПОДПИСКИ
+# GITHUB RAW
 # ============================================================
 
 GITHUB_RAW_URL = (
@@ -49,13 +49,76 @@ GITHUB_RAW_URL = (
 
 def get_subscription_url(user_id: int) -> str:
     """
-    Возвращает постоянную прямую ссылку
-    на персональный файл пользователя GitHub.
+    Постоянная ссылка на персональную подписку.
     """
 
     return (
         f"{GITHUB_RAW_URL}/"
         f"{user_id}.txt"
+    )
+
+
+# ============================================================
+# ДАТА
+# ============================================================
+
+def normalize_date(value):
+    """
+    Преобразует PostgreSQL datetime/date/строку
+    в date.
+    """
+
+    if value is None:
+        return None
+
+    if isinstance(value, datetime):
+        return value.date()
+
+    if isinstance(value, date):
+        return value
+
+    text = str(value).strip()
+
+    if not text:
+        return None
+
+    # PostgreSQL ISO datetime
+    try:
+        return datetime.fromisoformat(
+            text.replace(
+                "Z",
+                "+00:00",
+            )
+        ).date()
+
+    except Exception:
+        pass
+
+    # YYYY-MM-DD
+    try:
+        return datetime.strptime(
+            text[:10],
+            "%Y-%m-%d",
+        ).date()
+
+    except Exception:
+        return None
+
+
+def format_date_ru(value) -> str:
+    """
+    DD.MM.YYYY
+    """
+
+    parsed = normalize_date(
+        value
+    )
+
+    if not parsed:
+        return "—"
+
+    return parsed.strftime(
+        "%d.%m.%Y"
     )
 
 
@@ -138,44 +201,68 @@ async def show_cabinet(
         return
 
     # --------------------------------------------------------
-    # Дата окончания
+    # PostgreSQL dict
     # --------------------------------------------------------
 
-    until = user[4] or ""
+    until = user.get(
+        "subscription_until"
+    )
 
-    until_text = "—"
+    subscription_active = bool(
+        user.get(
+            "subscription"
+        )
+    )
+
+    expire_date = normalize_date(
+        until
+    )
+
+    today = datetime.now().date()
+
+    # --------------------------------------------------------
+    # Если дата уже прошла — считаем неактивной
+    # --------------------------------------------------------
+
+    if (
+        expire_date
+        and expire_date < today
+    ):
+
+        subscription_active = False
+
+    # --------------------------------------------------------
+    # Дата
+    # --------------------------------------------------------
+
+    until_text = format_date_ru(
+        until
+    )
 
     days = 0
 
-    if until:
+    if expire_date:
 
-        try:
+        days = max(
+            0,
+            (
+                expire_date
+                - today
+            ).days,
+        )
 
-            expire_date = datetime.strptime(
-                str(until),
-                "%Y-%m-%d",
-            ).date()
+    # --------------------------------------------------------
+    # Статус
+    # --------------------------------------------------------
 
-            today = datetime.now().date()
+    if subscription_active and days > 0:
 
-            until_text = expire_date.strftime(
-                "%d.%m.%Y"
-            )
+        status_text = "🟢 Активна"
 
-            days = max(
-                0,
-                (
-                    expire_date
-                    - today
-                ).days,
-            )
+    else:
 
-        except Exception as e:
-
-            print(
-                f"❌ Ошибка даты "
-                f"{user_id}: {e}"
-            )
+        status_text = "🔴 Не активна"
+        days = 0
 
     # ========================================================
     # КАБИНЕТ
@@ -189,6 +276,9 @@ async def show_cabinet(
 ━━━━━━━━━━━━━━━━━━
 
 🎫 <b>Подписка</b>
+
+📊 Статус:
+<b>{status_text}</b>
 
 📅 Активна до:
 <b>{until_text}</b>
@@ -291,21 +381,18 @@ async def get_link(
 
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-
             [
                 InlineKeyboardButton(
                     text="🔗 Открыть подписку",
                     url=subscription_url,
                 )
             ],
-
             [
                 InlineKeyboardButton(
                     text="📋 Получить ссылку",
                     callback_data="copy_subscription_link",
                 )
             ],
-
         ]
     )
 
@@ -385,7 +472,7 @@ async def copy_subscription_link(
         return
 
     # --------------------------------------------------------
-    # Прямая ссылка
+    # Ссылка
     # --------------------------------------------------------
 
     subscription_url = get_subscription_url(
@@ -393,7 +480,7 @@ async def copy_subscription_link(
     )
 
     # --------------------------------------------------------
-    # Отправляем ссылку
+    # Отправляем
     # --------------------------------------------------------
 
     await callback.message.answer(
@@ -488,10 +575,12 @@ async def refresh_subscription(
         return
 
     # --------------------------------------------------------
-    # Дата
+    # PostgreSQL dict
     # --------------------------------------------------------
 
-    until = user[4] or ""
+    until = user.get(
+        "subscription_until"
+    )
 
     if not until:
 
@@ -502,27 +591,11 @@ async def refresh_subscription(
 
         return
 
-    # --------------------------------------------------------
-    # Парсим дату
-    # --------------------------------------------------------
+    expire_date = normalize_date(
+        until
+    )
 
-    try:
-
-        date = datetime.strptime(
-            str(until),
-            "%Y-%m-%d",
-        )
-
-        date_text = date.strftime(
-            "%d.%m.%Y"
-        )
-
-    except Exception as e:
-
-        print(
-            f"❌ Ошибка даты "
-            f"{user_id}: {e}"
-        )
+    if not expire_date:
 
         await callback.answer(
             "❌ Ошибка даты подписки",
@@ -530,6 +603,10 @@ async def refresh_subscription(
         )
 
         return
+
+    date_text = format_date_ru(
+        expire_date
+    )
 
     # --------------------------------------------------------
     # Обновление GitHub
@@ -543,7 +620,7 @@ async def refresh_subscription(
 
         update_subscription_file(
             user_id,
-            date_text,
+            expire_date,
         )
 
         subscription_url = get_subscription_url(
@@ -553,6 +630,9 @@ async def refresh_subscription(
         await callback.message.answer(
             f"""
 ✅ <b>Серверы обновлены</b>
+
+📅 Подписка до:
+<b>{date_text}</b>
 
 🔗 Ссылка осталась прежней:
 
@@ -635,6 +715,14 @@ async def activate_promo(
         .upper()
     )
 
+    if not code:
+
+        await message.answer(
+            "❌ Промокод не может быть пустым."
+        )
+
+        return
+
     # --------------------------------------------------------
     # Активируем
     # --------------------------------------------------------
@@ -657,6 +745,19 @@ async def activate_promo(
 
         await message.answer(
             "❌ Произошла ошибка при активации."
+        )
+
+        return
+
+    if not isinstance(
+        result,
+        dict,
+    ):
+
+        await state.clear()
+
+        await message.answer(
+            "❌ Сервер вернул некорректный ответ."
         )
 
         return
@@ -735,20 +836,21 @@ async def activate_promo(
     )
 
     new_date = result.get(
-        "date",
-        "",
+        "date"
     )
 
     # --------------------------------------------------------
-    # Обновляем GitHub-файл
+    # Обновляем GitHub
     # --------------------------------------------------------
 
     try:
 
-        update_subscription_file(
-            user_id,
-            new_date,
-        )
+        if new_date:
+
+            update_subscription_file(
+                user_id,
+                new_date,
+            )
 
     except Exception as e:
 
@@ -758,23 +860,12 @@ async def activate_promo(
         )
 
     # --------------------------------------------------------
-    # Формат даты
+    # Дата
     # --------------------------------------------------------
 
-    try:
-
-        date_text = datetime.strptime(
-            str(new_date),
-            "%Y-%m-%d",
-        ).strftime(
-            "%d.%m.%Y"
-        )
-
-    except Exception:
-
-        date_text = str(
-            new_date
-        )
+    date_text = format_date_ru(
+        new_date
+    )
 
     await state.clear()
 
