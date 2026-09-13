@@ -9,7 +9,7 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 
-from datetime import datetime
+from datetime import datetime, timezone
 from html import escape
 
 from config import ADMIN_IDS
@@ -18,12 +18,10 @@ from keyboards import admin_menu
 from database import (
     get_all_users,
     get_user,
+    get_all_payments,
     get_subscription_link,
-    get_user_payments,
-    get_payments,
     disable_subscription,
     extend_subscription,
-    today_msk,
 )
 
 from github_update import (
@@ -45,16 +43,12 @@ MAX_CUSTOM_DAYS = 999_999_999
 
 
 # ============================================================
-# ПОИСК
+# FSM
 # ============================================================
 
 class AdminSearch(StatesGroup):
     waiting_query = State()
 
-
-# ============================================================
-# СВОЁ КОЛИЧЕСТВО ДНЕЙ
-# ============================================================
 
 class AdminCustomExtend(StatesGroup):
     waiting_days = State()
@@ -69,10 +63,134 @@ def is_admin(user_id: int) -> bool:
 
 
 # ============================================================
+# HTML
+# ============================================================
+
+def h(value) -> str:
+    return escape(str(value or ""))
+
+
+# ============================================================
+# DATETIME
+# ============================================================
+
+def normalize_datetime(value):
+    if not value:
+        return None
+
+    if isinstance(value, datetime):
+        dt = value
+    else:
+        text = str(value).strip()
+
+        try:
+            dt = datetime.fromisoformat(
+                text.replace("Z", "+00:00")
+            )
+        except Exception:
+            try:
+                dt = datetime.strptime(
+                    text,
+                    "%Y-%m-%d",
+                )
+            except Exception:
+                return None
+
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+
+    return dt
+
+
+def format_date(value):
+    if not value:
+        return "нет"
+
+    dt = normalize_datetime(value)
+
+    if dt:
+        return dt.astimezone(timezone.utc).strftime(
+            "%d.%m.%Y"
+        )
+
+    return str(value)
+
+
+def format_datetime(value):
+    if not value:
+        return "нет"
+
+    dt = normalize_datetime(value)
+
+    if dt:
+        return dt.astimezone(timezone.utc).strftime(
+            "%d.%m.%Y %H:%M"
+        )
+
+    return str(value)
+
+
+# ============================================================
+# СТАТУС ПОДПИСКИ
+# ============================================================
+
+def get_subscription_status(
+    subscription,
+    subscription_until,
+):
+    """
+    Новая БД:
+        subscription = BOOLEAN
+        subscription_until = TIMESTAMPTZ
+    """
+
+    if not subscription:
+        return "🔴 Неактивен", 0
+
+    if not subscription_until:
+        return "🔴 Неактивен", 0
+
+    dt = normalize_datetime(subscription_until)
+
+    if not dt:
+        return "⚠️ Ошибка даты", 0
+
+    now = datetime.now(timezone.utc)
+
+    if dt <= now:
+        return "⛔ Истёк", 0
+
+    days = max(
+        0,
+        (dt - now).days,
+    )
+
+    return "🟢 Активен", days
+
+
+# ============================================================
+# ТАРИФ
+# ============================================================
+
+def get_tariff_name(user: dict):
+    if not user:
+        return "❌ Нет подписки"
+
+    if not user.get("subscription"):
+        return "❌ Нет подписки"
+
+    if user.get("trial_used") and not user.get("pending_days"):
+        return "🎁 Пробный период"
+
+    return "☂️ ixxy VPN"
+
+
+# ============================================================
 # ССЫЛКА НА ПОДПИСКУ
 # ============================================================
 
 def get_user_subscription_url(user_id: int) -> str:
+
     try:
         link = get_github_subscription_link(user_id)
 
@@ -105,105 +223,7 @@ def get_user_subscription_url(user_id: int) -> str:
 
 
 # ============================================================
-# БЕЗОПАСНЫЙ HTML
-# ============================================================
-
-def h(value) -> str:
-    return escape(str(value or ""))
-
-
-# ============================================================
-# СТАТУС ПОДПИСКИ
-# ============================================================
-
-def get_subscription_status(
-    subscription,
-    subscription_until,
-):
-    if subscription in (
-        None,
-        "",
-        "none",
-        "expired",
-    ):
-        return "🔴 Неактивен", 0
-
-    if not subscription_until:
-        return "🔴 Неактивен", 0
-
-    try:
-        if isinstance(subscription_until, datetime):
-            expire_date = subscription_until.date()
-        else:
-            expire_date = datetime.strptime(
-                str(subscription_until),
-                "%Y-%m-%d",
-            ).date()
-
-    except Exception:
-        return "⚠️ Ошибка даты", 0
-
-    try:
-        today = today_msk()
-    except Exception:
-        today = datetime.now().date()
-
-    if expire_date < today:
-        return "⛔ Истёк", 0
-
-    days = (expire_date - today).days
-
-    return "🟢 Активен", days
-
-
-# ============================================================
-# ТАРИФ
-# ============================================================
-
-def get_tariff_name(subscription):
-    if subscription == "vip":
-        return "☂️ ixxy VIP"
-
-    if subscription == "ixxy":
-        return "☂️ ixxy"
-
-    if subscription == "trial":
-        return "🎁 Пробный период"
-
-    if subscription in (
-        None,
-        "",
-        "none",
-        "expired",
-    ):
-        return "❌ Нет подписки"
-
-    return str(subscription)
-
-
-# ============================================================
-# ДАТА
-# ============================================================
-
-def format_date(value):
-    if not value:
-        return "нет"
-
-    try:
-        if isinstance(value, datetime):
-            return value.strftime("%d.%m.%Y")
-
-        return datetime.strptime(
-            str(value),
-            "%Y-%m-%d",
-        ).strftime("%d.%m.%Y")
-
-    except Exception:
-        return str(value)
-
-
-# ============================================================
-# КНОПКА URL
+# URL BUTTON
 # ============================================================
 
 def add_url_button(
@@ -225,15 +245,33 @@ def add_url_button(
 
 
 # ============================================================
+# USERNAME
+# ============================================================
+
+def user_display_name(user: dict) -> str:
+    if not user:
+        return "неизвестный"
+
+    username = user.get("username")
+    first_name = user.get("first_name")
+    user_id = user.get("user_id")
+
+    if username:
+        return f"@{username}"
+
+    if first_name:
+        return str(first_name)
+
+    return f"ID {user_id}"
+
+
+# ============================================================
 # НАЗАД
 # ============================================================
 
-@router.callback_query(
-    F.data == "admin_back"
-)
-async def admin_back(
-    call: CallbackQuery,
-):
+@router.callback_query(F.data == "admin_back")
+async def admin_back(call: CallbackQuery):
+
     if not is_admin(call.from_user.id):
         await call.answer(
             "❌ Нет доступа",
@@ -241,12 +279,11 @@ async def admin_back(
         )
         return
 
-    # Сначала закрываем callback
     await call.answer()
 
     try:
         await call.message.edit_text(
-            "🛠 <b>Админ-панель ixxy</b>\n\n"
+            "🛠 <b>☂️ ixxy VPN — Админ-панель</b>\n\n"
             "Выбери нужный раздел:",
             reply_markup=admin_menu(),
             parse_mode="HTML",
@@ -286,27 +323,32 @@ def build_users_keyboard(
     buttons = []
 
     for user in page_users:
-        user_id = user[0]
+
+        if not isinstance(user, dict):
+            continue
+
+        user_id = user.get("user_id")
 
         username = (
-            user[1]
+            user.get("username")
+            or user.get("first_name")
             or f"ID {user_id}"
         )
 
-        subscription = user[3]
-        subscription_until = user[4]
-
         status, days = get_subscription_status(
-            subscription,
-            subscription_until,
+            user.get("subscription"),
+            user.get("subscription_until"),
         )
 
         if days > 0:
             status_text = f"🟢 {days}д."
+
         elif status == "⛔ Истёк":
             status_text = "⛔ истёк"
+
         elif status == "⚠️ Ошибка даты":
             status_text = "⚠️ дата"
+
         else:
             status_text = "🔴 нет"
 
@@ -404,8 +446,9 @@ async def render_users(
     call: CallbackQuery,
     page=0,
 ):
+
     try:
-        users = get_all_users()
+        users = get_all_users() or []
 
     except Exception as e:
         print(
@@ -422,7 +465,14 @@ async def render_users(
 
         return
 
+    users = [
+        user
+        for user in users
+        if isinstance(user, dict)
+    ]
+
     if not users:
+
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
                 [
@@ -499,12 +549,9 @@ async def render_users(
 # USERS
 # ============================================================
 
-@router.callback_query(
-    F.data == "admin_users"
-)
-async def show_users(
-    call: CallbackQuery,
-):
+@router.callback_query(F.data == "admin_users")
+async def show_users(call: CallbackQuery):
+
     if not is_admin(call.from_user.id):
         await call.answer(
             "❌ Нет доступа",
@@ -512,8 +559,6 @@ async def show_users(
         )
         return
 
-    # ВАЖНО:
-    # закрываем callback ДО работы с БД
     await call.answer()
 
     await render_users(
@@ -529,9 +574,8 @@ async def show_users(
 @router.callback_query(
     F.data.startswith("admin_users_page_")
 )
-async def users_page(
-    call: CallbackQuery,
-):
+async def users_page(call: CallbackQuery):
+
     if not is_admin(call.from_user.id):
         await call.answer(
             "❌ Нет доступа",
@@ -544,6 +588,7 @@ async def users_page(
             call.data.replace(
                 "admin_users_page_",
                 "",
+                1,
             )
         )
 
@@ -554,8 +599,6 @@ async def users_page(
         )
         return
 
-    # ВАЖНО:
-    # callback закрываем сразу
     await call.answer()
 
     await render_users(
@@ -571,9 +614,15 @@ async def users_page(
 @router.callback_query(
     F.data == "admin_users_noop"
 )
-async def users_noop(
-    call: CallbackQuery,
-):
+async def users_noop(call: CallbackQuery):
+
+    if not is_admin(call.from_user.id):
+        await call.answer(
+            "❌ Нет доступа",
+            show_alert=True,
+        )
+        return
+
     await call.answer()
 
 
@@ -581,13 +630,12 @@ async def users_noop(
 # ПОИСК
 # ============================================================
 
-@router.callback_query(
-    F.data == "admin_search"
-)
+@router.callback_query(F.data == "admin_search")
 async def admin_search(
     call: CallbackQuery,
     state: FSMContext,
 ):
+
     if not is_admin(call.from_user.id):
         await call.answer(
             "❌ Нет доступа",
@@ -635,6 +683,7 @@ async def admin_search_cancel(
     call: CallbackQuery,
     state: FSMContext,
 ):
+
     if not is_admin(call.from_user.id):
         await call.answer(
             "❌ Нет доступа",
@@ -665,13 +714,15 @@ async def admin_search_cancel(
 # ОБРАБОТКА ПОИСКА
 # ============================================================
 
-@router.message(
-    AdminSearch.waiting_query
-)
+@router.message(AdminSearch.waiting_query)
 async def admin_search_query(
     message: Message,
     state: FSMContext,
 ):
+
+    if not message.from_user:
+        return
+
     if not is_admin(message.from_user.id):
         return
 
@@ -688,7 +739,7 @@ async def admin_search_query(
         return
 
     try:
-        users = get_all_users()
+        users = get_all_users() or []
 
     except Exception as e:
         print(
@@ -707,16 +758,20 @@ async def admin_search_query(
     found = []
 
     for user in users:
+
+        if not isinstance(user, dict):
+            continue
+
         user_id = str(
-            user[0]
+            user.get("user_id") or ""
         ).lower()
 
         username = str(
-            user[1] or ""
+            user.get("username") or ""
         ).lower().lstrip("@")
 
         first_name = str(
-            user[2] or ""
+            user.get("first_name") or ""
         ).lower()
 
         if (
@@ -729,6 +784,7 @@ async def admin_search_query(
     await state.clear()
 
     if not found:
+
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
                 [
@@ -766,20 +822,18 @@ async def admin_search_query(
     buttons = []
 
     for user in found[:30]:
-        user_id = user[0]
+
+        user_id = user.get("user_id")
 
         username = (
-            user[1]
-            or user[2]
+            user.get("username")
+            or user.get("first_name")
             or f"ID {user_id}"
         )
 
-        subscription = user[3]
-        subscription_until = user[4]
-
         status, days = get_subscription_status(
-            subscription,
-            subscription_until,
+            user.get("subscription"),
+            user.get("subscription_until"),
         )
 
         if days > 0:
@@ -830,10 +884,6 @@ async def admin_search_query(
         ]
     )
 
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=buttons
-    )
-
     extra = ""
 
     if len(found) > 30:
@@ -847,7 +897,9 @@ async def admin_search_query(
         f"Запрос: <code>{h(query)}</code>\n"
         f"Найдено: <b>{len(found)}</b>"
         f"{extra}",
-        reply_markup=keyboard,
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=buttons
+        ),
         parse_mode="HTML",
     )
 
@@ -859,9 +911,8 @@ async def admin_search_query(
 @router.callback_query(
     F.data.startswith("admin_user_")
 )
-async def user_profile(
-    call: CallbackQuery,
-):
+async def user_profile(call: CallbackQuery):
+
     if not is_admin(call.from_user.id):
         await call.answer(
             "❌ Нет доступа",
@@ -874,6 +925,7 @@ async def user_profile(
             call.data.replace(
                 "admin_user_",
                 "",
+                1,
             )
         )
 
@@ -884,7 +936,6 @@ async def user_profile(
         )
         return
 
-    # Закрываем callback до БД
     await call.answer()
 
     try:
@@ -907,17 +958,15 @@ async def user_profile(
         )
         return
 
-    username = user[1] or "нет"
-    first_name = user[2] or "нет"
+    username = user.get("username") or "нет"
+    first_name = user.get("first_name") or "нет"
 
-    subscription = user[3] or "none"
-    subscription_until = user[4] or ""
-
-    created_at = (
-        user[11]
-        if len(user) > 11
-        else None
+    subscription = user.get("subscription")
+    subscription_until = user.get(
+        "subscription_until"
     )
+
+    created_at = user.get("created_at")
 
     subscription_url = (
         get_user_subscription_url(
@@ -930,49 +979,48 @@ async def user_profile(
         subscription_until,
     )
 
-    tariff = get_tariff_name(
-        subscription
-    )
+    tariff = get_tariff_name(user)
 
     date_text = format_date(
         subscription_until
     )
 
-    created_text = "нет"
+    created_text = format_datetime(
+        created_at
+    )
 
-    if created_at:
-        try:
-            if isinstance(
-                created_at,
-                datetime,
-            ):
-                created_text = (
-                    created_at.strftime(
-                        "%d.%m.%Y %H:%M"
-                    )
-                )
-            else:
-                created_text = str(created_at)
+    # ========================================================
+    # ПЛАТЕЖИ
+    # ========================================================
 
-        except Exception:
-            created_text = str(created_at)
+    payment_count = 0
+    paid_count = 0
 
     try:
-        user_payments = get_user_payments(
-            user_id
-        )
+        all_payments = get_all_payments() or []
 
-        payment_count = len(
-            user_payments or []
-        )
+        user_payments = [
+            payment
+            for payment in all_payments
+            if isinstance(payment, dict)
+            and int(payment.get("user_id") or 0)
+            == int(user_id)
+        ]
+
+        payment_count = len(user_payments)
 
         paid_count = sum(
             1
-            for payment in (
-                user_payments or []
+            for payment in user_payments
+            if str(
+                payment.get("status") or ""
+            ).lower()
+            in (
+                "paid",
+                "success",
+                "completed",
+                "approved",
             )
-            if len(payment) > 5
-            and payment[5] == "paid"
         )
 
     except Exception as e:
@@ -981,8 +1029,11 @@ async def user_profile(
             f"{user_id}: {e}"
         )
 
-        payment_count = 0
-        paid_count = 0
+    username_text = (
+        f"@{h(username)}"
+        if username != "нет"
+        else "нет"
+    )
 
     text = (
         "👤 <b>Пользователь</b>\n"
@@ -992,7 +1043,7 @@ async def user_profile(
         f"<code>{user_id}</code>\n"
 
         f"👤 <b>Username:</b> "
-        f"{('@' + h(username)) if username != 'нет' else 'нет'}\n"
+        f"{username_text}\n"
 
         f"🧑‍💻 <b>Имя:</b> "
         f"{h(first_name)}\n\n"
@@ -1053,15 +1104,8 @@ async def user_profile(
         ]
     )
 
-    if (
-        subscription not in (
-            None,
-            "",
-            "none",
-            "expired",
-        )
-        and days > 0
-    ):
+    if subscription and days > 0:
+
         buttons.append(
             [
                 InlineKeyboardButton(
@@ -1109,6 +1153,7 @@ async def user_profile(
 async def extend_subscription_menu(
     call: CallbackQuery,
 ):
+
     if not is_admin(call.from_user.id):
         await call.answer(
             "❌ Нет доступа",
@@ -1132,7 +1177,6 @@ async def extend_subscription_menu(
         )
         return
 
-    # Сразу отвечаем Telegram
     await call.answer()
 
     try:
@@ -1154,17 +1198,11 @@ async def extend_subscription_menu(
         )
         return
 
-    username = (
-        user[1]
-        or user[2]
-        or f"ID {user_id}"
-    )
+    username = user_display_name(user)
 
-    current_until = user[4] or ""
-
-    _, current_days = get_subscription_status(
-        user[3],
-        current_until,
+    status, current_days = get_subscription_status(
+        user.get("subscription"),
+        user.get("subscription_until"),
     )
 
     keyboard = InlineKeyboardMarkup(
@@ -1235,7 +1273,7 @@ async def extend_subscription_menu(
 
 
 # ============================================================
-# ЗАПРОС СВОЕГО КОЛИЧЕСТВА ДНЕЙ
+# CUSTOM EXTEND
 # ============================================================
 
 @router.callback_query(
@@ -1245,6 +1283,7 @@ async def custom_extend_start(
     call: CallbackQuery,
     state: FSMContext,
 ):
+
     if not is_admin(call.from_user.id):
         await call.answer(
             "❌ Нет доступа",
@@ -1268,10 +1307,18 @@ async def custom_extend_start(
         )
         return
 
-    # Закрываем callback сразу
     await call.answer()
 
-    user = get_user(user_id)
+    try:
+        user = get_user(user_id)
+    except Exception as e:
+        print(
+            f"❌ CUSTOM EXTEND USER ERROR: {e}"
+        )
+        await call.message.answer(
+            "❌ Ошибка базы данных."
+        )
+        return
 
     if not user:
         await call.message.answer(
@@ -1312,15 +1359,17 @@ async def custom_extend_start(
         "• <code>180</code>\n"
         "• <code>1000</code>\n\n"
         f"Максимум: "
-        f"<b>{MAX_CUSTOM_DAYS:,}</b> дней."
-        .replace(",", " "),
+        f"<b>{MAX_CUSTOM_DAYS:,}</b> дней.".replace(
+            ",",
+            " ",
+        ),
         reply_markup=keyboard,
         parse_mode="HTML",
     )
 
 
 # ============================================================
-# ОТМЕНА СВОЕГО ПРОДЛЕНИЯ
+# CANCEL CUSTOM EXTEND
 # ============================================================
 
 @router.callback_query(
@@ -1330,6 +1379,7 @@ async def custom_extend_cancel(
     call: CallbackQuery,
     state: FSMContext,
 ):
+
     if not is_admin(call.from_user.id):
         await call.answer(
             "❌ Нет доступа",
@@ -1345,10 +1395,8 @@ async def custom_extend_cancel(
                 1,
             )
         )
-
     except ValueError:
         await state.clear()
-
         await call.answer(
             "❌ Неверный ID",
             show_alert=True,
@@ -1377,13 +1425,12 @@ async def custom_extend_cancel(
             ),
             parse_mode="HTML",
         )
-
     except TelegramBadRequest:
         pass
 
 
 # ============================================================
-# ОБРАБОТКА СВОЕГО КОЛИЧЕСТВА ДНЕЙ
+# CUSTOM EXTEND PROCESS
 # ============================================================
 
 @router.message(
@@ -1393,6 +1440,10 @@ async def custom_extend_days(
     message: Message,
     state: FSMContext,
 ):
+
+    if not message.from_user:
+        return
+
     if not is_admin(message.from_user.id):
         return
 
@@ -1413,7 +1464,6 @@ async def custom_extend_days(
 
     try:
         days = int(raw_days)
-
     except ValueError:
         await message.answer(
             "❌ Слишком большое число."
@@ -1430,8 +1480,10 @@ async def custom_extend_days(
         await message.answer(
             "❌ Слишком большое количество дней.\n\n"
             f"Максимум: "
-            f"<b>{MAX_CUSTOM_DAYS:,}</b> дней."
-            .replace(",", " "),
+            f"<b>{MAX_CUSTOM_DAYS:,}</b> дней.".replace(
+                ",",
+                " ",
+            ),
             parse_mode="HTML",
         )
         return
@@ -1453,7 +1505,6 @@ async def custom_extend_days(
 
     try:
         user = get_user(user_id)
-
     except Exception as e:
         print(
             f"❌ CUSTOM EXTEND GET USER ERROR "
@@ -1475,15 +1526,12 @@ async def custom_extend_days(
         )
         return
 
-    username = (
-        user[1]
-        or user[2]
-        or f"ID {user_id}"
-    )
+    username = user_display_name(user)
 
     await state.clear()
 
     try:
+
         new_date = extend_subscription(
             user_id,
             days,
@@ -1501,6 +1549,7 @@ async def custom_extend_days(
             )
 
         except Exception as github_error:
+
             print(
                 f"⚠️ CUSTOM GITHUB ERROR "
                 f"user={user_id}: "
@@ -1587,6 +1636,7 @@ async def custom_extend_days(
         )
 
     except Exception as e:
+
         print(
             f"❌ CUSTOM EXTEND ERROR "
             f"user={user_id}, "
@@ -1604,7 +1654,7 @@ async def custom_extend_days(
 
 
 # ============================================================
-# ПРОДЛЕНИЕ — ГОТОВЫЕ СРОКИ
+# ГОТОВЫЕ СРОКИ
 # ============================================================
 
 @router.callback_query(
@@ -1613,6 +1663,7 @@ async def custom_extend_days(
 async def extend_subscription_admin(
     call: CallbackQuery,
 ):
+
     if not is_admin(call.from_user.id):
         await call.answer(
             "❌ Нет доступа",
@@ -1648,14 +1699,12 @@ async def extend_subscription_admin(
         )
         return
 
-    # Закрываем callback ДО БД
     await call.answer(
         "⏳ Продлеваю..."
     )
 
     try:
         user = get_user(user_id)
-
     except Exception as e:
         print(
             f"❌ GET USER ERROR "
@@ -1673,13 +1722,10 @@ async def extend_subscription_admin(
         )
         return
 
-    username = (
-        user[1]
-        or user[2]
-        or f"ID {user_id}"
-    )
+    username = user_display_name(user)
 
     try:
+
         new_date = extend_subscription(
             user_id,
             days,
@@ -1691,12 +1737,14 @@ async def extend_subscription_admin(
             )
 
         try:
+
             update_subscription_file(
                 user_id,
                 new_date,
             )
 
         except Exception as github_error:
+
             print(
                 f"⚠️ GITHUB UPDATE ERROR "
                 f"user={user_id}: "
@@ -1732,8 +1780,7 @@ async def extend_subscription_admin(
                 f"📅 Новая дата: "
                 f"<b>{format_date(new_date)}</b>\n\n"
                 "⚠️ Не удалось сразу обновить "
-                "файл подписки.\n"
-                "Нажми «Синхронизировать».",
+                "файл подписки.",
                 reply_markup=keyboard,
                 parse_mode="HTML",
             )
@@ -1782,6 +1829,7 @@ async def extend_subscription_admin(
         )
 
     except Exception as e:
+
         print(
             f"❌ ADMIN EXTEND ERROR "
             f"user={user_id}, "
@@ -1826,6 +1874,7 @@ async def extend_subscription_admin(
 async def admin_user_payments(
     call: CallbackQuery,
 ):
+
     if not is_admin(call.from_user.id):
         await call.answer(
             "❌ Нет доступа",
@@ -1838,6 +1887,7 @@ async def admin_user_payments(
             call.data.replace(
                 "admin_payments_",
                 "",
+                1,
             )
         )
 
@@ -1848,14 +1898,19 @@ async def admin_user_payments(
         )
         return
 
-    # Сразу закрываем callback
     await call.answer()
 
     try:
         user = get_user(user_id)
-        payments = get_user_payments(
-            user_id
-        )
+        all_payments = get_all_payments() or []
+
+        payments = [
+            payment
+            for payment in all_payments
+            if isinstance(payment, dict)
+            and int(payment.get("user_id") or 0)
+            == int(user_id)
+        ]
 
     except Exception as e:
         print(
@@ -1874,13 +1929,14 @@ async def admin_user_payments(
         )
         return
 
-    username = (
-        user[1]
-        or user[2]
-        or f"ID {user_id}"
-    )
+    username = user_display_name(user)
 
-    payments = payments or []
+    payments.sort(
+        key=lambda payment: str(
+            payment.get("created_at") or ""
+        ),
+        reverse=True,
+    )
 
     text = (
         "💳 <b>Платежи пользователя</b>\n"
@@ -1890,81 +1946,85 @@ async def admin_user_payments(
     )
 
     if not payments:
+
         text += "Платежей пока нет."
 
     else:
+
         for payment in payments[:15]:
 
-            payment_id = (
-                payment[0]
-                if len(payment) > 0
-                else "?"
-            )
-
-            days = (
-                payment[3]
-                if len(payment) > 3
-                else 0
-            )
-
+            payment_id = payment.get("id", "?")
+            days = payment.get("days") or 0
             external_id = (
-                payment[4]
-                if len(payment) > 4
-                else None
+                payment.get("payment_id")
+            )
+            status_value = str(
+                payment.get("status")
+                or "unknown"
+            ).lower()
+
+            created_at = payment.get(
+                "created_at"
             )
 
-            status_value = (
-                payment[5]
-                if len(payment) > 5
-                else "unknown"
-            )
+            provider = str(
+                payment.get("provider")
+                or ""
+            ).lower()
 
-            created_at = (
-                payment[6]
-                if len(payment) > 6
-                else ""
-            )
+            amount = payment.get("amount")
 
-            if status_value == "paid":
+            if status_value in (
+                "paid",
+                "success",
+                "completed",
+                "approved",
+            ):
                 status_text = "✅ Оплачен"
 
             elif status_value == "pending":
                 status_text = "⏳ Ожидает"
 
-            elif status_value == "cancelled":
-                status_text = "❌ Отменён"
+            elif status_value in (
+                "cancelled",
+                "canceled",
+                "rejected",
+                "failed",
+            ):
+                status_text = "❌ Неуспешен"
 
             else:
                 status_text = (
                     f"⚪ {status_value}"
                 )
 
-            date_text = ""
-
-            if created_at:
+            if provider == "cashera":
                 try:
-                    if isinstance(
-                        created_at,
-                        datetime,
-                    ):
-                        date_text = (
-                            created_at.strftime(
-                                "%d.%m.%Y %H:%M"
-                            )
-                        )
-                    else:
-                        date_text = str(
-                            created_at
-                        )
-
-                except Exception:
-                    date_text = str(
-                        created_at
+                    amount_text = (
+                        f"{int(amount) / 100:.2f} ₽"
                     )
+                except Exception:
+                    amount_text = "—"
+
+            elif provider == "stars":
+                try:
+                    amount_text = (
+                        f"{int(amount)} ⭐"
+                    )
+                except Exception:
+                    amount_text = "—"
+
+            else:
+                amount_text = (
+                    str(amount)
+                    if amount is not None
+                    else "—"
+                )
 
             text += (
                 f"💳 <b>#{payment_id}</b>\n"
-                f"📅 {h(date_text)}\n"
+                f"💰 Сумма: <b>{h(amount_text)}</b>\n"
+                f"📅 {h(format_datetime(created_at))}\n"
                 f"⏳ Дней: <b>{days}</b>\n"
                 f"📊 {status_text}\n"
             )
@@ -2030,6 +2090,7 @@ async def admin_user_payments(
 async def disable_user_subscription(
     call: CallbackQuery,
 ):
+
     if not is_admin(call.from_user.id):
         await call.answer(
             "❌ Нет доступа",
@@ -2042,6 +2103,7 @@ async def disable_user_subscription(
             call.data.replace(
                 "disable_",
                 "",
+                1,
             )
         )
 
@@ -2074,11 +2136,7 @@ async def disable_user_subscription(
         )
         return
 
-    username = (
-        user[1]
-        or user[2]
-        or f"ID {user_id}"
-    )
+    username = user_display_name(user)
 
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -2121,7 +2179,7 @@ async def disable_user_subscription(
 
 
 # ============================================================
-# ПОДТВЕРЖДЁННОЕ ОТКЛЮЧЕНИЕ
+# ПОДТВЕРЖДЕНИЕ ОТКЛЮЧЕНИЯ
 # ============================================================
 
 @router.callback_query(
@@ -2130,6 +2188,7 @@ async def disable_user_subscription(
 async def confirm_disable_subscription(
     call: CallbackQuery,
 ):
+
     if not is_admin(call.from_user.id):
         await call.answer(
             "❌ Нет доступа",
@@ -2142,6 +2201,7 @@ async def confirm_disable_subscription(
             call.data.replace(
                 "confirm_disable_",
                 "",
+                1,
             )
         )
 
@@ -2174,7 +2234,6 @@ async def confirm_disable_subscription(
 
     try:
         user = get_user(user_id)
-
     except Exception:
         user = None
 
@@ -2182,8 +2241,16 @@ async def confirm_disable_subscription(
     first_name = "нет"
 
     if user:
-        username = user[1] or "нет"
-        first_name = user[2] or "нет"
+
+        username = (
+            user.get("username")
+            or "нет"
+        )
+
+        first_name = (
+            user.get("first_name")
+            or "нет"
+        )
 
     subscription_url = (
         get_user_subscription_url(
@@ -2258,14 +2325,12 @@ async def confirm_disable_subscription(
         ]
     )
 
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=buttons
-    )
-
     try:
         await call.message.edit_text(
             text,
-            reply_markup=keyboard,
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=buttons
+            ),
             parse_mode="HTML",
             disable_web_page_preview=True,
         )
@@ -2285,6 +2350,7 @@ async def confirm_disable_subscription(
 async def admin_stats(
     call: CallbackQuery,
 ):
+
     if not is_admin(call.from_user.id):
         await call.answer(
             "❌ Нет доступа",
@@ -2292,12 +2358,11 @@ async def admin_stats(
         )
         return
 
-    # Сразу закрываем callback
     await call.answer()
 
     try:
-        users = get_all_users()
-        payments = get_payments()
+        users = get_all_users() or []
+        payments = get_all_payments() or []
 
     except Exception as e:
         print(
@@ -2309,8 +2374,17 @@ async def admin_stats(
         )
         return
 
-    users = users or []
-    payments = payments or []
+    users = [
+        user
+        for user in users
+        if isinstance(user, dict)
+    ]
+
+    payments = [
+        payment
+        for payment in payments
+        if isinstance(payment, dict)
+    ]
 
     total_users = len(users)
 
@@ -2321,69 +2395,68 @@ async def admin_stats(
 
     for user in users:
 
-        subscription = (
-            user[3]
-            if len(user) > 3
-            else "none"
-        )
-
-        subscription_until = (
-            user[4]
-            if len(user) > 4
-            else ""
-        )
-
         status, days = get_subscription_status(
-            subscription,
-            subscription_until,
+            user.get("subscription"),
+            user.get("subscription_until"),
         )
 
-        if subscription == "trial":
+        if (
+            user.get("trial_used")
+            and not user.get("subscription")
+        ):
+            trial_users += 1
 
-            if days > 0:
-                trial_users += 1
-
-            elif status == "⛔ Истёк":
-                expired_users += 1
-
-        elif days > 0:
+        if status == "🟢 Активен":
             active_users += 1
 
         elif status == "⛔ Истёк":
             expired_users += 1
 
-        else:
+        elif not user.get("subscription"):
             no_subscription += 1
 
     paid_payments = sum(
         1
         for payment in payments
-        if len(payment) > 5
-        and payment[5] == "paid"
+        if str(
+            payment.get("status") or ""
+        ).lower()
+        in (
+            "paid",
+            "success",
+            "completed",
+            "approved",
+        )
     )
 
     pending_payments = sum(
         1
         for payment in payments
-        if len(payment) > 5
-        and payment[5] == "pending"
+        if str(
+            payment.get("status") or ""
+        ).lower()
+        == "pending"
     )
 
     total_days_paid = sum(
-        int(payment[3] or 0)
+        int(payment.get("days") or 0)
         for payment in payments
-        if len(payment) > 5
-        and payment[5] == "paid"
-        and payment[3] is not None
+        if str(
+            payment.get("status") or ""
+        ).lower()
+        in (
+            "paid",
+            "success",
+            "completed",
+            "approved",
+        )
     )
 
-    try:
-        current_time = datetime.now().strftime(
-            "%d.%m.%Y %H:%M"
-        )
-
-    except Exception:
-        current_time = "—"
+    current_time = datetime.now(
+        timezone.utc
+    ).strftime(
+        "%d.%m.%Y %H:%M UTC"
+    )
 
     text = (
         "📊 <b>Статистика ixxy</b>\n"
@@ -2459,17 +2532,14 @@ async def admin_stats(
 async def sync_servers(
     call: CallbackQuery,
 ):
-    if not is_admin(
-        call.from_user.id
-    ):
+
+    if not is_admin(call.from_user.id):
         await call.answer(
             "❌ Нет доступа",
             show_alert=True,
         )
         return
 
-    # КРИТИЧНО:
-    # callback закрывается ДО синхронизации
     await call.answer(
         "🔄 Обновление началось..."
     )
@@ -2482,6 +2552,7 @@ async def sync_servers(
     )
 
     try:
+
         result = sync_servers_update()
 
         if not isinstance(result, dict):
@@ -2521,6 +2592,7 @@ async def sync_servers(
         )
 
     except Exception as e:
+
         print(
             f"❌ SYNC ERROR: {e}"
         )
