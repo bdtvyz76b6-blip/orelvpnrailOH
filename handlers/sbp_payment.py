@@ -4,8 +4,7 @@ from aiogram.types import CallbackQuery
 from cashera_api import create_cashera_payment
 
 from database import (
-    add_payment,
-    save_payment_id,
+    create_payment,
 )
 
 router = Router()
@@ -14,14 +13,6 @@ router = Router()
 # ============================================================
 # ТАРИФЫ СБП
 # ============================================================
-#
-# Сейчас 30 дней = 1 ₽ для безопасного теста.
-#
-# После успешного теста:
-# "sbp_30": {"amount": 129, "days": 30},
-#
-# Остальные цены уже реальные.
-#
 
 PAYMENTS = {
     "sbp_30": {
@@ -55,11 +46,17 @@ async def sbp_payment(callback: CallbackQuery):
 
     code = callback.data
 
+    # ========================================================
+    # ПРОВЕРКА ТАРИФА
+    # ========================================================
+
     if code not in PAYMENTS:
+
         await callback.answer(
             "❌ Ошибка тарифа",
-            show_alert=True
+            show_alert=True,
         )
+
         return
 
     plan = PAYMENTS[code]
@@ -71,33 +68,44 @@ async def sbp_payment(callback: CallbackQuery):
 
     try:
 
-        # ----------------------------------------------------
-        # Создаём платёж в Cashera
-        # ----------------------------------------------------
+        # ====================================================
+        # СОЗДАЁМ ПЛАТЁЖ В CASHERA
+        # ====================================================
 
         result = create_cashera_payment(
             user_id=user_id,
             amount=amount,
-            days=days
+            days=days,
         )
 
         print(
-            "💳 CASHeRA PAYMENT RESULT:",
+            "💳 CASHERA PAYMENT RESULT:"
+        )
+
+        print(
             result
         )
 
-        if not isinstance(result, dict):
+        # ====================================================
+        # ПРОВЕРКА ОТВЕТА
+        # ====================================================
+
+        if not isinstance(
+            result,
+            dict,
+        ):
 
             await callback.message.answer(
-                "❌ Cashera вернула некорректный ответ."
+                "❌ CasheRa вернула некорректный ответ."
             )
 
             await callback.answer()
+
             return
 
-        # ----------------------------------------------------
-        # UUID платежа
-        # ----------------------------------------------------
+        # ====================================================
+        # UUID ПЛАТЕЖА
+        # ====================================================
 
         payment_uuid = (
             result.get("uuid")
@@ -108,20 +116,26 @@ async def sbp_payment(callback: CallbackQuery):
 
             await callback.message.answer(
                 f"""
-❌ Cashera не вернула ID платежа.
+❌ <b>CasheRa не вернула ID платежа.</b>
 
-Ответ Cashera:
+Ответ CasheRa:
 
-{result}
-"""
+<code>{result}</code>
+""",
+                parse_mode="HTML",
             )
 
             await callback.answer()
+
             return
 
-        # ----------------------------------------------------
-        # Ссылка на оплату
-        # ----------------------------------------------------
+        payment_uuid = str(
+            payment_uuid
+        )
+
+        # ====================================================
+        # ССЫЛКА НА ОПЛАТУ
+        # ====================================================
 
         payment_url = (
             result.get("payment_url")
@@ -132,79 +146,145 @@ async def sbp_payment(callback: CallbackQuery):
 
             await callback.message.answer(
                 f"""
-❌ Cashera не вернула ссылку на оплату.
+❌ <b>CasheRa не вернула ссылку на оплату.</b>
 
-Ответ Cashera:
+ID платежа:
 
-{result}
-"""
+<code>{payment_uuid}</code>
+""",
+                parse_mode="HTML",
             )
 
             await callback.answer()
+
             return
 
-        # ----------------------------------------------------
-        # Сохраняем платёж в нашу БД
-        # ----------------------------------------------------
+        payment_url = str(
+            payment_url
+        )
 
-        add_payment(
+        # ====================================================
+        # СОХРАНЯЕМ ПЛАТЁЖ В POSTGRESQL
+        # ====================================================
+
+        saved = create_payment(
             user_id=user_id,
-            photo="",
-            days=days
+            payment_id=payment_uuid,
+            amount=amount * 100,
+            days=days,
+            provider="cashera",
         )
 
-        save_payment_id(
-            user_id=user_id,
-            payment_id=str(payment_uuid)
-        )
+        if not saved:
 
-        print(
-            f"💾 PAYMENT SAVED: "
-            f"user={user_id}, "
-            f"payment={payment_uuid}, "
-            f"days={days}, "
-            f"amount={amount}"
-        )
+            print(
+                "⚠️ Платёж уже существует:"
+            )
 
-        # ----------------------------------------------------
-        # Отправляем пользователю ссылку
-        # ----------------------------------------------------
+            print(
+                payment_uuid
+            )
+
+        else:
+
+            print(
+                "💾 CASHERA PAYMENT SAVED"
+            )
+
+            print(
+                f"user={user_id}"
+            )
+
+            print(
+                f"payment={payment_uuid}"
+            )
+
+            print(
+                f"amount={amount * 100}"
+            )
+
+            print(
+                f"days={days}"
+            )
+
+        # ====================================================
+        # ОТПРАВЛЯЕМ ССЫЛКУ ПОЛЬЗОВАТЕЛЮ
+        # ====================================================
 
         await callback.message.answer(
             f"""
-☂️ ixxy VPN
+☂️ <b>ixxy VPN</b>
 
-💳 Оплата через СБП
+💳 <b>Оплата через СБП</b>
 
-📅 Срок: {days} дней
+📅 Срок:
+<b>{days} дней</b>
 
-💰 Цена: {amount} ₽
+💰 Цена:
+<b>{amount} ₽</b>
 
-🔗 Оплатить:
+🔗 <b>Ссылка на оплату:</b>
 
 {payment_url}
 
 После успешной оплаты подписка
 активируется автоматически.
 
-⚠️ Не закрывайте страницу оплаты,
-пока платёж не будет завершён.
-"""
+⚠️ После оплаты не нужно нажимать
+ничего дополнительно.
+
+Дождитесь уведомления от бота.
+""",
+            parse_mode="HTML",
         )
+
+        print(
+            "✅ Ссылка на оплату отправлена"
+        )
+
+    # ========================================================
+    # ОШИБКА
+    # ========================================================
 
     except Exception as e:
 
         print(
-            "❌ SBP ERROR:",
-            repr(e)
+            "❌ SBP ERROR:"
         )
 
-        await callback.message.answer(
-            f"""
-❌ Ошибка создания платежа.
+        print(
+            f"{type(e).__name__}: {e}"
+        )
+
+        try:
+
+            await callback.message.answer(
+                """
+❌ <b>Не удалось создать платёж.</b>
 
 Попробуйте ещё раз немного позже.
-"""
-        )
+""",
+                parse_mode="HTML",
+            )
 
-    await callback.answer()
+        except Exception as send_error:
+
+            print(
+                "❌ Ошибка отправки сообщения:"
+            )
+
+            print(
+                send_error
+            )
+
+    # ========================================================
+    # CALLBACK
+    # ========================================================
+
+    try:
+
+        await callback.answer()
+
+    except Exception:
+
+        pass
