@@ -12,9 +12,8 @@ from config import BOT_TOKEN
 from database import (
     create_table,
     check_expired_subscriptions,
-    extend_subscription,
     get_payment_by_payment_id,
-    update_payment_status,
+    process_paid_payment,
 )
 
 from github_update import (
@@ -51,6 +50,46 @@ CASHERA_API_SECRET = os.getenv(
 
 
 # =========================================================
+# HELPERS
+# =========================================================
+
+def format_datetime(value):
+    """
+    Превращает datetime/date/строку
+    в нормальный формат для Telegram.
+    """
+
+    if value is None:
+        return "—"
+
+    try:
+        return value.strftime("%d.%m.%Y")
+    except Exception:
+        pass
+
+    try:
+        text = str(value)
+
+        if "T" in text:
+            text = text.split("T")[0]
+
+        if " " in text:
+            text = text.split(" ")[0]
+
+        parts = text.split("-")
+
+        if len(parts) == 3:
+            return (
+                f"{parts[2]}.{parts[1]}.{parts[0]}"
+            )
+
+        return text
+
+    except Exception:
+        return str(value)
+
+
+# =========================================================
 # CASHERA WEBHOOK
 # =========================================================
 
@@ -65,19 +104,14 @@ def cashera():
     print("💳 CASHERA WEBHOOK RECEIVED")
     print("========================================")
 
+    # =====================================================
+    # API KEY
+    # =====================================================
+
     received_api_key = request.headers.get(
         "X-Api-Key",
         "",
     ).strip()
-
-    received_secret = request.headers.get(
-        "X-Secret",
-        "",
-    ).strip()
-
-    # =====================================================
-    # API KEY
-    # =====================================================
 
     if CASHERA_API_KEY:
 
@@ -98,6 +132,11 @@ def cashera():
     # =====================================================
     # SECRET
     # =====================================================
+
+    received_secret = request.headers.get(
+        "X-Secret",
+        "",
+    ).strip()
 
     if CASHERA_API_SECRET:
 
@@ -172,7 +211,6 @@ def cashera():
             ):
 
                 transaction = item
-
                 break
 
     # =====================================================
@@ -210,12 +248,15 @@ def cashera():
     print(transaction)
 
     # =====================================================
-    # ДАННЫЕ
+    # DATA
     # =====================================================
 
-    status = transaction.get(
-        "status"
-    )
+    status = str(
+        transaction.get(
+            "status",
+            "",
+        )
+    ).lower()
 
     payment_uuid = (
         transaction.get("uuid")
@@ -261,8 +302,7 @@ def cashera():
     if status != "paid":
 
         print(
-            f"⏭ Платёж ещё не оплачен: "
-            f"{status}"
+            f"⏭ Платёж ещё не оплачен: {status}"
         )
 
         return "OK", 200
@@ -296,8 +336,7 @@ def cashera():
         )
 
         print(
-            type(e).__name__,
-            str(e),
+            f"{type(e).__name__}: {e}"
         )
 
         return "OK", 200
@@ -315,36 +354,66 @@ def cashera():
         return "OK", 200
 
     # =====================================================
-    # ДАННЫЕ ПЛАТЕЖА
+    # POSTGRESQL DICT
     # =====================================================
 
-    payment_db_id = payment[0]
-    user_id = payment[1]
-    days = payment[3]
-    old_status = payment[5]
+    user_id = payment.get(
+        "user_id"
+    )
 
-    print(
-        f"🆔 DB PAYMENT ID: "
-        f"{payment_db_id}"
+    days = payment.get(
+        "days"
+    )
+
+    old_status = payment.get(
+        "status"
+    )
+
+    provider = payment.get(
+        "provider"
+    )
+
+    db_amount = payment.get(
+        "amount"
     )
 
     print(
-        f"👤 USER ID: "
-        f"{user_id}"
+        f"👤 USER ID: {user_id}"
     )
 
     print(
-        f"📅 DAYS: "
-        f"{days}"
+        f"📅 DAYS: {days}"
     )
 
     print(
-        f"📊 STATUS: "
-        f"{old_status}"
+        f"📊 STATUS: {old_status}"
+    )
+
+    print(
+        f"💳 PROVIDER: {provider}"
+    )
+
+    print(
+        f"💰 DB AMOUNT: {db_amount}"
     )
 
     # =====================================================
-    # ЗАЩИТА ОТ ПОВТОРНОЙ ВЫДАЧИ
+    # ПРОВЕРКА ПРОВАЙДЕРА
+    # =====================================================
+
+    if provider:
+
+        if str(provider).lower() != "cashera":
+
+            print(
+                f"❌ Платёж принадлежит другому "
+                f"провайдеру: {provider}"
+            )
+
+            return "OK", 200
+
+    # =====================================================
+    # ЗАЩИТА ОТ ПОВТОРА
     # =====================================================
 
     if old_status == "paid":
@@ -357,20 +426,32 @@ def cashera():
         return "OK", 200
 
     # =====================================================
-    # DAYS
+    # USER ID
     # =====================================================
 
-    if not days:
+    try:
+
+        user_id = int(
+            user_id
+        )
+
+    except Exception:
 
         print(
-            "❌ У платежа отсутствует days"
+            f"❌ Некорректный user_id: {user_id}"
         )
 
         return "OK", 200
 
+    # =====================================================
+    # DAYS
+    # =====================================================
+
     try:
 
-        days = int(days)
+        days = int(
+            days
+        )
 
     except Exception:
 
@@ -399,8 +480,7 @@ def cashera():
         ).upper() != "RUB":
 
             print(
-                f"❌ Неверная валюта: "
-                f"{currency}"
+                f"❌ Неверная валюта: {currency}"
             )
 
             return "OK", 200
@@ -408,7 +488,7 @@ def cashera():
     # =====================================================
     # ПРОВЕРКА СУММЫ
     #
-    # Cashera передаёт amount в копейках.
+    # CasheRa:
     #
     # 129 ₽  = 12900
     # 379 ₽  = 37900
@@ -417,15 +497,10 @@ def cashera():
     # =====================================================
 
     expected_amounts = {
-
         30: 12900,
-
         90: 37900,
-
         180: 65900,
-
         365: 108900,
-
     }
 
     expected_amount = expected_amounts.get(
@@ -454,13 +529,11 @@ def cashera():
             return "OK", 200
 
         print(
-            f"💰 Ожидалось: "
-            f"{expected_amount}"
+            f"💰 Ожидалось: {expected_amount}"
         )
 
         print(
-            f"💰 Получено: "
-            f"{received_amount}"
+            f"💰 Получено: {received_amount}"
         )
 
         if received_amount != expected_amount:
@@ -476,7 +549,44 @@ def cashera():
         )
 
     # =====================================================
-    # ВЫДАЧА ПОДПИСКИ
+    # ПРОВЕРКА СУММЫ С БД
+    # =====================================================
+
+    if db_amount is not None:
+
+        try:
+
+            db_amount_int = int(
+                db_amount
+            )
+
+            if (
+                expected_amount is not None
+                and db_amount_int != expected_amount
+            ):
+
+                print(
+                    "❌ Сумма в БД не соответствует тарифу"
+                )
+
+                print(
+                    f"DB: {db_amount_int}"
+                )
+
+                print(
+                    f"Expected: {expected_amount}"
+                )
+
+                return "OK", 200
+
+        except Exception:
+
+            print(
+                "⚠️ Не удалось проверить amount из БД"
+            )
+
+    # =====================================================
+    # ПОЛУЧАЕМ ПОДПИСКУ
     # =====================================================
 
     try:
@@ -486,23 +596,49 @@ def cashera():
         )
 
         # -------------------------------------------------
-        # ПРОДЛЕВАЕМ ПОДПИСКУ
+        # СНАЧАЛА УЗНАЁМ ТЕКУЩУЮ ДАТУ И ПРОДЛЯЕМ
+        # ЧЕРЕЗ АТОМАРНУЮ ФУНКЦИЮ БД
         # -------------------------------------------------
 
-        new_date = extend_subscription(
-            user_id,
-            days,
+        result = process_paid_payment(
+            payment_uuid
+        )
+
+        if not result:
+
+            print(
+                "❌ process_paid_payment "
+                "вернул None"
+            )
+
+            return "OK", 200
+
+        # -------------------------------------------------
+        # ПЛАТЁЖ УЖЕ БЫЛ ОБРАБОТАН
+        # -------------------------------------------------
+
+        if result.get(
+            "already_paid"
+        ):
+
+            print(
+                f"⏭ Платёж {payment_uuid} "
+                f"уже был обработан"
+            )
+
+            return "OK", 200
+
+        new_date = result.get(
+            "subscription_until"
         )
 
         print(
             f"🎫 Подписка продлена: "
-            f"{user_id} "
-            f"+{days} дней"
+            f"{user_id} +{days} дней"
         )
 
         print(
-            f"📅 Новая дата: "
-            f"{new_date}"
+            f"📅 Новая дата: {new_date}"
         )
 
         # -------------------------------------------------
@@ -519,77 +655,6 @@ def cashera():
             f"обновлён: {user_id}"
         )
 
-        # -------------------------------------------------
-        # ПОМЕЧАЕМ ПЛАТЁЖ PAID
-        # -------------------------------------------------
-
-        update_payment_status(
-            payment_db_id,
-            "paid",
-        )
-
-        print(
-            f"✅ Платёж "
-            f"{payment_uuid} "
-            f"помечен как paid"
-        )
-
-        # -------------------------------------------------
-        # УВЕДОМЛЕНИЕ
-        # -------------------------------------------------
-
-        if BOT_LOOP:
-
-            subscription_link = (
-                make_subscription_link(
-                    user_id
-                )
-            )
-
-            message = f"""
-✅ Оплата успешно получена!
-
-☂️ ixxy VPN
-
-🎫 Подписка продлена
-
-📅 Начислено:
-{days} дней
-
-📅 Действует до:
-{new_date}
-
-🔄 Подписка обновлена автоматически.
-
-🔗 Ваша подписка:
-{subscription_link}
-
-Откройте эту ссылку в Happ.
-
-Спасибо за покупку! ❤️
-"""
-
-            asyncio.run_coroutine_threadsafe(
-
-                bot.send_message(
-                    user_id,
-                    message,
-                ),
-
-                BOT_LOOP,
-            )
-
-            print(
-                f"📨 Уведомление отправлено: "
-                f"{user_id}"
-            )
-
-        else:
-
-            print(
-                "⚠️ BOT_LOOP ещё не запущен"
-            )
-
     except Exception as e:
 
         print(
@@ -601,6 +666,85 @@ def cashera():
         )
 
         return "OK", 200
+
+    # =====================================================
+    # УВЕДОМЛЕНИЕ
+    # =====================================================
+
+    if BOT_LOOP:
+
+        try:
+
+            subscription_link = (
+                make_subscription_link(
+                    user_id
+                )
+            )
+
+            date_text = format_datetime(
+                new_date
+            )
+
+            message = f"""
+✅ <b>Оплата успешно получена!</b>
+
+☂️ <b>ixxy VPN</b>
+
+🎫 Подписка продлена на:
+<b>{days} дней</b>
+
+📅 Действует до:
+<b>{date_text}</b>
+
+🔄 Подписка обновлена автоматически.
+
+🔗 Ваша подписка:
+
+{subscription_link}
+
+Откройте ссылку в Happ.
+
+Спасибо за покупку! ❤️
+"""
+
+            future = (
+                asyncio.run_coroutine_threadsafe(
+                    bot.send_message(
+                        user_id,
+                        message,
+                        parse_mode="HTML",
+                    ),
+                    BOT_LOOP,
+                )
+            )
+
+            try:
+                future.result(
+                    timeout=15
+                )
+            except Exception as e:
+                print(
+                    "⚠️ Ошибка отправки "
+                    f"уведомления: {e}"
+                )
+
+            print(
+                f"📨 Уведомление отправлено: "
+                f"{user_id}"
+            )
+
+        except Exception as e:
+
+            print(
+                "⚠️ Ошибка формирования "
+                f"уведомления: {e}"
+            )
+
+    else:
+
+        print(
+            "⚠️ BOT_LOOP ещё не запущен"
+        )
 
     print(
         "========================================"
@@ -674,6 +818,10 @@ def add_days_api():
                     "days must be greater than 0",
             }, 400
 
+        from database import (
+            extend_subscription,
+        )
+
         new_date = extend_subscription(
             user_id,
             days,
@@ -690,20 +838,20 @@ def add_days_api():
             )
         )
 
+        date_text = format_datetime(
+            new_date
+        )
+
         print(
             f"☂️ ixxycodes +{days} дней "
             f"пользователю {user_id}"
         )
 
         return {
-
             "status": "ok",
-
-            "date": new_date,
-
+            "date": date_text,
             "subscription":
                 subscription_link,
-
         }
 
     except Exception as e:
@@ -714,11 +862,8 @@ def add_days_api():
         )
 
         return {
-
             "status": "error",
-
             "message": str(e),
-
         }, 500
 
 
@@ -750,7 +895,7 @@ def health():
 
 
 # =========================================================
-# FLASK / WEBHOOK
+# FLASK
 # =========================================================
 
 def run_webhook():
@@ -760,6 +905,10 @@ def run_webhook():
             "PORT",
             "8080",
         )
+    )
+
+    print(
+        f"🌐 Flask запускается на порту {port}"
     )
 
     app.run(
@@ -927,11 +1076,11 @@ async def main():
     create_table()
 
     print(
-        "💾 База данных инициализирована"
+        "💾 PostgreSQL инициализирован"
     )
 
     # =====================================================
-    # ПРОВЕРКА ПРОСРОЧЕННЫХ
+    # EXPIRED
     # =====================================================
 
     try:
@@ -950,7 +1099,7 @@ async def main():
         )
 
     # =====================================================
-    # СИНХРОНИЗАЦИЯ
+    # GITHUB SYNC
     # =====================================================
 
     try:
@@ -969,7 +1118,7 @@ async def main():
         )
 
     # =====================================================
-    # АВТОПРОВЕРКА
+    # SUBSCRIPTION CHECKER
     # =====================================================
 
     try:
