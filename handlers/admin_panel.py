@@ -29,7 +29,11 @@ def is_admin(user_id: int) -> bool:
 # ============================================================
 
 def is_subscription_active(user: dict) -> bool:
-    if not user.get("subscription"):
+    if not isinstance(user, dict):
+        return False
+
+    # В БД subscription теперь BOOLEAN
+    if user.get("subscription") is not True:
         return False
 
     subscription_until = user.get("subscription_until")
@@ -44,6 +48,9 @@ def is_subscription_active(user: dict) -> bool:
             )
         except ValueError:
             return False
+
+    if not isinstance(subscription_until, datetime):
+        return False
 
     if subscription_until.tzinfo is None:
         subscription_until = subscription_until.replace(
@@ -83,7 +90,7 @@ async def admin_start(message: Message):
         users = get_all_users() or []
     except Exception as e:
         print(
-            "Admin get_all_users error:",
+            "❌ Admin get_all_users error:",
             repr(e),
         )
         users = []
@@ -96,7 +103,7 @@ async def admin_start(message: Message):
         payments = get_all_payments() or []
     except Exception as e:
         print(
-            "Admin get_all_payments error:",
+            "❌ Admin get_all_payments error:",
             repr(e),
         )
         payments = []
@@ -104,121 +111,3 @@ async def admin_start(message: Message):
     # ========================================================
     # СТАТИСТИКА ПОЛЬЗОВАТЕЛЕЙ
     # ========================================================
-
-    total_users = len(users)
-
-    active_users = 0
-    trial_users = 0
-    expired_users = 0
-    no_subscription_users = 0
-
-    for user in users:
-
-        if not isinstance(user, dict):
-            continue
-
-        # ----------------------------------------------------
-        # АКТИВНАЯ ПОДПИСКА
-        # ----------------------------------------------------
-
-        if is_subscription_active(user):
-            active_users += 1
-
-        # ----------------------------------------------------
-        # ПРОБНЫЙ ПЕРИОД
-        # ----------------------------------------------------
-
-        if user.get("trial_used"):
-            trial_users += 1
-
-        # ----------------------------------------------------
-        # ИСТЁКШАЯ ПОДПИСКА
-        # ----------------------------------------------------
-
-        subscription_until = user.get(
-            "subscription_until"
-        )
-
-        if (
-            subscription_until
-            and not is_subscription_active(user)
-        ):
-            expired_users += 1
-
-        # ----------------------------------------------------
-        # БЕЗ ПОДПИСКИ
-        # ----------------------------------------------------
-
-        if (
-            not user.get("subscription")
-            and not subscription_until
-        ):
-            no_subscription_users += 1
-
-    # ========================================================
-    # СТАТИСТИКА ПЛАТЕЖЕЙ
-    # ========================================================
-
-    pending_payments = 0
-    successful_payments = 0
-    failed_payments = 0
-
-    for payment in payments:
-
-        if not isinstance(payment, dict):
-            continue
-
-        status = str(
-            payment.get("status") or "pending"
-        ).lower()
-
-        if status == "pending":
-            pending_payments += 1
-
-        elif status in (
-            "paid",
-            "success",
-            "completed",
-            "approved",
-        ):
-            successful_payments += 1
-
-        elif status in (
-            "failed",
-            "cancelled",
-            "canceled",
-            "rejected",
-        ):
-            failed_payments += 1
-
-    # ========================================================
-    # ТЕКСТ
-    # ========================================================
-
-    text = (
-        "🛠 <b>☂️ ixxy VPN — Админ-панель</b>\n\n"
-
-        "📊 <b>Пользователи</b>\n"
-        f"👥 Всего: <b>{total_users}</b>\n"
-        f"🟢 Активных подписок: <b>{active_users}</b>\n"
-        f"🎁 Использовали пробник: <b>{trial_users}</b>\n"
-        f"🔴 Истёкших: <b>{expired_users}</b>\n"
-        f"⚪ Без подписки: <b>{no_subscription_users}</b>\n\n"
-
-        "💳 <b>Платежи</b>\n"
-        f"⏳ Ожидают: <b>{pending_payments}</b>\n"
-        f"✅ Успешных: <b>{successful_payments}</b>\n"
-        f"❌ Неуспешных: <b>{failed_payments}</b>\n\n"
-
-        "👇 <b>Выберите действие:</b>"
-    )
-
-    # ========================================================
-    # ОТПРАВКА
-    # ========================================================
-
-    await message.answer(
-        text,
-        reply_markup=admin_menu(),
-        parse_mode="HTML",
-    )
