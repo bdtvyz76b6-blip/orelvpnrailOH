@@ -54,11 +54,6 @@ CASHERA_API_SECRET = os.getenv(
 # =========================================================
 
 def format_datetime(value):
-    """
-    Превращает datetime/date/строку
-    в нормальный формат для Telegram.
-    """
-
     if value is None:
         return "—"
 
@@ -79,9 +74,7 @@ def format_datetime(value):
         parts = text.split("-")
 
         if len(parts) == 3:
-            return (
-                f"{parts[2]}.{parts[1]}.{parts[0]}"
-            )
+            return f"{parts[2]}.{parts[1]}.{parts[0]}"
 
         return text
 
@@ -119,15 +112,8 @@ def cashera():
             received_api_key,
             CASHERA_API_KEY,
         ):
-
-            print(
-                "❌ Неверный X-Api-Key"
-            )
-
-            return (
-                "Unauthorized",
-                401,
-            )
+            print("❌ Неверный X-Api-Key")
+            return "Unauthorized", 401
 
     # =====================================================
     # SECRET
@@ -144,15 +130,8 @@ def cashera():
             received_secret,
             CASHERA_API_SECRET,
         ):
-
-            print(
-                "❌ Неверный X-Secret"
-            )
-
-            return (
-                "Unauthorized",
-                401,
-            )
+            print("❌ Неверный X-Secret")
+            return "Unauthorized", 401
 
     # =====================================================
     # JSON
@@ -166,23 +145,16 @@ def cashera():
     print(data)
 
     if not data:
-
-        print(
-            "⚠️ Пустой webhook"
-        )
-
+        print("⚠️ Пустой webhook")
         return "OK", 200
 
     # =====================================================
-    # ПОИСК TRANSACTION
+    # TRANSACTION
     # =====================================================
 
     transaction = None
 
-    if isinstance(
-        data,
-        dict,
-    ):
+    if isinstance(data, dict):
 
         transaction = (
             data.get("transaction")
@@ -191,17 +163,11 @@ def cashera():
             or data
         )
 
-    elif isinstance(
-        data,
-        (list, tuple),
-    ):
+    elif isinstance(data, (list, tuple)):
 
         for item in data:
 
-            if not isinstance(
-                item,
-                dict,
-            ):
+            if not isinstance(item, dict):
                 continue
 
             if (
@@ -209,18 +175,10 @@ def cashera():
                 or "status" in item
                 or "uuid" in item
             ):
-
                 transaction = item
                 break
 
-    # =====================================================
-    # NESTED TRANSACTION
-    # =====================================================
-
-    if isinstance(
-        transaction,
-        dict,
-    ):
+    if isinstance(transaction, dict):
 
         nested_transaction = transaction.get(
             "transaction"
@@ -230,13 +188,9 @@ def cashera():
             nested_transaction,
             dict,
         ):
-
             transaction = nested_transaction
 
-    if not isinstance(
-        transaction,
-        dict,
-    ):
+    if not isinstance(transaction, dict):
 
         print(
             "⚠️ Неверный формат transaction"
@@ -256,7 +210,7 @@ def cashera():
             "status",
             "",
         )
-    ).lower()
+    ).strip().lower()
 
     payment_uuid = (
         transaction.get("uuid")
@@ -275,28 +229,14 @@ def cashera():
         "currency"
     )
 
-    print(
-        f"💳 Статус: {status}"
-    )
-
-    print(
-        f"🆔 UUID: {payment_uuid}"
-    )
-
-    print(
-        f"🔗 External ID: {external_id}"
-    )
-
-    print(
-        f"💰 Amount: {amount}"
-    )
-
-    print(
-        f"💱 Currency: {currency}"
-    )
+    print(f"💳 Статус: {status}")
+    print(f"🆔 UUID: {payment_uuid}")
+    print(f"🔗 External ID: {external_id}")
+    print(f"💰 Amount: {amount}")
+    print(f"💱 Currency: {currency}")
 
     # =====================================================
-    # ТОЛЬКО PAID
+    # ONLY PAID
     # =====================================================
 
     if status != "paid":
@@ -320,7 +260,7 @@ def cashera():
     )
 
     # =====================================================
-    # ПОИСК ПЛАТЕЖА
+    # PAYMENT FROM DB
     # =====================================================
 
     try:
@@ -334,7 +274,6 @@ def cashera():
         print(
             "❌ Ошибка поиска платежа:"
         )
-
         print(
             f"{type(e).__name__}: {e}"
         )
@@ -354,7 +293,7 @@ def cashera():
         return "OK", 200
 
     # =====================================================
-    # POSTGRESQL DICT
+    # POSTGRES DICT
     # =====================================================
 
     user_id = payment.get(
@@ -377,28 +316,14 @@ def cashera():
         "amount"
     )
 
-    print(
-        f"👤 USER ID: {user_id}"
-    )
-
-    print(
-        f"📅 DAYS: {days}"
-    )
-
-    print(
-        f"📊 STATUS: {old_status}"
-    )
-
-    print(
-        f"💳 PROVIDER: {provider}"
-    )
-
-    print(
-        f"💰 DB AMOUNT: {db_amount}"
-    )
+    print(f"👤 USER ID: {user_id}")
+    print(f"📅 DAYS: {days}")
+    print(f"📊 STATUS: {old_status}")
+    print(f"💳 PROVIDER: {provider}")
+    print(f"💰 DB AMOUNT: {db_amount}")
 
     # =====================================================
-    # ПРОВЕРКА ПРОВАЙДЕРА
+    # PROVIDER
     # =====================================================
 
     if provider:
@@ -413,14 +338,13 @@ def cashera():
             return "OK", 200
 
     # =====================================================
-    # ЗАЩИТА ОТ ПОВТОРА
+    # DUPLICATE PAYMENT
     # =====================================================
 
-    if old_status == "paid":
+    if str(old_status).lower() == "paid":
 
         print(
-            f"⏭ Платёж {payment_uuid} "
-            f"уже обработан"
+            f"⏭ Платёж {payment_uuid} уже обработан"
         )
 
         return "OK", 200
@@ -430,10 +354,7 @@ def cashera():
     # =====================================================
 
     try:
-
-        user_id = int(
-            user_id
-        )
+        user_id = int(user_id)
 
     except Exception:
 
@@ -448,10 +369,7 @@ def cashera():
     # =====================================================
 
     try:
-
-        days = int(
-            days
-        )
+        days = int(days)
 
     except Exception:
 
@@ -470,14 +388,12 @@ def cashera():
         return "OK", 200
 
     # =====================================================
-    # ВАЛЮТА
+    # CURRENCY
     # =====================================================
 
     if currency:
 
-        if str(
-            currency
-        ).upper() != "RUB":
+        if str(currency).upper() != "RUB":
 
             print(
                 f"❌ Неверная валюта: {currency}"
@@ -486,14 +402,7 @@ def cashera():
             return "OK", 200
 
     # =====================================================
-    # ПРОВЕРКА СУММЫ
-    #
-    # CasheRa:
-    #
-    # 129 ₽  = 12900
-    # 379 ₽  = 37900
-    # 659 ₽  = 65900
-    # 1089 ₽ = 108900
+    # EXPECTED AMOUNTS
     # =====================================================
 
     expected_amounts = {
@@ -510,20 +419,17 @@ def cashera():
     if expected_amount is not None:
 
         try:
-
             received_amount = int(
                 float(amount)
             )
 
         except Exception:
-
             received_amount = None
 
         if received_amount is None:
 
             print(
-                "❌ Не удалось определить "
-                "сумму платежа"
+                "❌ Не удалось определить сумму"
             )
 
             return "OK", 200
@@ -544,12 +450,8 @@ def cashera():
 
             return "OK", 200
 
-        print(
-            "✅ Сумма платежа совпадает"
-        )
-
     # =====================================================
-    # ПРОВЕРКА СУММЫ С БД
+    # DB AMOUNT
     # =====================================================
 
     if db_amount is not None:
@@ -569,14 +471,6 @@ def cashera():
                     "❌ Сумма в БД не соответствует тарифу"
                 )
 
-                print(
-                    f"DB: {db_amount_int}"
-                )
-
-                print(
-                    f"Expected: {expected_amount}"
-                )
-
                 return "OK", 200
 
         except Exception:
@@ -586,7 +480,7 @@ def cashera():
             )
 
     # =====================================================
-    # ПОЛУЧАЕМ ПОДПИСКУ
+    # PROCESS PAYMENT
     # =====================================================
 
     try:
@@ -595,11 +489,6 @@ def cashera():
             "🎫 Начинаем выдачу подписки..."
         )
 
-        # -------------------------------------------------
-        # СНАЧАЛА УЗНАЁМ ТЕКУЩУЮ ДАТУ И ПРОДЛЯЕМ
-        # ЧЕРЕЗ АТОМАРНУЮ ФУНКЦИЮ БД
-        # -------------------------------------------------
-
         result = process_paid_payment(
             payment_uuid
         )
@@ -607,23 +496,17 @@ def cashera():
         if not result:
 
             print(
-                "❌ process_paid_payment "
-                "вернул None"
+                "❌ process_paid_payment вернул None"
             )
 
             return "OK", 200
-
-        # -------------------------------------------------
-        # ПЛАТЁЖ УЖЕ БЫЛ ОБРАБОТАН
-        # -------------------------------------------------
 
         if result.get(
             "already_paid"
         ):
 
             print(
-                f"⏭ Платёж {payment_uuid} "
-                f"уже был обработан"
+                f"⏭ Платёж {payment_uuid} уже обработан"
             )
 
             return "OK", 200
@@ -641,18 +524,16 @@ def cashera():
             f"📅 Новая дата: {new_date}"
         )
 
-        # -------------------------------------------------
-        # ОБНОВЛЯЕМ GITHUB
-        # -------------------------------------------------
+        # ВАЖНО:
+        # update_subscription_file()
+        # принимает только user_id.
 
         update_subscription_file(
-            user_id,
-            new_date,
+            user_id
         )
 
         print(
-            f"☂️ GitHub subscription "
-            f"обновлён: {user_id}"
+            f"☂️ Subscription обновлена: {user_id}"
         )
 
     except Exception as e:
@@ -668,7 +549,7 @@ def cashera():
         return "OK", 200
 
     # =====================================================
-    # УВЕДОМЛЕНИЕ
+    # TELEGRAM NOTIFICATION
     # =====================================================
 
     if BOT_LOOP:
@@ -722,22 +603,23 @@ def cashera():
                 future.result(
                     timeout=15
                 )
+
             except Exception as e:
+
                 print(
-                    "⚠️ Ошибка отправки "
-                    f"уведомления: {e}"
+                    "⚠️ Ошибка отправки уведомления:",
+                    e,
                 )
 
             print(
-                f"📨 Уведомление отправлено: "
-                f"{user_id}"
+                f"📨 Уведомление отправлено: {user_id}"
             )
 
         except Exception as e:
 
             print(
-                "⚠️ Ошибка формирования "
-                f"уведомления: {e}"
+                "⚠️ Ошибка формирования уведомления:",
+                e,
             )
 
     else:
@@ -771,6 +653,36 @@ def cashera():
 )
 def add_days_api():
 
+    # -----------------------------------------------------
+    # SECRET
+    # -----------------------------------------------------
+
+    expected_secret = os.getenv(
+        "IXXY_API_SECRET",
+        "",
+    ).strip()
+
+    if expected_secret:
+
+        received_secret = request.headers.get(
+            "X-IXXY-Secret",
+            "",
+        ).strip()
+
+        if not hmac.compare_digest(
+            received_secret,
+            expected_secret,
+        ):
+
+            return {
+                "status": "error",
+                "message": "unauthorized",
+            }, 401
+
+    # -----------------------------------------------------
+    # JSON
+    # -----------------------------------------------------
+
     data = request.get_json(
         silent=True
     )
@@ -802,13 +714,8 @@ def add_days_api():
 
     try:
 
-        user_id = int(
-            user_id
-        )
-
-        days = int(
-            days
-        )
+        user_id = int(user_id)
+        days = int(days)
 
         if days <= 0:
 
@@ -827,9 +734,11 @@ def add_days_api():
             days,
         )
 
+        # ВАЖНО:
+        # Только user_id.
+
         update_subscription_file(
-            user_id,
-            new_date,
+            user_id
         )
 
         subscription_link = (
@@ -923,19 +832,19 @@ def run_webhook():
 # =========================================================
 
 from handlers.start import (
-    router as start_router
+    router as start_router,
 )
 
 from handlers.cabinet import (
-    router as cabinet_router
+    router as cabinet_router,
 )
 
 from handlers.stars_payment import (
-    router as stars_router
+    router as stars_router,
 )
 
 from handlers.sbp_payment import (
-    router as sbp_router
+    router as sbp_router,
 )
 
 
@@ -943,40 +852,39 @@ from handlers.sbp_payment import (
 # ADMIN HANDLERS
 # =========================================================
 
-from handlers.admin_panel import (
-    router as admin_router
+# ВАЖНО:
+# /admin находится именно в admin_start.py
+
+from handlers.admin_start import (
+    router as admin_router,
 )
 
 from handlers.admin_payments import (
-    router as admin_payments_router
+    router as admin_payments_router,
 )
 
 from handlers.admin_users import (
-    router as admin_users_router
+    router as admin_users_router,
 )
 
 from handlers.admin_search import (
-    router as admin_search_router
+    router as admin_search_router,
 )
 
 from handlers.admin_promos import (
-    router as admin_promos_router
-)
-
-from handlers.admin_stats import (
-    router as admin_stats_router
+    router as admin_promos_router,
 )
 
 from handlers.admin_broadcast import (
-    router as admin_broadcast_router
+    router as admin_broadcast_router,
 )
 
 from handlers.admin_settings import (
-    router as admin_settings_router
+    router as admin_settings_router,
 )
 
 from handlers.admin_extend import (
-    router as admin_extend_router
+    router as admin_extend_router,
 )
 
 
@@ -985,7 +893,7 @@ from handlers.admin_extend import (
 # =========================================================
 
 bot = Bot(
-    token=BOT_TOKEN
+    token=BOT_TOKEN,
 )
 
 dp = Dispatcher()
@@ -996,19 +904,19 @@ dp = Dispatcher()
 # =========================================================
 
 dp.include_router(
-    start_router
+    start_router,
 )
 
 dp.include_router(
-    cabinet_router
+    cabinet_router,
 )
 
 dp.include_router(
-    stars_router
+    stars_router,
 )
 
 dp.include_router(
-    sbp_router
+    sbp_router,
 )
 
 
@@ -1017,39 +925,35 @@ dp.include_router(
 # =========================================================
 
 dp.include_router(
-    admin_router
+    admin_router,
 )
 
 dp.include_router(
-    admin_payments_router
+    admin_payments_router,
 )
 
 dp.include_router(
-    admin_users_router
+    admin_users_router,
 )
 
 dp.include_router(
-    admin_search_router
+    admin_search_router,
 )
 
 dp.include_router(
-    admin_promos_router
+    admin_promos_router,
 )
 
 dp.include_router(
-    admin_stats_router
+    admin_broadcast_router,
 )
 
 dp.include_router(
-    admin_broadcast_router
+    admin_settings_router,
 )
 
 dp.include_router(
-    admin_settings_router
-)
-
-dp.include_router(
-    admin_extend_router
+    admin_extend_router,
 )
 
 
@@ -1124,7 +1028,9 @@ async def main():
     try:
 
         asyncio.create_task(
-            check_subscriptions(bot)
+            check_subscriptions(
+                bot
+            )
         )
 
         print(
