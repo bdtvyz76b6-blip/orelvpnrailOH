@@ -63,6 +63,7 @@ def back_to_user_keyboard(user_id: int):
 async def choose_extend(
     call: CallbackQuery,
 ):
+
     # --------------------------------------------------------
     # ПРОВЕРКА АДМИНА
     # --------------------------------------------------------
@@ -102,6 +103,7 @@ async def choose_extend(
 
     try:
         user = get_user(user_id)
+
     except Exception as e:
         print(
             "Get user for extension error:",
@@ -177,9 +179,15 @@ async def choose_extend(
     # ТЕКУЩАЯ ДАТА
     # --------------------------------------------------------
 
-    try:
-        current_date = user[4] or "нет"
-    except (IndexError, TypeError):
+    current_date = user.get(
+        "subscription_until"
+    )
+
+    if current_date:
+        current_date = str(
+            current_date
+        )
+    else:
         current_date = "нет"
 
     # --------------------------------------------------------
@@ -189,8 +197,10 @@ async def choose_extend(
     text = (
         "⏳ <b>Продление подписки</b>\n\n"
         f"👤 ID: <code>{user_id}</code>\n"
-        f"📅 Текущий срок: <b>{current_date}</b>\n\n"
-        "Выберите, на сколько дней продлить:"
+        f"📅 Текущий срок: "
+        f"<b>{current_date}</b>\n\n"
+        "Выберите, на сколько дней "
+        "продлить:"
     )
 
     try:
@@ -217,6 +227,7 @@ async def choose_extend(
 async def extend_days(
     call: CallbackQuery,
 ):
+
     # --------------------------------------------------------
     # ПРОВЕРКА АДМИНА
     # --------------------------------------------------------
@@ -279,6 +290,7 @@ async def extend_days(
 
     try:
         user = get_user(user_id)
+
     except Exception as e:
         print(
             "Get user before extension error:",
@@ -297,9 +309,13 @@ async def extend_days(
     # СТАРАЯ ДАТА
     # --------------------------------------------------------
 
-    try:
-        old_date = user[4] or "нет"
-    except (IndexError, TypeError):
+    old_date = user.get(
+        "subscription_until"
+    )
+
+    if old_date:
+        old_date = str(old_date)
+    else:
         old_date = "нет"
 
     # --------------------------------------------------------
@@ -333,27 +349,36 @@ async def extend_days(
         return
 
     # --------------------------------------------------------
-    # ОБНОВЛЯЕМ GITHUB
+    # ОБНОВЛЯЕМ СОДЕРЖИМОЕ ПОДПИСКИ
+    # --------------------------------------------------------
+    #
+    # ВАЖНО:
+    # GitHub больше НЕ используется для
+    # users/<id>.txt.
+    #
+    # update_subscription_file()
+    # теперь обновляет subscription_content
+    # в PostgreSQL.
+    #
+    # Постоянная ссылка пользователя
+    # при этом НЕ меняется.
     # --------------------------------------------------------
 
-    github_updated = False
+    subscription_updated = False
 
     try:
-        github_date = datetime.strptime(
-            str(new_date),
-            "%Y-%m-%d",
-        ).strftime("%d.%m.%Y")
 
         update_subscription_file(
             user_id,
-            github_date,
+            new_date,
         )
 
-        github_updated = True
+        subscription_updated = True
 
     except Exception as e:
+
         print(
-            "GitHub update error:",
+            "Subscription content update error:",
             repr(e),
         )
 
@@ -363,30 +388,66 @@ async def extend_days(
 
     try:
         user = get_user(user_id)
+
     except Exception:
         user = None
 
     username = "нет"
 
     if user:
-        try:
-            username = user[1] or "нет"
-        except (IndexError, TypeError):
-            username = "нет"
 
-    # --------------------------------------------------------
-    # СТАТУС GITHUB
-    # --------------------------------------------------------
-
-    if github_updated:
-        github_status = (
-            "🟢 Файл подписки обновлён"
+        username = (
+            user.get("username")
+            or user.get("first_name")
+            or "нет"
         )
+
+    # --------------------------------------------------------
+    # СТАТУС ОБНОВЛЕНИЯ
+    # --------------------------------------------------------
+
+    if subscription_updated:
+
+        subscription_status = (
+            "🟢 Содержимое подписки обновлено"
+        )
+
     else:
-        github_status = (
+
+        subscription_status = (
             "🟡 Подписка продлена в БД,\n"
-            "но GitHub обновить не удалось"
+            "но содержимое подписки "
+            "обновить не удалось"
         )
+
+    # --------------------------------------------------------
+    # ФОРМАТ НОВОЙ ДАТЫ
+    # --------------------------------------------------------
+
+    if isinstance(new_date, datetime):
+
+        new_date_text = new_date.strftime(
+            "%d.%m.%Y"
+        )
+
+    else:
+
+        new_date_text = str(
+            new_date
+        )
+
+        try:
+
+            new_date_text = datetime.strptime(
+                new_date_text,
+                "%Y-%m-%d",
+            ).strftime(
+                "%d.%m.%Y"
+            )
+
+        except Exception:
+
+            pass
 
     # --------------------------------------------------------
     # РЕЗУЛЬТАТ
@@ -394,15 +455,30 @@ async def extend_days(
 
     text = (
         "✅ <b>Подписка успешно продлена</b>\n\n"
-        f"👤 Пользователь: @{username}\n"
-        f"🆔 ID: <code>{user_id}</code>\n\n"
-        f"📅 Было: <b>{old_date}</b>\n"
-        f"➕ Добавлено: <b>{days} дней</b>\n"
-        f"📅 Стало: <b>{new_date}</b>\n\n"
-        f"{github_status}"
+
+        f"👤 Пользователь: "
+        f"<b>{username}</b>\n"
+
+        f"🆔 ID: "
+        f"<code>{user_id}</code>\n\n"
+
+        f"📅 Было: "
+        f"<b>{old_date}</b>\n"
+
+        f"➕ Добавлено: "
+        f"<b>{days} дней</b>\n"
+
+        f"📅 Стало: "
+        f"<b>{new_date_text}</b>\n\n"
+
+        f"{subscription_status}\n\n"
+
+        "🔗 Постоянная ссылка пользователя "
+        "не изменилась."
     )
 
     try:
+
         await call.message.edit_text(
             text,
             parse_mode="HTML",
@@ -412,6 +488,7 @@ async def extend_days(
         )
 
     except TelegramBadRequest as e:
+
         if "message is not modified" not in str(e):
             raise
 
