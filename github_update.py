@@ -1,7 +1,11 @@
+# ============================================================
 # ☂️ IXXY VPN — server updater
+#
 # Permanent subscription URLs:
 # https://ixxyweb.onrender.com/sub/2ix847xy<USER_ID>
+#
 # GitHub is used only as an optional source of servers.
+# ============================================================
 
 import os
 import logging
@@ -29,15 +33,14 @@ UTC = timezone.utc
 # CONFIG
 # ============================================================
 
-PUBLIC_SITE_URL = os.getenv(
-    "PUBLIC_SITE_URL",
-    "https://ixxyweb.onrender.com",
-).rstrip("/")
+# ВАЖНО:
+# Ссылка теперь фиксированная.
+# Старый PUBLIC_SITE_URL из .env НЕ используется для генерации
+# пользовательских ссылок.
 
-SUBSCRIPTION_PREFIX = os.getenv(
-    "SUBSCRIPTION_PREFIX",
-    "2ix847xy",
-)
+PUBLIC_SITE_URL = "https://ixxyweb.onrender.com"
+
+SUBSCRIPTION_PREFIX = "2ix847xy"
 
 PROFILE_TITLE = os.getenv(
     "PROFILE_TITLE",
@@ -121,7 +124,9 @@ def github_headers():
     }
 
     if GITHUB_TOKEN:
-        headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
+        headers["Authorization"] = (
+            f"Bearer {GITHUB_TOKEN}"
+        )
 
     return headers
 
@@ -132,7 +137,7 @@ def github_headers():
 
 def raw_url(filename: str) -> str:
     return (
-        f"https://raw.githubusercontent.com/"
+        "https://raw.githubusercontent.com/"
         f"{GITHUB_OWNER}/"
         f"{GITHUB_REPO}/"
         f"{GITHUB_BRANCH}/"
@@ -144,10 +149,16 @@ def raw_url(filename: str) -> str:
 # ПОСТОЯННАЯ ССЫЛКА ПОДПИСКИ
 # ============================================================
 
-def get_subscription_link(user_id: int) -> str:
+def get_subscription_link(
+    user_id: int,
+) -> str:
+
+    # НИКАКИХ старых ссылок из .env.
+    # Всегда только этот адрес.
+
     return (
-        f"{PUBLIC_SITE_URL}/sub/"
-        f"{SUBSCRIPTION_PREFIX}{int(user_id)}"
+        "https://ixxyweb.onrender.com/sub/"
+        f"2ix847xy{int(user_id)}"
     )
 
 
@@ -155,7 +166,10 @@ def get_subscription_link(user_id: int) -> str:
 # ЗАГРУЗКА ФАЙЛА С GITHUB
 # ============================================================
 
-def load_github_file(filename: str) -> str:
+def load_github_file(
+    filename: str,
+) -> str:
+
     response = requests.get(
         raw_url(filename),
         headers=github_headers(),
@@ -178,7 +192,9 @@ def load_servers() -> str:
     # --------------------------------------------------------
 
     if GITHUB_SERVERS_URL:
+
         try:
+
             response = requests.get(
                 GITHUB_SERVERS_URL,
                 headers=github_headers(),
@@ -193,6 +209,7 @@ def load_servers() -> str:
                 return text
 
         except Exception as e:
+
             logger.error(
                 "Ошибка GITHUB_SERVERS_URL: %s",
                 e,
@@ -203,6 +220,7 @@ def load_servers() -> str:
     # --------------------------------------------------------
 
     try:
+
         text = load_github_file(
             SERVERS_FILE
         )
@@ -211,6 +229,7 @@ def load_servers() -> str:
             return text
 
     except Exception as e:
+
         logger.error(
             "Ошибка загрузки серверов из GitHub: %s",
             e,
@@ -221,17 +240,21 @@ def load_servers() -> str:
     # --------------------------------------------------------
 
     try:
+
         if os.path.exists(
             LOCAL_SERVERS_FILE
         ):
+
             with open(
                 LOCAL_SERVERS_FILE,
                 "r",
                 encoding="utf-8",
             ) as f:
+
                 return f.read().strip()
 
     except Exception as e:
+
         logger.error(
             "Ошибка локального servers.txt: %s",
             e,
@@ -241,7 +264,7 @@ def load_servers() -> str:
 
 
 # ============================================================
-# NO SERVERS — СОВМЕСТИМОСТЬ СО СТАРЫМ КОДОМ
+# NO SERVERS
 # ============================================================
 
 def load_no_servers() -> str:
@@ -263,17 +286,22 @@ def _to_datetime(
         value,
         datetime,
     ):
+
         if value.tzinfo is None:
+
             return value.replace(
                 tzinfo=UTC
             )
 
-        return value.astimezone(UTC)
+        return value.astimezone(
+            UTC
+        )
 
     if isinstance(
         value,
         date,
     ):
+
         return datetime.combine(
             value,
             datetime.min.time(),
@@ -286,39 +314,49 @@ def _to_datetime(
         return None
 
     parsers = (
+
         lambda x: datetime.fromisoformat(
             x.replace(
                 "Z",
                 "+00:00",
             )
         ),
+
         lambda x: datetime.strptime(
             x,
             "%Y-%m-%d",
         ),
+
         lambda x: datetime.strptime(
             x,
             "%d.%m.%Y",
         ),
+
         lambda x: datetime.strptime(
             x,
             "%Y-%m-%d %H:%M:%S",
         ),
+
     )
 
     for parser in parsers:
 
         try:
+
             dt = parser(text)
 
             if dt.tzinfo is None:
+
                 return dt.replace(
                     tzinfo=UTC
                 )
 
-            return dt.astimezone(UTC)
+            return dt.astimezone(
+                UTC
+            )
 
         except ValueError:
+
             continue
 
     return None
@@ -332,7 +370,9 @@ def date_to_timestamp(
     value,
 ) -> int:
 
-    dt = _to_datetime(value)
+    dt = _to_datetime(
+        value
+    )
 
     if not dt:
         return 0
@@ -350,7 +390,9 @@ def format_subscription_date(
     value,
 ) -> str:
 
-    dt = _to_datetime(value)
+    dt = _to_datetime(
+        value
+    )
 
     if not dt:
         return "—"
@@ -368,13 +410,15 @@ def is_subscription_active(
     user: dict,
 ) -> bool:
 
-    if (
-        not isinstance(user, dict)
-        or not bool(
-            user.get("subscription")
-        )
+    if not isinstance(
+        user,
+        dict,
     ):
         return False
+
+    # Главное — дата окончания.
+    # Поле subscription больше не ломает
+    # определение активности.
 
     until = _to_datetime(
         user.get(
@@ -408,10 +452,13 @@ def build_profile_header(
         announce = (
             "🟢 Подписка активна"
             f" • до "
-            f"{format_subscription_date(subscription_until)}"
+            f"{format_subscription_date("
+            f"subscription_until"
+            f")}"
         )
 
         if user_id is not None:
+
             announce += (
                 f" • 🆔 ID: {user_id}"
             )
@@ -425,7 +472,9 @@ def build_profile_header(
         )
 
     lines = [
-        f"#profile-title: {PROFILE_TITLE}",
+
+        f"#profile-title: "
+        f"{PROFILE_TITLE}",
 
         (
             "#profile-update-interval: "
@@ -438,7 +487,9 @@ def build_profile_header(
             f"download={TRAFFIC_DOWNLOAD}; "
             f"total={TRAFFIC_TOTAL}; "
             f"expire="
-            f"{date_to_timestamp(subscription_until)}"
+            f"{date_to_timestamp("
+            f"subscription_until"
+            f")}"
         ),
 
         (
@@ -455,7 +506,9 @@ def build_profile_header(
         f"#announce: {announce}",
     ]
 
-    return "\n".join(lines)
+    return "\n".join(
+        lines
+    )
 
 
 # ============================================================
@@ -478,11 +531,16 @@ def build_subscription_content(
     # серверы пользователю не выдаём.
 
     if not active:
-        return header + "\n"
+
+        return (
+            header
+            + "\n"
+        )
 
     servers = load_servers()
 
     if not servers:
+
         raise RuntimeError(
             "Список серверов пуст — "
             "обновление отменено"
@@ -512,19 +570,33 @@ def save_user_subscription(
             int(user_id)
         ) or {}
 
+        # Всегда генерируем новую
+        # правильную постоянную ссылку.
+
         if link is None:
+
             link = get_subscription_link(
                 user_id
             )
+
+        # Дополнительная защита:
+        # даже если где-то передали старую
+        # ссылку — заменяем её.
+
+        link = get_subscription_link(
+            user_id
+        )
 
         if content is None:
 
             content = (
                 build_subscription_content(
                     int(user_id),
+
                     is_subscription_active(
                         user
                     ),
+
                     user.get(
                         "subscription_until"
                     ),
@@ -570,6 +642,7 @@ def create_user_subscription(
         user_id,
         link=link,
     ):
+
         return link
 
     return None
@@ -583,12 +656,6 @@ def create_subscription(
     user_id: int,
     days: int = 30,
 ) -> Optional[str]:
-
-    # Срок подписки меняется
-    # через database.py / handlers.
-
-    # Здесь создаётся только
-    # постоянная ссылка.
 
     return create_user_subscription(
         user_id
@@ -647,9 +714,11 @@ def update_subscription_file(
 
     content = build_subscription_content(
         int(user_id),
+
         is_subscription_active(
             user
         ),
+
         user.get(
             "subscription_until"
         ),
@@ -698,21 +767,11 @@ def expire_subscription(
 # ============================================================
 
 def sync_all_active_users() -> dict:
-    """
-    Обновляет серверы у всех пользователей.
-
-    Ссылка пользователя НЕ меняется.
-
-    Например:
-
-    https://ixxyweb.onrender.com/sub/2ix847xy6312016802
-
-    останется такой же.
-    """
 
     servers = load_servers()
 
     if not servers:
+
         raise RuntimeError(
             "Список серверов пуст. "
             "Обновление отменено."
@@ -727,9 +786,15 @@ def sync_all_active_users() -> dict:
     for user in users:
 
         if (
-            not isinstance(user, dict)
-            or user.get("user_id") is None
+            not isinstance(
+                user,
+                dict,
+            )
+            or user.get(
+                "user_id"
+            ) is None
         ):
+
             skipped += 1
             continue
 
@@ -742,26 +807,33 @@ def sync_all_active_users() -> dict:
             content = (
                 build_subscription_content(
                     uid,
+
                     is_subscription_active(
                         user
                     ),
+
                     user.get(
                         "subscription_until"
                     ),
                 )
             )
 
-            success = save_user_subscription(
-                uid,
-                content,
-                get_subscription_link(
-                    uid
-                ),
+            success = (
+                save_user_subscription(
+                    uid,
+                    content,
+                    get_subscription_link(
+                        uid
+                    ),
+                )
             )
 
             if success:
+
                 updated += 1
+
             else:
+
                 failed += 1
 
         except Exception as e:
@@ -794,6 +866,7 @@ def sync_all_active_users() -> dict:
 # ============================================================
 
 def sync_servers_update() -> dict:
+
     return sync_all_active_users()
 
 
