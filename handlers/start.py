@@ -1,19 +1,14 @@
 from aiogram import Router, F
-from aiogram.types import (
-    Message,
-    CallbackQuery,
-)
+from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from config import SUPPORT
 
 from database import (
     add_user,
     get_user,
-    get_subscription_link,
-    save_subscription_link,
     check_trial,
     activate_trial,
     has_accepted_terms,
@@ -32,28 +27,20 @@ from github_update import (
     create_subscription,
     create_user_subscription,
     update_subscription_file,
+    get_subscription_link,
 )
 
 
 router = Router()
 
-
-# ============================================================
-# UTC
-# ============================================================
-
 UTC = timezone.utc
 
 
 # ============================================================
-# ПРОВЕРКА ПОДПИСКИ
+# ДАТА
 # ============================================================
 
 def normalize_date(value):
-    """
-    Преобразует PostgreSQL datetime/date/строку
-    в date.
-    """
 
     if value is None:
         return None
@@ -97,6 +84,10 @@ def normalize_date(value):
         return None
 
 
+# ============================================================
+# СТАТУС ПОДПИСКИ
+# ============================================================
+
 def get_subscription_status(user_id: int):
 
     try:
@@ -117,27 +108,10 @@ def get_subscription_status(user_id: int):
     if not user:
         return False, "—"
 
-    # ========================================================
-    # ТЕКУЩАЯ СХЕМА DATABASE.PY
-    #
-    # subscription = BOOLEAN
-    # subscription_until = дата
-    # ========================================================
-
-    subscription = (
-        user.get("subscription")
-        is True
-    )
-
-    until = user.get(
-        "subscription_until"
-    )
-
-    if not subscription:
-        return False, "—"
-
     expire_date = normalize_date(
-        until
+        user.get(
+            "subscription_until"
+        )
     )
 
     if not expire_date:
@@ -147,19 +121,14 @@ def get_subscription_status(user_id: int):
         UTC
     ).date()
 
-    # --------------------------------------------------------
-    # Подписка истекла
-    # --------------------------------------------------------
-
     if expire_date < today:
 
-        return False, expire_date.strftime(
-            "%d.%m.%Y"
+        return (
+            False,
+            expire_date.strftime(
+                "%d.%m.%Y"
+            ),
         )
-
-    # --------------------------------------------------------
-    # Подписка активна
-    # --------------------------------------------------------
 
     return (
         True,
@@ -170,35 +139,22 @@ def get_subscription_status(user_id: int):
 
 
 # ============================================================
-# СОЗДАНИЕ ПЕРСОНАЛЬНОЙ ССЫЛКИ
+# ПОСТОЯННАЯ ССЫЛКА
 # ============================================================
 
-def ensure_subscription(user_id: int):
+def ensure_subscription(
+    user_id: int,
+) -> str:
 
-    # --------------------------------------------------------
-    # Сначала пробуем получить уже существующую
-    # постоянную ссылку.
-    # --------------------------------------------------------
+    # Всегда используем ОДИН генератор ссылки.
+    # Никаких старых ссылок из database.py.
 
-    try:
+    link = get_subscription_link(
+        user_id
+    )
 
-        link = get_subscription_link(
-            user_id
-        )
-
-        if link:
-            return str(link).strip()
-
-    except Exception as e:
-
-        print(
-            f"⚠️ Ошибка получения ссылки "
-            f"{user_id}: {e}"
-        )
-
-    # --------------------------------------------------------
-    # Если ссылки нет — создаём её.
-    # --------------------------------------------------------
+    if link:
+        return str(link).strip()
 
     try:
 
@@ -207,15 +163,7 @@ def ensure_subscription(user_id: int):
         )
 
         if link:
-
-            link = str(link).strip()
-
-            save_subscription_link(
-                user_id,
-                link,
-            )
-
-            return link
+            return str(link).strip()
 
     except Exception as e:
 
@@ -235,7 +183,7 @@ def ensure_subscription(user_id: int):
     Command("start")
 )
 async def start(
-    message: Message
+    message: Message,
 ):
 
     if not message.from_user:
@@ -269,7 +217,7 @@ async def start(
         return
 
     # --------------------------------------------------------
-    # ПРОВЕРКА УСЛОВИЙ
+    # УСЛОВИЯ
     # --------------------------------------------------------
 
     try:
@@ -309,7 +257,7 @@ async def start(
         return
 
     # --------------------------------------------------------
-    # СОЗДАЁМ ПЕРСОНАЛЬНУЮ ССЫЛКУ
+    # ПОСТОЯННАЯ ССЫЛКА
     # --------------------------------------------------------
 
     ensure_subscription(
@@ -317,7 +265,7 @@ async def start(
     )
 
     # --------------------------------------------------------
-    # ПРОВЕРЯЕМ СТАТУС
+    # СТАТУС
     # --------------------------------------------------------
 
     subscription_active, until_text = (
@@ -325,10 +273,6 @@ async def start(
             user_id
         )
     )
-
-    # --------------------------------------------------------
-    # АКТИВНАЯ ПОДПИСКА
-    # --------------------------------------------------------
 
     if subscription_active:
 
@@ -348,10 +292,6 @@ async def start(
 👇 Выберите раздел в меню:
 """
 
-    # --------------------------------------------------------
-    # НЕТ ПОДПИСКИ
-    # --------------------------------------------------------
-
     else:
 
         text = """
@@ -368,10 +308,6 @@ async def start(
 
 👇 Выберите раздел в меню:
 """
-
-    # --------------------------------------------------------
-    # ГЛАВНОЕ МЕНЮ
-    # --------------------------------------------------------
 
     await message.answer(
         text,
@@ -390,7 +326,7 @@ async def start(
     F.data == "accept_terms"
 )
 async def accept(
-    callback: CallbackQuery
+    callback: CallbackQuery,
 ):
 
     user_id = callback.from_user.id
@@ -446,7 +382,7 @@ async def accept(
         return
 
     # --------------------------------------------------------
-    # СОЗДАЁМ ПЕРСОНАЛЬНУЮ ССЫЛКУ
+    # СОЗДАЁМ ПОСТОЯННУЮ ССЫЛКУ
     # --------------------------------------------------------
 
     ensure_subscription(
@@ -463,11 +399,10 @@ async def accept(
             await callback.message.delete()
 
     except Exception:
-
         pass
 
     # --------------------------------------------------------
-    # ПОКАЗЫВАЕМ ГЛАВНОЕ МЕНЮ
+    # МЕНЮ
     # --------------------------------------------------------
 
     if callback.message:
@@ -494,14 +429,14 @@ async def accept(
 
 
 # ============================================================
-# КУПИТЬ ПОДПИСКУ
+# КУПИТЬ
 # ============================================================
 
 @router.message(
     F.text == "🎫 Купить подписку"
 )
 async def buy(
-    message: Message
+    message: Message,
 ):
 
     await message.answer(
@@ -523,7 +458,7 @@ async def buy(
     F.data == "pay_stars"
 )
 async def stars(
-    callback: CallbackQuery
+    callback: CallbackQuery,
 ):
 
     if callback.message:
@@ -549,7 +484,7 @@ async def stars(
     F.data == "pay_sbp"
 )
 async def sbp(
-    callback: CallbackQuery
+    callback: CallbackQuery,
 ):
 
     if callback.message:
@@ -575,7 +510,7 @@ async def sbp(
     F.text == "🎁 Пробный период"
 )
 async def trial(
-    message: Message
+    message: Message,
 ):
 
     if not message.from_user:
@@ -609,7 +544,7 @@ async def trial(
         return
 
     # --------------------------------------------------------
-    # ПРОВЕРКА УСЛОВИЙ
+    # УСЛОВИЯ
     # --------------------------------------------------------
 
     try:
@@ -681,7 +616,7 @@ async def trial(
         return
 
     # --------------------------------------------------------
-    # СОЗДАЁМ ПОДПИСКУ
+    # СОЗДАНИЕ ПОДПИСКИ
     # --------------------------------------------------------
 
     try:
@@ -703,39 +638,16 @@ async def trial(
                 "Не удалось получить ссылку подписки"
             )
 
-        # ----------------------------------------------------
-        # Сохраняем trial
-        # ----------------------------------------------------
-
+        # Сохраняем факт trial.
         activate_trial(
             user_id,
             link,
         )
 
-        save_subscription_link(
-            user_id,
-            link,
+        # Обновляем профиль.
+        update_subscription_file(
+            user_id
         )
-
-        # ----------------------------------------------------
-        # Обновляем сохранённый профиль.
-        #
-        # github_update.py сам получает
-        # subscription_until из PostgreSQL.
-        # ----------------------------------------------------
-
-        try:
-
-            update_subscription_file(
-                user_id
-            )
-
-        except Exception as e:
-
-            print(
-                f"⚠️ Ошибка обновления профиля "
-                f"trial {user_id}: {e}"
-            )
 
     except Exception as e:
 
@@ -759,7 +671,7 @@ async def trial(
         return
 
     # --------------------------------------------------------
-    # Получаем фактическую дату из БД
+    # ПОЛУЧАЕМ ДАТУ
     # --------------------------------------------------------
 
     try:
@@ -769,68 +681,46 @@ async def trial(
         )
 
         trial_until = (
-            user.get("subscription_until")
-            if isinstance(user, dict)
+            user.get(
+                "subscription_until"
+            )
+            if isinstance(
+                user,
+                dict,
+            )
             else None
         )
 
-    except Exception as e:
-
-        print(
-            f"⚠️ Ошибка получения даты trial "
-            f"{user_id}: {e}"
-        )
+    except Exception:
 
         trial_until = None
 
-    # --------------------------------------------------------
-    # Если БД не вернула дату — резервно +3 дня
-    # --------------------------------------------------------
+    trial_date = normalize_date(
+        trial_until
+    )
 
-    if trial_until:
+    if trial_date:
 
-        trial_until_text = normalize_date(
-            trial_until
+        trial_until_text = (
+            trial_date.strftime(
+                "%d.%m.%Y"
+            )
         )
-
-        if trial_until_text:
-
-            trial_until = trial_until_text.strftime(
-                "%d.%m.%Y"
-            )
-
-        else:
-
-            trial_until = (
-                datetime.now(
-                    UTC
-                ).date()
-                + timedelta(days=3)
-            ).strftime(
-                "%d.%m.%Y"
-            )
 
     else:
 
-        trial_until = (
-            datetime.now(
-                UTC
-            ).date()
-            + timedelta(days=3)
-        ).strftime(
-            "%d.%m.%Y"
-        )
+        trial_until_text = "через 3 дня"
 
     # --------------------------------------------------------
     # ПОСТОЯННАЯ ССЫЛКА
     # --------------------------------------------------------
 
-    permanent_link = ensure_subscription(
+    permanent_link = get_subscription_link(
         user_id
     )
 
     # --------------------------------------------------------
-    # УСПЕШНАЯ АКТИВАЦИЯ
+    # УСПЕХ
     # --------------------------------------------------------
 
     await message.answer(
@@ -840,7 +730,7 @@ async def trial(
 ☂️ <b>ixxy VPN</b>
 
 🟢 Подписка активна до:
-<b>{trial_until}</b>
+<b>{trial_until_text}</b>
 
 ━━━━━━━━━━━━━━━━━━
 
@@ -872,7 +762,7 @@ async def trial(
     F.text == "💬 Поддержка"
 )
 async def support(
-    message: Message
+    message: Message,
 ):
 
     support_text = str(
