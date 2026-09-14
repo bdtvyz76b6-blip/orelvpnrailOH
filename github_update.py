@@ -1,105 +1,77 @@
+# ☂️ IXXY VPN — server updater
+# Permanent subscription URLs:
+# https://ixxyweb.onrender.com/sub/2ix847xy<USER_ID>
+# GitHub is used only as an optional source of servers.
+
 import os
-import time
-import threading
-import base64
+import logging
+from datetime import datetime, date, timezone
+from typing import Optional
+
 import requests
-
-from datetime import datetime, timedelta
-
 from dotenv import load_dotenv
 
 from database import (
-    save_subscription_link,
-    save_subscription_content,
     get_all_users,
+    get_user,
+    save_subscription_content,
+    save_subscription_link,
 )
-
 
 load_dotenv()
 
+logger = logging.getLogger(__name__)
+
+UTC = timezone.utc
+
 
 # ============================================================
-# НАСТРОЙКИ
+# CONFIG
 # ============================================================
+
+PUBLIC_SITE_URL = os.getenv(
+    "PUBLIC_SITE_URL",
+    "https://ixxyweb.onrender.com",
+).rstrip("/")
 
 SUBSCRIPTION_PREFIX = os.getenv(
     "SUBSCRIPTION_PREFIX",
     "2ix847xy",
-).strip()
+)
 
 PROFILE_TITLE = os.getenv(
     "PROFILE_TITLE",
     "𝗦𝗨𝗕 - 𝗜𝗫𝗫𝗬 ☂️",
-).strip()
+)
 
-try:
-    PROFILE_UPDATE_INTERVAL = int(
-        os.getenv("PROFILE_UPDATE_INTERVAL", "1")
-    )
-except Exception:
-    PROFILE_UPDATE_INTERVAL = 1
-
-
-# ============================================================
-# HAPP — ТРАФИК
-# ============================================================
-
-try:
-    TRAFFIC_TOTAL = int(
-        os.getenv("TRAFFIC_TOTAL", "0")
-    )
-except Exception:
-    TRAFFIC_TOTAL = 0
-
-try:
-    TRAFFIC_UPLOAD = int(
-        os.getenv("TRAFFIC_UPLOAD", "0")
-    )
-except Exception:
-    TRAFFIC_UPLOAD = 0
-
-try:
-    TRAFFIC_DOWNLOAD = int(
-        os.getenv("TRAFFIC_DOWNLOAD", "0")
-    )
-except Exception:
-    TRAFFIC_DOWNLOAD = 0
-
-
-# ============================================================
-# HAPP — СКРЫТИЕ НАСТРОЕК
-# ============================================================
+PROFILE_UPDATE_INTERVAL = os.getenv(
+    "PROFILE_UPDATE_INTERVAL",
+    "1",
+)
 
 HIDE_SETTINGS = os.getenv(
     "HIDE_SETTINGS",
-    "1",
-).strip().lower() in (
-    "1",
-    "true",
-    "yes",
-    "on",
+    "True",
+)
+
+TRAFFIC_TOTAL = os.getenv(
+    "TRAFFIC_TOTAL",
+    "0",
+)
+
+TRAFFIC_UPLOAD = os.getenv(
+    "TRAFFIC_UPLOAD",
+    "0",
+)
+
+TRAFFIC_DOWNLOAD = os.getenv(
+    "TRAFFIC_DOWNLOAD",
+    "0",
 )
 
 
 # ============================================================
-# АВТОСИНХРОНИЗАЦИЯ
-# ============================================================
-
-AUTO_SYNC_ENABLED = os.getenv(
-    "AUTO_SYNC_ENABLED",
-    "1",
-).strip() == "1"
-
-try:
-    AUTO_SYNC_INTERVAL = int(
-        os.getenv("AUTO_SYNC_INTERVAL", "600")
-    )
-except Exception:
-    AUTO_SYNC_INTERVAL = 600
-
-
-# ============================================================
-# GITHUB
+# GITHUB — ТОЛЬКО ИСТОЧНИК СПИСКА СЕРВЕРОВ
 # ============================================================
 
 GITHUB_TOKEN = os.getenv(
@@ -107,496 +79,588 @@ GITHUB_TOKEN = os.getenv(
     "",
 ).strip()
 
-OWNER = os.getenv(
+GITHUB_OWNER = os.getenv(
     "GITHUB_OWNER",
     "bdtvyz76b6-blip",
-).strip()
+)
 
-REPO = os.getenv(
+GITHUB_REPO = os.getenv(
     "GITHUB_REPO",
     "vpn-sub",
-).strip()
+)
 
-BRANCH = os.getenv(
+GITHUB_BRANCH = os.getenv(
     "GITHUB_BRANCH",
     "main",
-).strip()
-
+)
 
 SERVERS_FILE = os.getenv(
     "SERVERS_FILE",
     "servers.txt",
 ).strip()
 
-NO_SERVERS_FILE = os.getenv(
-    "NO_SERVERS_FILE",
-    "no_servers.txt",
+GITHUB_SERVERS_URL = os.getenv(
+    "GITHUB_SERVERS_URL",
+    "",
+).strip()
+
+LOCAL_SERVERS_FILE = os.getenv(
+    "LOCAL_SERVERS_FILE",
+    "servers.txt",
 ).strip()
 
 
 # ============================================================
-# GITHUB API
+# GITHUB HEADERS
 # ============================================================
-
-GITHUB_API = (
-    f"https://api.github.com/repos/"
-    f"{OWNER}/{REPO}/contents"
-)
-
 
 def github_headers():
     headers = {
         "Accept": "application/vnd.github+json",
-        "User-Agent": "ixxy-vpn-bot",
+        "User-Agent": "ixxy-vpn",
     }
 
     if GITHUB_TOKEN:
-        headers["Authorization"] = (
-            f"Bearer {GITHUB_TOKEN}"
-        )
+        headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
 
     return headers
 
 
 # ============================================================
-# RAW URL
+# GITHUB RAW URL
 # ============================================================
 
-def get_subscription_link(user_id):
-    """
-    Постоянная RAW-ссылка пользователя.
-    """
-
+def raw_url(filename: str) -> str:
     return (
         f"https://raw.githubusercontent.com/"
-        f"{OWNER}/{REPO}/{BRANCH}/"
-        f"users/{user_id}.txt"
+        f"{GITHUB_OWNER}/"
+        f"{GITHUB_REPO}/"
+        f"{GITHUB_BRANCH}/"
+        f"{filename.lstrip('/')}"
     )
 
 
 # ============================================================
-# GITHUB RAW
+# ПОСТОЯННАЯ ССЫЛКА ПОДПИСКИ
 # ============================================================
 
-def raw_url(filename):
+def get_subscription_link(user_id: int) -> str:
     return (
-        f"https://raw.githubusercontent.com/"
-        f"{OWNER}/{REPO}/{BRANCH}/{filename}"
+        f"{PUBLIC_SITE_URL}/sub/"
+        f"{SUBSCRIPTION_PREFIX}{int(user_id)}"
     )
 
 
 # ============================================================
-# ЗАГРУЗКА GITHUB ФАЙЛА
+# ЗАГРУЗКА ФАЙЛА С GITHUB
 # ============================================================
 
-def load_github_file(filename):
-
+def load_github_file(filename: str) -> str:
     response = requests.get(
         raw_url(filename),
         headers=github_headers(),
         timeout=20,
     )
 
-    if response.status_code != 200:
-        raise Exception(
-            f"Не удалось загрузить {filename}: "
-            f"HTTP {response.status_code}"
-        )
+    response.raise_for_status()
 
-    content = response.text.strip()
-
-    if not content:
-        raise Exception(
-            f"Файл {filename} пустой"
-        )
-
-    return content
-
-
-def load_servers():
-    return load_github_file(
-        SERVERS_FILE
-    )
-
-
-def load_no_servers():
-    return load_github_file(
-        NO_SERVERS_FILE
-    )
+    return response.text.strip()
 
 
 # ============================================================
-# ЗАПИСЬ ПЕРСОНАЛЬНОГО ФАЙЛА В GITHUB
+# ЗАГРУЗКА СПИСКА СЕРВЕРОВ
 # ============================================================
 
-def upload_user_file(user_id, content):
-
-    path = f"users/{user_id}.txt"
-
-    url = f"{GITHUB_API}/{path}"
-
-    encoded_content = base64.b64encode(
-        content.encode("utf-8")
-    ).decode("ascii")
+def load_servers() -> str:
 
     # --------------------------------------------------------
-    # Получаем SHA старого файла, если он существует
+    # 1. Прямая ссылка GITHUB_SERVERS_URL
     # --------------------------------------------------------
 
-    sha = None
+    if GITHUB_SERVERS_URL:
+        try:
+            response = requests.get(
+                GITHUB_SERVERS_URL,
+                headers=github_headers(),
+                timeout=20,
+            )
 
-    response = requests.get(
-        url,
-        headers=github_headers(),
-        params={
-            "ref": BRANCH,
-        },
-        timeout=20,
-    )
+            response.raise_for_status()
 
-    if response.status_code == 200:
+            text = response.text.strip()
 
-        data = response.json()
+            if text:
+                return text
 
-        sha = data.get("sha")
+        except Exception as e:
+            logger.error(
+                "Ошибка GITHUB_SERVERS_URL: %s",
+                e,
+            )
 
-    elif response.status_code != 404:
+    # --------------------------------------------------------
+    # 2. servers.txt в GitHub
+    # --------------------------------------------------------
 
-        raise Exception(
-            f"Ошибка проверки GitHub файла "
-            f"{path}: HTTP {response.status_code}"
+    try:
+        text = load_github_file(
+            SERVERS_FILE
+        )
+
+        if text:
+            return text
+
+    except Exception as e:
+        logger.error(
+            "Ошибка загрузки серверов из GitHub: %s",
+            e,
         )
 
     # --------------------------------------------------------
-    # Создаём / обновляем
+    # 3. Локальный servers.txt
     # --------------------------------------------------------
 
-    payload = {
-        "message": (
-            f"☂️ ixxy: update user {user_id}"
+    try:
+        if os.path.exists(
+            LOCAL_SERVERS_FILE
+        ):
+            with open(
+                LOCAL_SERVERS_FILE,
+                "r",
+                encoding="utf-8",
+            ) as f:
+                return f.read().strip()
+
+    except Exception as e:
+        logger.error(
+            "Ошибка локального servers.txt: %s",
+            e,
+        )
+
+    return ""
+
+
+# ============================================================
+# NO SERVERS — СОВМЕСТИМОСТЬ СО СТАРЫМ КОДОМ
+# ============================================================
+
+def load_no_servers() -> str:
+    return ""
+
+
+# ============================================================
+# DATETIME
+# ============================================================
+
+def _to_datetime(
+    value,
+) -> Optional[datetime]:
+
+    if value is None:
+        return None
+
+    if isinstance(
+        value,
+        datetime,
+    ):
+        if value.tzinfo is None:
+            return value.replace(
+                tzinfo=UTC
+            )
+
+        return value.astimezone(UTC)
+
+    if isinstance(
+        value,
+        date,
+    ):
+        return datetime.combine(
+            value,
+            datetime.min.time(),
+            tzinfo=UTC,
+        )
+
+    text = str(value).strip()
+
+    if not text:
+        return None
+
+    parsers = (
+        lambda x: datetime.fromisoformat(
+            x.replace(
+                "Z",
+                "+00:00",
+            )
         ),
-        "content": encoded_content,
-        "branch": BRANCH,
-    }
-
-    if sha:
-        payload["sha"] = sha
-
-    response = requests.put(
-        url,
-        headers=github_headers(),
-        json=payload,
-        timeout=30,
+        lambda x: datetime.strptime(
+            x,
+            "%Y-%m-%d",
+        ),
+        lambda x: datetime.strptime(
+            x,
+            "%d.%m.%Y",
+        ),
+        lambda x: datetime.strptime(
+            x,
+            "%Y-%m-%d %H:%M:%S",
+        ),
     )
 
-    if response.status_code not in (
-        200,
-        201,
-    ):
-
-        raise Exception(
-            f"GitHub не смог сохранить "
-            f"{path}: "
-            f"HTTP {response.status_code} "
-            f"{response.text[:500]}"
-        )
-
-    return get_subscription_link(
-        user_id
-    )
-
-
-# ============================================================
-# DATE → UNIX
-# ============================================================
-
-def date_to_timestamp(date):
-
-    if isinstance(date, datetime):
-        return int(date.timestamp())
-
-    value = str(date).strip()
-
-    for fmt in (
-        "%Y-%m-%d",
-        "%d.%m.%Y",
-    ):
+    for parser in parsers:
 
         try:
+            dt = parser(text)
 
-            parsed = datetime.strptime(
-                value,
-                fmt,
-            )
+            if dt.tzinfo is None:
+                return dt.replace(
+                    tzinfo=UTC
+                )
 
-            return int(
-                datetime.combine(
-                    parsed.date(),
-                    datetime.min.time(),
-                ).timestamp()
-            )
+            return dt.astimezone(UTC)
 
-        except Exception:
-            pass
+        except ValueError:
+            continue
 
-    return 0
+    return None
 
 
 # ============================================================
-# PROFILE HEADER
+# DATE → UNIX TIMESTAMP
 # ============================================================
 
-def build_profile_header(
-    announce,
-    expire=0,
-    upload=TRAFFIC_UPLOAD,
-    download=TRAFFIC_DOWNLOAD,
-    total=TRAFFIC_TOTAL,
-):
+def date_to_timestamp(
+    value,
+) -> int:
 
-    hide_settings = (
-        "true"
-        if HIDE_SETTINGS
-        else "false"
+    dt = _to_datetime(value)
+
+    if not dt:
+        return 0
+
+    return int(
+        dt.timestamp()
     )
-
-    return (
-        f"#profile-title: {PROFILE_TITLE}\n"
-        f"#profile-update-interval: "
-        f"{PROFILE_UPDATE_INTERVAL}\n"
-        f"#subscription-userinfo: "
-        f"upload={int(upload)}; "
-        f"download={int(download)}; "
-        f"total={int(total)}; "
-        f"expire={int(expire)}\n"
-        f"#hide-settings: {hide_settings}\n"
-        f"#happ-hide-settings: {hide_settings}\n"
-        f"#hide_server_settings: {hide_settings}\n"
-        f"#hidesettings: {hide_settings}\n"
-        f"#announce: {announce}\n\n"
-    )
-
-
-# ============================================================
-# СОХРАНЕНИЕ
-# ============================================================
-
-def save_user_subscription(
-    user_id,
-    content,
-):
-
-    link = upload_user_file(
-        user_id,
-        content,
-    )
-
-    # Оставляем сохранение в БД,
-    # чтобы существующий код не ломался.
-
-    save_subscription_content(
-        user_id,
-        content,
-    )
-
-    save_subscription_link(
-        user_id,
-        link,
-    )
-
-    return link
-
-
-# ============================================================
-# НОВЫЙ ПОЛЬЗОВАТЕЛЬ
-# ============================================================
-
-_NEW_USER_ANNOUNCE = (
-    "🔒 Подписка не активна • "
-    "Оформите подписку через @orelvpntopbot"
-)
-
-
-NEW_USER_TEMPLATE = (
-    build_profile_header(
-        _NEW_USER_ANNOUNCE,
-        expire=0,
-        upload=0,
-        download=0,
-        total=0,
-    )
-    +
-    "vless://00000000-0000-0000-0000-000000000000"
-    "@expired.invalid:443"
-    "?type=tcp"
-    "&security=reality"
-    "&sni=expired.invalid"
-    "&fp=chrome"
-    "&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-    "&sid="
-    "&flow=xtls-rprx-vision"
-    "#⛔ Активируйте подписку"
-).strip()
-
-
-def create_user_subscription(user_id):
-
-    link = save_user_subscription(
-        user_id,
-        NEW_USER_TEMPLATE,
-    )
-
-    print(
-        f"🆕 Создан файл "
-        f"users/{user_id}.txt"
-    )
-
-    print(
-        f"🔗 RAW: {link}"
-    )
-
-    return link
 
 
 # ============================================================
 # ФОРМАТ ДАТЫ
 # ============================================================
 
-def format_subscription_date(date):
+def format_subscription_date(
+    value,
+) -> str:
 
-    if isinstance(date, datetime):
-        return date.strftime("%d.%m.%Y")
+    dt = _to_datetime(value)
 
-    if hasattr(date, "strftime"):
+    if not dt:
+        return "—"
 
-        try:
-            return date.strftime("%d.%m.%Y")
-        except Exception:
-            pass
+    return dt.strftime(
+        "%d.%m.%Y"
+    )
 
-    value = str(date).strip()
 
-    for fmt in (
-        "%Y-%m-%d",
-        "%d.%m.%Y",
+# ============================================================
+# ПРОВЕРКА АКТИВНОСТИ ПОДПИСКИ
+# ============================================================
+
+def is_subscription_active(
+    user: dict,
+) -> bool:
+
+    if (
+        not isinstance(user, dict)
+        or not bool(
+            user.get("subscription")
+        )
     ):
+        return False
 
-        try:
+    until = _to_datetime(
+        user.get(
+            "subscription_until"
+        )
+    )
 
-            parsed = datetime.strptime(
-                value,
-                fmt,
-            )
+    if not until:
+        return False
 
-            return parsed.strftime(
-                "%d.%m.%Y"
-            )
-
-        except Exception:
-            pass
-
-    return value
+    return (
+        until.date()
+        >= datetime.now(
+            UTC
+        ).date()
+    )
 
 
 # ============================================================
-# АКТИВНАЯ ПОДПИСКА
+# HEADER ПОДПИСКИ
 # ============================================================
 
-def activate_subscription_file(
-    user_id,
-    date,
-):
+def build_profile_header(
+    subscription_until=None,
+    user_id=None,
+    active=True,
+) -> str:
+
+    if active:
+
+        announce = (
+            "🟢 Подписка активна"
+            f" • до "
+            f"{format_subscription_date(subscription_until)}"
+        )
+
+        if user_id is not None:
+            announce += (
+                f" • 🆔 ID: {user_id}"
+            )
+
+    else:
+
+        announce = (
+            "🔴 Подписка не активна"
+            " • Продлите подписку"
+            " в боте ixxy VPN"
+        )
+
+    lines = [
+        f"#profile-title: {PROFILE_TITLE}",
+
+        (
+            "#profile-update-interval: "
+            f"{PROFILE_UPDATE_INTERVAL}"
+        ),
+
+        (
+            "#subscription-userinfo: "
+            f"upload={TRAFFIC_UPLOAD}; "
+            f"download={TRAFFIC_DOWNLOAD}; "
+            f"total={TRAFFIC_TOTAL}; "
+            f"expire="
+            f"{date_to_timestamp(subscription_until)}"
+        ),
+
+        (
+            "#hide-settings: "
+            f"{str(HIDE_SETTINGS).lower()}"
+        ),
+
+        "#happ-hide-settings: true",
+
+        "#hide_server_settings: true",
+
+        "#hidesettings: true",
+
+        f"#announce: {announce}",
+    ]
+
+    return "\n".join(lines)
+
+
+# ============================================================
+# СОЗДАНИЕ CONTENT ПОДПИСКИ
+# ============================================================
+
+def build_subscription_content(
+    user_id: int,
+    active: bool,
+    subscription_until=None,
+) -> str:
+
+    header = build_profile_header(
+        subscription_until,
+        user_id,
+        active,
+    )
+
+    # Если подписка неактивна —
+    # серверы пользователю не выдаём.
+
+    if not active:
+        return header + "\n"
 
     servers = load_servers()
 
-    display_date = format_subscription_date(
-        date
-    )
-
-    expire_timestamp = date_to_timestamp(
-        display_date
-    )
-
-    announce = (
-        f"🟢 Подписка активна • "
-        f"до {display_date} • "
-        f"🆔 ID: {user_id}"
-    )
-
-    content = (
-        build_profile_header(
-            announce,
-            expire=expire_timestamp,
-            upload=0,
-            download=0,
-            total=0,
+    if not servers:
+        raise RuntimeError(
+            "Список серверов пуст — "
+            "обновление отменено"
         )
-        + servers
-    )
 
-    link = save_user_subscription(
-        user_id,
-        content,
+    return (
+        header.rstrip()
+        + "\n"
+        + servers.strip()
+        + "\n"
     )
-
-    print(
-        f"🟢 {user_id} — "
-        f"подписка до {display_date}"
-    )
-
-    print(
-        f"🔗 RAW: {link}"
-    )
-
-    return link
 
 
 # ============================================================
-# СОЗДАНИЕ ПОДПИСКИ
+# СОХРАНЕНИЕ ПОДПИСКИ
+# ============================================================
+
+def save_user_subscription(
+    user_id: int,
+    content=None,
+    link=None,
+) -> bool:
+
+    try:
+
+        user = get_user(
+            int(user_id)
+        ) or {}
+
+        if link is None:
+            link = get_subscription_link(
+                user_id
+            )
+
+        if content is None:
+
+            content = (
+                build_subscription_content(
+                    int(user_id),
+                    is_subscription_active(
+                        user
+                    ),
+                    user.get(
+                        "subscription_until"
+                    ),
+                )
+            )
+
+        save_subscription_content(
+            int(user_id),
+            content,
+        )
+
+        save_subscription_link(
+            int(user_id),
+            link,
+        )
+
+        return True
+
+    except Exception as e:
+
+        logger.error(
+            "Ошибка сохранения подписки %s: %s",
+            user_id,
+            e,
+        )
+
+        return False
+
+
+# ============================================================
+# СОЗДАНИЕ ПОСТОЯННОЙ ПОДПИСКИ
+# ============================================================
+
+def create_user_subscription(
+    user_id: int,
+) -> Optional[str]:
+
+    link = get_subscription_link(
+        user_id
+    )
+
+    if save_user_subscription(
+        user_id,
+        link=link,
+    ):
+        return link
+
+    return None
+
+
+# ============================================================
+# СТАРАЯ ФУНКЦИЯ ДЛЯ СОВМЕСТИМОСТИ
 # ============================================================
 
 def create_subscription(
-    user_id,
-    days=30,
-):
+    user_id: int,
+    days: int = 30,
+) -> Optional[str]:
 
-    days = int(days)
+    # Срок подписки меняется
+    # через database.py / handlers.
 
-    if days <= 0:
-        raise ValueError(
-            "Количество дней должно быть больше 0"
-        )
+    # Здесь создаётся только
+    # постоянная ссылка.
 
-    expire_date = (
-        datetime.now().date()
-        + timedelta(days=days)
+    return create_user_subscription(
+        user_id
     )
 
-    return activate_subscription_file(
+
+# ============================================================
+# АКТИВАЦИЯ ПОДПИСКИ
+# ============================================================
+
+def activate_subscription_file(
+    user_id: int,
+    subscription_until=None,
+) -> bool:
+
+    content = build_subscription_content(
         user_id,
-        expire_date.strftime("%d.%m.%Y"),
+        True,
+        subscription_until,
+    )
+
+    return save_user_subscription(
+        user_id,
+        content,
+        get_subscription_link(
+            user_id
+        ),
     )
 
 
 def activate_user_subscription(
-    user_id,
-    days,
-):
-
-    return create_subscription(
-        user_id,
-        days,
-    )
-
-
-def update_subscription_file(
-    user_id,
-    date,
-):
+    user_id: int,
+    subscription_until=None,
+) -> bool:
 
     return activate_subscription_file(
         user_id,
-        date,
+        subscription_until,
+    )
+
+
+# ============================================================
+# ОБНОВЛЕНИЕ ПОДПИСКИ ОДНОГО ПОЛЬЗОВАТЕЛЯ
+# ============================================================
+
+def update_subscription_file(
+    user_id: int,
+) -> bool:
+
+    user = get_user(
+        int(user_id)
+    )
+
+    if not user:
+        return False
+
+    content = build_subscription_content(
+        int(user_id),
+        is_subscription_active(
+            user
+        ),
+        user.get(
+            "subscription_until"
+        ),
+    )
+
+    return save_user_subscription(
+        int(user_id),
+        content,
+        get_subscription_link(
+            user_id
+        ),
     )
 
 
@@ -604,349 +668,212 @@ def update_subscription_file(
 # ИСТЁКШАЯ ПОДПИСКА
 # ============================================================
 
-def expire_subscription(user_id):
+def expire_subscription(
+    user_id: int,
+) -> bool:
 
-    no_servers = load_no_servers()
+    user = get_user(
+        int(user_id)
+    ) or {}
 
-    announce = (
-        "🔴 Подписка истекла • "
-        "Продлите подписку через @orelvpntopbot"
+    content = build_subscription_content(
+        int(user_id),
+        False,
+        user.get(
+            "subscription_until"
+        ),
     )
 
-    content = (
-        build_profile_header(
-            announce,
-            expire=0,
-            upload=0,
-            download=0,
-            total=0,
-        )
-        + no_servers
-    )
-
-    link = save_user_subscription(
-        user_id,
+    return save_user_subscription(
+        int(user_id),
         content,
+        get_subscription_link(
+            user_id
+        ),
     )
 
-    print(
-        f"🔴 {user_id} — подписка отключена"
-    )
-
-    print(
-        f"🔗 RAW: {link}"
-    )
-
-    return link
-
 
 # ============================================================
-# АКТИВНЫЕ ТАРИФЫ
+# ОБНОВИТЬ СЕРВЕРЫ У ВСЕХ ПОЛЬЗОВАТЕЛЕЙ
 # ============================================================
 
-ACTIVE_SUBSCRIPTIONS = {
-    "vip",
-    "trial",
+def sync_all_active_users() -> dict:
+    """
+    Обновляет серверы у всех пользователей.
 
-    # Старые названия
-    "👑 Орёл VPN",
-    "🎁 Пробный период",
-}
+    Ссылка пользователя НЕ меняется.
 
+    Например:
 
-# ============================================================
-# СИНХРОНИЗАЦИЯ
-# ============================================================
+    https://ixxyweb.onrender.com/sub/2ix847xy6312016802
 
-def sync_all_active_users():
+    останется такой же.
+    """
 
-    print("━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    print("🔄 Начинаю синхронизацию...")
-    print("━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    servers = load_servers()
 
-    try:
-
-        servers = load_servers()
-        no_servers = load_no_servers()
-        users = get_all_users()
-
-    except Exception as e:
-
-        print(
-            f"❌ Не удалось загрузить данные: {e}"
+    if not servers:
+        raise RuntimeError(
+            "Список серверов пуст. "
+            "Обновление отменено."
         )
 
-        return {
-            "updated": 0,
-            "skipped": 0,
-            "expired": 0,
-            "errors": 1,
-        }
+    users = get_all_users() or []
 
     updated = 0
+    failed = 0
     skipped = 0
-    expired = 0
-    errors = 0
-
-    today = datetime.now().date()
 
     for user in users:
 
-        user_id = user[0]
+        if (
+            not isinstance(user, dict)
+            or user.get("user_id") is None
+        ):
+            skipped += 1
+            continue
+
+        uid = int(
+            user["user_id"]
+        )
 
         try:
 
-            subscription = user[3]
-            subscription_until = user[4]
-
-            # ------------------------------------------------
-            # НЕАКТИВНА
-            # ------------------------------------------------
-
-            if subscription not in ACTIVE_SUBSCRIPTIONS:
-
-                announce = (
-                    "🔴 Подписка не активна • "
-                    "Оформите подписку через @orelvpntopbot"
-                )
-
-                content = (
-                    build_profile_header(
-                        announce,
-                        expire=0,
-                        upload=0,
-                        download=0,
-                        total=0,
-                    )
-                    + no_servers
-                )
-
-                save_user_subscription(
-                    user_id,
-                    content,
-                )
-
-                skipped += 1
-
-                print(
-                    f"{user_id} — ⚪ "
-                    f"нет активной подписки"
-                )
-
-                continue
-
-            # ------------------------------------------------
-            # НЕТ ДАТЫ
-            # ------------------------------------------------
-
-            if not subscription_until:
-
-                announce = (
-                    "🔴 Подписка не активна • "
-                    "Оформите подписку через @orelvpntopbot"
-                )
-
-                content = (
-                    build_profile_header(
-                        announce,
-                        expire=0,
-                        upload=0,
-                        download=0,
-                        total=0,
-                    )
-                    + no_servers
-                )
-
-                save_user_subscription(
-                    user_id,
-                    content,
-                )
-
-                expired += 1
-
-                continue
-
-            # ------------------------------------------------
-            # ДАТА
-            # ------------------------------------------------
-
-            try:
-
-                expire_date = datetime.strptime(
-                    str(subscription_until),
-                    "%Y-%m-%d",
-                ).date()
-
-            except Exception:
-
-                print(
-                    f"❌ Неверная дата "
-                    f"{user_id}: "
-                    f"{subscription_until}"
-                )
-
-                errors += 1
-
-                continue
-
-            # ------------------------------------------------
-            # ИСТЕКЛА
-            # ------------------------------------------------
-
-            if expire_date < today:
-
-                announce = (
-                    "🔴 Подписка истекла • "
-                    "Продлите подписку через @orelvpntopbot"
-                )
-
-                content = (
-                    build_profile_header(
-                        announce,
-                        expire=0,
-                        upload=0,
-                        download=0,
-                        total=0,
-                    )
-                    + no_servers
-                )
-
-                save_user_subscription(
-                    user_id,
-                    content,
-                )
-
-                expired += 1
-
-                print(
-                    f"{user_id} — 🔴 истекла"
-                )
-
-                continue
-
-            # ------------------------------------------------
-            # АКТИВНА
-            # ------------------------------------------------
-
-            display_date = expire_date.strftime(
-                "%d.%m.%Y"
-            )
-
-            expire_timestamp = int(
-                datetime.combine(
-                    expire_date,
-                    datetime.min.time(),
-                ).timestamp()
-            )
-
-            announce = (
-                f"🟢 Подписка активна • "
-                f"до {display_date} • "
-                f"🆔 ID: {user_id}"
-            )
-
             content = (
-                build_profile_header(
-                    announce,
-                    expire=expire_timestamp,
-                    upload=0,
-                    download=0,
-                    total=0,
+                build_subscription_content(
+                    uid,
+                    is_subscription_active(
+                        user
+                    ),
+                    user.get(
+                        "subscription_until"
+                    ),
                 )
-                + servers
             )
 
-            save_user_subscription(
-                user_id,
+            success = save_user_subscription(
+                uid,
                 content,
+                get_subscription_link(
+                    uid
+                ),
             )
 
-            updated += 1
-
-            print(
-                f"{user_id} — 🟢 "
-                f"до {display_date}"
-            )
+            if success:
+                updated += 1
+            else:
+                failed += 1
 
         except Exception as e:
 
-            errors += 1
+            failed += 1
 
-            print(
-                f"❌ Ошибка {user_id}: {e}"
+            logger.error(
+                "Ошибка обновления %s: %s",
+                uid,
+                e,
             )
 
-    print("━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    print("✅ Синхронизация завершена")
-    print(f"🟢 Обновлено: {updated}")
-    print(f"🔴 Истекло: {expired}")
-    print(f"⚪ Пропущено: {skipped}")
-    print(f"❌ Ошибок: {errors}")
-    print("━━━━━━━━━━━━━━━━━━━━━━━━━━")
-
-    return {
+    result = {
+        "total": len(users),
         "updated": updated,
         "skipped": skipped,
-        "expired": expired,
-        "errors": errors,
+        "failed": failed,
     }
 
-
-# ============================================================
-# АДМИНСКОЕ ОБНОВЛЕНИЕ
-# ============================================================
-
-def sync_servers_update():
-
-    print(
-        "🔄 Обновление серверов..."
+    logger.info(
+        "🔄 IXXY: серверы обновлены: %s",
+        result,
     )
 
+    return result
+
+
+# ============================================================
+# СОВМЕСТИМОСТЬ
+# ============================================================
+
+def sync_servers_update() -> dict:
     return sync_all_active_users()
 
 
-# ============================================================
-# АВТОСИНХРОНИЗАТОР
-# ============================================================
+def update_user_servers(
+    user_id: int,
+) -> bool:
 
-def _auto_sync_worker():
-
-    print(
-        "🤖 Автоматическая синхронизация "
-        "запущена"
+    return update_subscription_file(
+        user_id
     )
 
-    print(
-        f"⏱ Интервал: "
-        f"{AUTO_SYNC_INTERVAL} сек."
+
+# ============================================================
+# АВТОСИНХРОНИЗАЦИЯ
+# ============================================================
+
+AUTO_SYNC_ENABLED = (
+    os.getenv(
+        "AUTO_SYNC_ENABLED",
+        "0",
+    ).lower()
+    in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+)
+
+try:
+
+    AUTO_SYNC_INTERVAL = max(
+        60,
+        int(
+            os.getenv(
+                "AUTO_SYNC_INTERVAL",
+                "600",
+            )
+        ),
     )
 
-    time.sleep(15)
+except ValueError:
 
-    while True:
+    AUTO_SYNC_INTERVAL = 600
 
-        try:
 
-            sync_all_active_users()
+def start_auto_sync():
 
-        except Exception as e:
+    import threading
+    import time
 
-            print(
-                f"❌ Ошибка автосинхронизации: "
-                f"{e}"
+    def worker():
+
+        while True:
+
+            try:
+
+                sync_all_active_users()
+
+            except Exception as e:
+
+                logger.error(
+                    "❌ IXXY AUTO SYNC ERROR: %s",
+                    e,
+                )
+
+            time.sleep(
+                AUTO_SYNC_INTERVAL
             )
 
-        time.sleep(
-            AUTO_SYNC_INTERVAL
-        )
+    thread = threading.Thread(
+        target=worker,
+        daemon=True,
+        name="ixxy-server-sync",
+    )
+
+    thread.start()
+
+    return thread
 
 
 if AUTO_SYNC_ENABLED:
-
-    sync_thread = threading.Thread(
-        target=_auto_sync_worker,
-        daemon=True,
-        name="ixxy-vpn-auto-sync",
-    )
-
-    sync_thread.start()
+    start_auto_sync()
