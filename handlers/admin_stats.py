@@ -15,7 +15,10 @@ from database import (
     get_all_payments,
 )
 
+
 router = Router()
+
+UTC = timezone.utc
 
 
 # ============================================================
@@ -23,15 +26,15 @@ router = Router()
 # ============================================================
 
 def is_admin(user_id: int) -> bool:
-    return user_id in ADMIN_IDS
+    try:
+        return int(user_id) in ADMIN_IDS
+    except (TypeError, ValueError):
+        return False
 
 
 # ============================================================
 # ДАТА
 # ============================================================
-
-UTC = timezone.utc
-
 
 def normalize_datetime(value):
     if value is None:
@@ -43,7 +46,37 @@ def normalize_datetime(value):
 
         return value.astimezone(UTC)
 
+    if isinstance(value, str):
+        value = value.strip()
+
+        if not value:
+            return None
+
+        try:
+            parsed = datetime.fromisoformat(
+                value.replace("Z", "+00:00")
+            )
+
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=UTC)
+
+            return parsed.astimezone(UTC)
+
+        except (ValueError, TypeError):
+            return None
+
     return None
+
+
+# ============================================================
+# БЕЗОПАСНОЕ ПОЛУЧЕНИЕ ЗНАЧЕНИЯ
+# ============================================================
+
+def get_value(data, key, default=None):
+    if not isinstance(data, dict):
+        return default
+
+    return data.get(key, default)
 
 
 # ============================================================
@@ -102,6 +135,12 @@ async def admin_stats(call: CallbackQuery):
         )
         return
 
+    now = datetime.now(UTC)
+
+    today = now.date()
+    week_ago = now - timedelta(days=7)
+    month_ago = now - timedelta(days=30)
+
     # ========================================================
     # ПОЛЬЗОВАТЕЛИ
     # ========================================================
@@ -126,12 +165,6 @@ async def admin_stats(call: CallbackQuery):
     users_7_days = 0
     users_30_days = 0
 
-    now = datetime.now(UTC)
-
-    today = now.date()
-    week_ago = now - timedelta(days=7)
-    month_ago = now - timedelta(days=30)
-
     for user in users_list:
 
         if not isinstance(user, dict):
@@ -141,16 +174,20 @@ async def admin_stats(call: CallbackQuery):
         # ПОДПИСКА
         # ----------------------------------------------------
 
-        subscription = bool(
-            user.get(
-                "subscription",
-                False,
-            )
+        subscription = get_value(
+            user,
+            "subscription",
+            False,
         )
 
+        # В актуальной БД subscription = BOOLEAN.
+        # True = подписка включена.
+        subscription = subscription is True
+
         subscription_until = normalize_datetime(
-            user.get(
-                "subscription_until"
+            get_value(
+                user,
+                "subscription_until",
             )
         )
 
@@ -167,7 +204,7 @@ async def admin_stats(call: CallbackQuery):
         ):
             expired_users += 1
 
-        elif not subscription:
+        else:
             no_subscription_users += 1
 
         # ----------------------------------------------------
@@ -175,7 +212,8 @@ async def admin_stats(call: CallbackQuery):
         # ----------------------------------------------------
 
         if bool(
-            user.get(
+            get_value(
+                user,
                 "trial_used",
                 False,
             )
@@ -187,8 +225,9 @@ async def admin_stats(call: CallbackQuery):
         # ----------------------------------------------------
 
         created_at = normalize_datetime(
-            user.get(
-                "created_at"
+            get_value(
+                user,
+                "created_at",
             )
         )
 
@@ -208,25 +247,25 @@ async def admin_stats(call: CallbackQuery):
     # ========================================================
 
     try:
-        promos_list = (
-            get_all_promocodes()
-            or []
-        )
+        promos_list = get_all_promocodes() or []
 
-        promo_count = len(
-            promos_list
-        )
+        promo_count = len(promos_list)
 
-        active_promos = sum(
-            1
-            for promo in promos_list
+        active_promos = 0
+
+        for promo in promos_list:
+
+            if not isinstance(promo, dict):
+                continue
+
             if bool(
-                promo.get(
+                get_value(
+                    promo,
                     "active",
                     False,
                 )
-            )
-        )
+            ):
+                active_promos += 1
 
     except Exception as e:
 
@@ -257,9 +296,7 @@ async def admin_stats(call: CallbackQuery):
 
         payments_list = []
 
-    total_payments = len(
-        payments_list
-    )
+    total_payments = len(payments_list)
 
     pending_payments = 0
     successful_payments = 0
@@ -267,55 +304,104 @@ async def admin_stats(call: CallbackQuery):
 
     revenue = 0
 
+    successful_statuses = {
+        "paid",
+        "success",
+        "successful",
+        "completed",
+        "approved",
+    }
+
+    failed_statuses = {
+        "failed",
+        "cancelled",
+        "canceled",
+        "rejected",
+        "error",
+    }
+
+    pending_statuses = {
+        "pending",
+        "processing",
+        "waiting",
+        "created",
+    }
+
     for payment in payments_list:
 
         if not isinstance(payment, dict):
             continue
 
         status = str(
-            payment.get(
+            get_value(
+                payment,
                 "status",
                 "pending",
             )
             or "pending"
         ).lower().strip()
 
-        if status == "pending":
+        if status in pending_statuses:
 
             pending_payments += 1
 
-        elif status in (
-            "paid",
-            "success",
-            "successful",
-            "completed",
-            "approved",
-        ):
+        elif status in successful_statuses:
 
             successful_payments += 1
 
             try:
-                revenue += int(
-                    payment.get(
+                amount = int(
+                    get_value(
+                        payment,
                         "amount",
                         0,
                     )
                     or 0
                 )
+
+                # CashEra хранит сумму в копейках.
+                # Stars — в XTR, поэтому Stars не
+                # смешиваем с рублёвым доходом.
+                payment_method = str(
+                    get_value(
+                        payment,
+                        "payment_method",
+                        get_value(
+                            payment,
+                            "method",
+                            "",
+                        ),
+                    )
+                    or ""
+                ).lower()
+
+                if payment_method not in (
+                    "stars",
+                    "telegram_stars",
+                    "xtr",
+                ):
+                    revenue += amount
+
             except (
                 ValueError,
                 TypeError,
             ):
                 pass
 
-        elif status in (
-            "failed",
-            "cancelled",
-            "canceled",
-            "rejected",
-        ):
+        elif status in failed_statuses:
 
             failed_payments += 1
+
+    # ========================================================
+    # РУБЛИ
+    # ========================================================
+
+    revenue_rub = revenue / 100
+
+    if revenue_rub.is_integer():
+        revenue_text = f"{int(revenue_rub)} ₽"
+    else:
+        revenue_text = f"{revenue_rub:.2f} ₽"
 
     # ========================================================
     # ФОРМИРУЕМ ТЕКСТ
@@ -351,7 +437,8 @@ async def admin_stats(call: CallbackQuery):
         f"└ 🟢 Активных: <b>{active_promos}</b>\n"
         "\n"
 
-        f"💰 <b>Доход:</b> {revenue} ₽\n"
+        f"💰 <b>Доход СБП:</b> {revenue_text}\n"
+        "⭐ <b>Stars:</b> учитываются отдельно\n"
         "📡 <b>Трафик:</b> нет телеметрии\n"
     )
 
@@ -361,17 +448,21 @@ async def admin_stats(call: CallbackQuery):
 
     try:
 
-        await call.message.edit_text(
-            text,
-            reply_markup=stats_keyboard(),
-            parse_mode="HTML",
-        )
+        if call.message:
+            await call.message.edit_text(
+                text,
+                reply_markup=stats_keyboard(),
+                parse_mode="HTML",
+            )
 
     except Exception as e:
 
-        print(
-            "❌ Admin stats message error:",
-            repr(e),
-        )
+        error_text = str(e).lower()
+
+        if "message is not modified" not in error_text:
+            print(
+                "❌ Admin stats message error:",
+                repr(e),
+            )
 
     await call.answer()
