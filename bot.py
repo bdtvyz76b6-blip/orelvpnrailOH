@@ -5,7 +5,6 @@ import hmac
 import logging
 
 from flask import Flask, request
-
 from aiogram import Bot, Dispatcher
 
 from config import BOT_TOKEN, ADMIN_IDS
@@ -80,6 +79,26 @@ app = Flask(__name__)
 BOT_LOOP = None
 
 
+def run_webhook():
+    port = int(
+        os.getenv(
+            "PORT",
+            "8080",
+        )
+    )
+
+    logger.info(
+        "🌐 Flask запускается на порту %s",
+        port,
+    )
+
+    app.run(
+        host="0.0.0.0",
+        port=port,
+        threaded=True,
+    )
+
+
 # =========================================================
 # CASHERA
 # =========================================================
@@ -100,6 +119,7 @@ CASHERA_API_SECRET = os.getenv(
 # =========================================================
 
 def format_datetime(value):
+
     if value is None:
         return "—"
 
@@ -121,7 +141,9 @@ def format_datetime(value):
         parts = text.split("-")
 
         if len(parts) == 3:
-            return f"{parts[2]}.{parts[1]}.{parts[0]}"
+            return (
+                f"{parts[2]}.{parts[1]}.{parts[0]}"
+            )
 
         return text
 
@@ -139,7 +161,9 @@ def format_datetime(value):
 )
 def cashera():
 
-    logger.info("💳 CASHERA WEBHOOK RECEIVED")
+    logger.info(
+        "💳 CASHERA WEBHOOK RECEIVED"
+    )
 
     # -----------------------------------------------------
     # API KEY
@@ -156,9 +180,11 @@ def cashera():
             received_api_key,
             CASHERA_API_KEY,
         ):
+
             logger.warning(
                 "❌ Неверный X-Api-Key"
             )
+
             return "Unauthorized", 401
 
     # -----------------------------------------------------
@@ -176,9 +202,11 @@ def cashera():
             received_secret,
             CASHERA_API_SECRET,
         ):
+
             logger.warning(
                 "❌ Неверный X-Secret"
             )
+
             return "Unauthorized", 401
 
     # -----------------------------------------------------
@@ -224,6 +252,7 @@ def cashera():
                 or "status" in item
                 or "uuid" in item
             ):
+
                 transaction = item
                 break
 
@@ -236,7 +265,10 @@ def cashera():
         if isinstance(nested, dict):
             transaction = nested
 
-    if not isinstance(transaction, dict):
+    if not isinstance(
+        transaction,
+        dict,
+    ):
         return "OK", 200
 
     logger.info(
@@ -245,7 +277,10 @@ def cashera():
     )
 
     status = str(
-        transaction.get("status", "")
+        transaction.get(
+            "status",
+            "",
+        )
     ).strip().lower()
 
     payment_uuid = (
@@ -253,8 +288,13 @@ def cashera():
         or transaction.get("id")
     )
 
-    amount = transaction.get("amount")
-    currency = transaction.get("currency")
+    amount = transaction.get(
+        "amount"
+    )
+
+    currency = transaction.get(
+        "currency"
+    )
 
     logger.info(
         "💳 status=%s uuid=%s amount=%s currency=%s",
@@ -269,46 +309,76 @@ def cashera():
     # -----------------------------------------------------
 
     if status != "paid":
+
         logger.info(
             "⏭ Платёж ещё не оплачен: %s",
             status,
         )
+
         return "OK", 200
 
     if not payment_uuid:
+
         logger.warning(
             "❌ UUID отсутствует"
         )
+
         return "OK", 200
 
-    payment_uuid = str(payment_uuid)
+    payment_uuid = str(
+        payment_uuid
+    )
 
     # -----------------------------------------------------
     # FIND PAYMENT
     # -----------------------------------------------------
 
     try:
+
         payment = get_payment_by_payment_id(
             payment_uuid
         )
+
     except Exception:
+
         logger.exception(
             "❌ Ошибка поиска платежа"
         )
+
         return "OK", 200
 
     if not payment:
+
         logger.warning(
             "❌ Платёж не найден: %s",
             payment_uuid,
         )
+
         return "OK", 200
 
-    user_id = payment.get("user_id")
-    days = payment.get("days")
-    old_status = payment.get("status")
-    provider = payment.get("provider")
-    db_amount = payment.get("amount")
+    # -----------------------------------------------------
+    # PAYMENT DATA
+    # -----------------------------------------------------
+
+    user_id = payment.get(
+        "user_id"
+    )
+
+    days = payment.get(
+        "days"
+    )
+
+    old_status = payment.get(
+        "status"
+    )
+
+    provider = payment.get(
+        "provider"
+    )
+
+    db_amount = payment.get(
+        "amount"
+    )
 
     # -----------------------------------------------------
     # PROVIDER
@@ -343,12 +413,16 @@ def cashera():
     # -----------------------------------------------------
 
     try:
+
         user_id = int(user_id)
         days = int(days)
+
     except Exception:
+
         logger.warning(
             "❌ Некорректные user_id/days"
         )
+
         return "OK", 200
 
     if days <= 0:
@@ -361,14 +435,16 @@ def cashera():
     if currency:
 
         if str(currency).upper() != "RUB":
+
             logger.warning(
                 "❌ Неверная валюта: %s",
                 currency,
             )
+
             return "OK", 200
 
     # -----------------------------------------------------
-    # AMOUNTS
+    # EXPECTED AMOUNTS
     # -----------------------------------------------------
 
     expected_amounts = {
@@ -392,15 +468,18 @@ def cashera():
             received_amount = None
 
         if received_amount is None:
+
             logger.warning(
                 "❌ Невозможно определить сумму"
             )
+
             return "OK", 200
 
         if received_amount != expected_amount:
 
             logger.warning(
-                "❌ Неверная сумма: получено=%s ожидалось=%s",
+                "❌ Неверная сумма: "
+                "получено=%s ожидалось=%s",
                 received_amount,
                 expected_amount,
             )
@@ -414,7 +493,10 @@ def cashera():
     if db_amount is not None:
 
         try:
-            db_amount_int = int(db_amount)
+
+            db_amount_int = int(
+                db_amount
+            )
 
             if (
                 expected_amount is not None
@@ -441,36 +523,44 @@ def cashera():
         )
 
         if not result:
+
             logger.warning(
-                "❌ process_paid_payment вернул None"
+                "❌ process_paid_payment "
+                "вернул None"
             )
+
             return "OK", 200
 
         if result.get("already_paid"):
+
+            logger.info(
+                "⏭ Платёж уже обработан"
+            )
+
             return "OK", 200
 
         new_date = result.get(
             "subscription_until"
         )
 
-        # ВАЖНО:
-        # update_subscription_file принимает
-        # только user_id
         update_subscription_file(
             user_id
         )
 
         logger.info(
-            "☂️ Подписка выдана: user=%s days=%s until=%s",
+            "☂️ Подписка выдана: "
+            "user=%s days=%s until=%s",
             user_id,
             days,
             new_date,
         )
 
     except Exception:
+
         logger.exception(
             "❌ ОШИБКА ВЫДАЧИ ПОДПИСКИ"
         )
+
         return "OK", 200
 
     # -----------------------------------------------------
@@ -525,6 +615,7 @@ def cashera():
             )
 
         except Exception:
+
             logger.exception(
                 "⚠️ Ошибка Telegram-уведомления"
             )
@@ -558,6 +649,7 @@ def add_days_api():
             received_secret,
             secret,
         ):
+
             return {
                 "status": "error",
                 "message": "unauthorized",
@@ -568,6 +660,7 @@ def add_days_api():
     )
 
     if not data:
+
         return {
             "status": "error",
             "message": "no json",
@@ -619,8 +712,7 @@ def add_days_api():
             "date": format_datetime(
                 new_date
             ),
-            "subscription":
-                subscription_link,
+            "subscription": subscription_link,
         }
 
     except Exception as e:
@@ -639,7 +731,10 @@ def add_days_api():
 # HEALTH
 # =========================================================
 
-@app.route("/", methods=["GET"])
+@app.route(
+    "/",
+    methods=["GET"],
+)
 def home():
 
     return {
@@ -648,7 +743,10 @@ def home():
     }
 
 
-@app.route("/health", methods=["GET"])
+@app.route(
+    "/health",
+    methods=["GET"],
+)
 def health():
 
     return {
@@ -678,14 +776,11 @@ from handlers.sbp_payment import (
 
 
 # =========================================================
-# ADMIN
+# ADMIN HANDLERS
 # =========================================================
 
-# ВАЖНО:
-# именно admin_start.py обрабатывает /admin
-
-from handlers.admin_start import (
-    router as admin_start_router
+from handlers.admin import (
+    router as admin_router
 )
 
 from handlers.admin_payments import (
@@ -733,7 +828,7 @@ dp = Dispatcher()
 
 
 # =========================================================
-# ROUTERS
+# USER ROUTERS
 # =========================================================
 
 dp.include_router(
@@ -752,9 +847,13 @@ dp.include_router(
     sbp_router
 )
 
-# ADMIN
+
+# =========================================================
+# ADMIN ROUTERS
+# =========================================================
+
 dp.include_router(
-    admin_start_router
+    admin_router
 )
 
 dp.include_router(
@@ -798,22 +897,36 @@ async def main():
 
     global BOT_LOOP
 
-    BOT_LOOP = (
-        asyncio.get_running_loop()
-    )
+    BOT_LOOP = asyncio.get_running_loop()
 
     logger.info(
         "☂️ Запуск ixxy VPN..."
     )
 
+    # -----------------------------------------------------
     # DATABASE
-    create_table()
+    # -----------------------------------------------------
 
-    logger.info(
-        "💾 PostgreSQL готов"
-    )
+    try:
 
+        create_table()
+
+        logger.info(
+            "💾 PostgreSQL готов"
+        )
+
+    except Exception:
+
+        logger.exception(
+            "❌ Ошибка инициализации PostgreSQL"
+        )
+
+        raise
+
+    # -----------------------------------------------------
     # EXPIRED
+    # -----------------------------------------------------
+
     try:
 
         check_expired_subscriptions()
@@ -823,11 +936,15 @@ async def main():
         )
 
     except Exception:
+
         logger.exception(
             "❌ Ошибка проверки подписок"
         )
 
+    # -----------------------------------------------------
     # GITHUB
+    # -----------------------------------------------------
+
     try:
 
         sync_all_active_users()
@@ -837,15 +954,21 @@ async def main():
         )
 
     except Exception:
+
         logger.exception(
             "❌ Ошибка GitHub-синхронизации"
         )
 
+    # -----------------------------------------------------
     # CHECKER
+    # -----------------------------------------------------
+
     try:
 
         asyncio.create_task(
-            check_subscriptions(bot)
+            check_subscriptions(
+                bot
+            )
         )
 
         logger.info(
@@ -853,9 +976,14 @@ async def main():
         )
 
     except Exception:
+
         logger.exception(
             "❌ Ошибка запуска checker"
         )
+
+    # -----------------------------------------------------
+    # POLLING
+    # -----------------------------------------------------
 
     logger.info(
         "☂️ ixxy VPN бот запущен"
@@ -877,6 +1005,10 @@ async def main():
 # =========================================================
 
 if __name__ == "__main__":
+
+    logger.info(
+        "🚀 Запуск Flask + Telegram..."
+    )
 
     threading.Thread(
         target=run_webhook,
