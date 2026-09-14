@@ -9,7 +9,7 @@ from aiogram.types import (
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 
 from database import (
     get_user,
@@ -46,16 +46,29 @@ def get_subscription_url(user_id: int) -> str:
     """
     Постоянная ссылка ixxy VPN.
 
-    Пример:
+    Формат:
 
-    https://ixxyweb.onrender.com/sub/2ix847xy6312016802
+    https://ixxyweb.onrender.com/sub/2ix847xy<ID>
 
-    Ссылка НЕ зависит от GitHub users/<id>.txt
-    и не меняется при обновлении серверов.
+    Ссылка не меняется при обновлении серверов.
     """
 
-    return get_subscription_link(
-        int(user_id)
+    try:
+        link = get_subscription_link(int(user_id))
+
+        if link:
+            return str(link).strip()
+
+    except Exception as e:
+        print(
+            f"⚠️ Ошибка получения subscription link "
+            f"{user_id}: {e}"
+        )
+
+    # Резервный постоянный URL
+    return (
+        "https://ixxyweb.onrender.com/sub/"
+        f"2ix847xy{int(user_id)}"
     )
 
 
@@ -73,7 +86,14 @@ def normalize_date(value):
         return None
 
     if isinstance(value, datetime):
-        return value.date()
+        if value.tzinfo is None:
+            value = value.replace(
+                tzinfo=timezone.utc
+            )
+
+        return value.astimezone(
+            timezone.utc
+        ).date()
 
     if isinstance(value, date):
         return value
@@ -83,7 +103,6 @@ def normalize_date(value):
     if not text:
         return None
 
-    # PostgreSQL ISO datetime
     try:
         return datetime.fromisoformat(
             text.replace(
@@ -95,7 +114,6 @@ def normalize_date(value):
     except Exception:
         pass
 
-    # YYYY-MM-DD
     try:
         return datetime.strptime(
             text[:10],
@@ -111,9 +129,7 @@ def format_date_ru(value) -> str:
     DD.MM.YYYY
     """
 
-    parsed = normalize_date(
-        value
-    )
+    parsed = normalize_date(value)
 
     if not parsed:
         return "—"
@@ -132,6 +148,36 @@ class PromoState(StatesGroup):
 
 
 # ============================================================
+# ПРОВЕРКА АКТИВНОСТИ
+# ============================================================
+
+def is_subscription_active(user: dict) -> bool:
+    """
+    Текущая схема PostgreSQL:
+
+    subscription = BOOLEAN
+    subscription_until = дата окончания
+    """
+
+    if not isinstance(user, dict):
+        return False
+
+    if user.get("subscription") is not True:
+        return False
+
+    until = normalize_date(
+        user.get("subscription_until")
+    )
+
+    if not until:
+        return False
+
+    return until >= datetime.now(
+        timezone.utc
+    ).date()
+
+
+# ============================================================
 # ЛИЧНЫЙ КАБИНЕТ
 # ============================================================
 
@@ -141,10 +187,7 @@ class PromoState(StatesGroup):
 async def cabinet(
     message: Message,
 ):
-
-    await show_cabinet(
-        message
-    )
+    await show_cabinet(message)
 
 
 # ============================================================
@@ -155,6 +198,9 @@ async def show_cabinet(
     message: Message,
 ):
 
+    if not message.from_user:
+        return
+
     user_id = message.from_user.id
 
     # --------------------------------------------------------
@@ -162,13 +208,11 @@ async def show_cabinet(
     # --------------------------------------------------------
 
     try:
-
         check_user_subscription(
             user_id
         )
 
     except Exception as e:
-
         print(
             f"❌ Ошибка проверки подписки "
             f"{user_id}: {e}"
@@ -179,13 +223,11 @@ async def show_cabinet(
     # --------------------------------------------------------
 
     try:
-
         user = get_user(
             user_id
         )
 
     except Exception as e:
-
         print(
             f"❌ Ошибка получения пользователя "
             f"{user_id}: {e}"
@@ -194,11 +236,9 @@ async def show_cabinet(
         user = None
 
     if not user:
-
         await message.answer(
             "❌ Пользователь не найден."
         )
-
         return
 
     # --------------------------------------------------------
@@ -209,17 +249,17 @@ async def show_cabinet(
         "subscription_until"
     )
 
-    subscription_active = bool(
-        user.get(
-            "subscription"
-        )
+    subscription_active = (
+        user.get("subscription") is True
     )
 
     expire_date = normalize_date(
         until
     )
 
-    today = datetime.now().date()
+    today = datetime.now(
+        timezone.utc
+    ).date()
 
     # --------------------------------------------------------
     # Если дата уже прошла
@@ -229,7 +269,6 @@ async def show_cabinet(
         expire_date
         and expire_date < today
     ):
-
         subscription_active = False
 
     # --------------------------------------------------------
@@ -243,12 +282,10 @@ async def show_cabinet(
     days = 0
 
     if expire_date:
-
         days = max(
             0,
             (
-                expire_date
-                - today
+                expire_date - today
             ).days,
         )
 
@@ -257,11 +294,8 @@ async def show_cabinet(
     # --------------------------------------------------------
 
     if subscription_active and days > 0:
-
         status_text = "🟢 Активна"
-
     else:
-
         status_text = "🔴 Не активна"
         days = 0
 
@@ -317,13 +351,11 @@ async def get_link(
     # --------------------------------------------------------
 
     try:
-
         is_active = check_user_subscription(
             user_id
         )
 
     except Exception as e:
-
         print(
             f"❌ Ошибка проверки подписки "
             f"{user_id}: {e}"
@@ -332,12 +364,10 @@ async def get_link(
         is_active = False
 
     if not is_active:
-
         await callback.answer(
             "❌ Подписка не активна",
             show_alert=True,
         )
-
         return
 
     # --------------------------------------------------------
@@ -345,13 +375,11 @@ async def get_link(
     # --------------------------------------------------------
 
     try:
-
         user = get_user(
             user_id
         )
 
     except Exception as e:
-
         print(
             f"❌ Ошибка получения пользователя "
             f"{user_id}: {e}"
@@ -360,12 +388,21 @@ async def get_link(
         user = None
 
     if not user:
-
         await callback.answer(
             "❌ Пользователь не найден",
             show_alert=True,
         )
+        return
 
+    # --------------------------------------------------------
+    # Дополнительная проверка BOOLEAN + даты
+    # --------------------------------------------------------
+
+    if not is_subscription_active(user):
+        await callback.answer(
+            "❌ Подписка не активна",
+            show_alert=True,
+        )
         return
 
     # ========================================================
@@ -449,13 +486,11 @@ async def copy_subscription_link(
     # --------------------------------------------------------
 
     try:
-
         is_active = check_user_subscription(
             user_id
         )
 
     except Exception as e:
-
         print(
             f"❌ Ошибка проверки подписки "
             f"{user_id}: {e}"
@@ -464,12 +499,10 @@ async def copy_subscription_link(
         is_active = False
 
     if not is_active:
-
         await callback.answer(
             "❌ Подписка не активна",
             show_alert=True,
         )
-
         return
 
     # --------------------------------------------------------
@@ -524,13 +557,11 @@ async def refresh_subscription(
     # --------------------------------------------------------
 
     try:
-
         is_active = check_user_subscription(
             user_id
         )
 
     except Exception as e:
-
         print(
             f"❌ Ошибка проверки подписки "
             f"{user_id}: {e}"
@@ -539,12 +570,10 @@ async def refresh_subscription(
         is_active = False
 
     if not is_active:
-
         await callback.answer(
             "❌ Подписка не активна",
             show_alert=True,
         )
-
         return
 
     # --------------------------------------------------------
@@ -552,13 +581,11 @@ async def refresh_subscription(
     # --------------------------------------------------------
 
     try:
-
         user = get_user(
             user_id
         )
 
     except Exception as e:
-
         print(
             f"❌ Ошибка получения пользователя "
             f"{user_id}: {e}"
@@ -567,29 +594,32 @@ async def refresh_subscription(
         user = None
 
     if not user:
-
         await callback.answer(
             "❌ Пользователь не найден",
             show_alert=True,
         )
-
         return
 
     # --------------------------------------------------------
-    # Дата подписки
+    # Проверяем BOOLEAN + дату
     # --------------------------------------------------------
+
+    if not is_subscription_active(user):
+        await callback.answer(
+            "❌ Подписка не активна",
+            show_alert=True,
+        )
+        return
 
     until = user.get(
         "subscription_until"
     )
 
     if not until:
-
         await callback.answer(
-            "❌ Нет активной подписки",
+            "❌ Нет даты окончания подписки",
             show_alert=True,
         )
-
         return
 
     expire_date = normalize_date(
@@ -597,12 +627,10 @@ async def refresh_subscription(
     )
 
     if not expire_date:
-
         await callback.answer(
             "❌ Ошибка даты подписки",
             show_alert=True,
         )
-
         return
 
     date_text = format_date_ru(
@@ -610,16 +638,7 @@ async def refresh_subscription(
     )
 
     # --------------------------------------------------------
-    # Обновляем содержимое подписки
-    #
-    # ВАЖНО:
-    # GitHub users/<id>.txt здесь больше НЕТ.
-    #
-    # github_update.py:
-    # 1. берёт актуальный список серверов;
-    # 2. собирает профиль;
-    # 3. сохраняет его в PostgreSQL;
-    # 4. постоянная ссылка остаётся прежней.
+    # Обновляем
     # --------------------------------------------------------
 
     await callback.answer(
@@ -628,9 +647,13 @@ async def refresh_subscription(
 
     try:
 
+        # ВАЖНО:
+        # github_update.py принимает ТОЛЬКО user_id.
+        #
+        # Он сам получает subscription_until
+        # из PostgreSQL.
         update_subscription_file(
-            user_id,
-            expire_date,
+            user_id
         )
 
         subscription_url = get_subscription_url(
@@ -696,6 +719,27 @@ async def enter_promo(
 
 
 # ============================================================
+# ПРОМОКОД — ОТМЕНА
+# ============================================================
+
+@router.message(
+    PromoState.waiting_code,
+    F.text.in_({"/cancel", "❌ Отмена"}),
+)
+async def cancel_promo(
+    message: Message,
+    state: FSMContext,
+):
+
+    await state.clear()
+
+    await message.answer(
+        "❌ Ввод промокода отменён.",
+        reply_markup=cabinet_keyboard(),
+    )
+
+
+# ============================================================
 # ПРОМОКОД — АКТИВАЦИЯ
 # ============================================================
 
@@ -707,14 +751,15 @@ async def activate_promo(
     state: FSMContext,
 ):
 
+    if not message.from_user:
+        return
+
     user_id = message.from_user.id
 
     if not message.text:
-
         await message.answer(
             "❌ Введите промокод текстом."
         )
-
         return
 
     # --------------------------------------------------------
@@ -728,11 +773,9 @@ async def activate_promo(
     )
 
     if not code:
-
         await message.answer(
             "❌ Промокод не может быть пустым."
         )
-
         return
 
     # --------------------------------------------------------
@@ -740,7 +783,6 @@ async def activate_promo(
     # --------------------------------------------------------
 
     try:
-
         result = use_promocode(
             user_id,
             code,
@@ -756,7 +798,8 @@ async def activate_promo(
         await state.clear()
 
         await message.answer(
-            "❌ Произошла ошибка при активации."
+            "❌ Произошла ошибка при активации.",
+            reply_markup=cabinet_keyboard(),
         )
 
         return
@@ -765,11 +808,11 @@ async def activate_promo(
         result,
         dict,
     ):
-
         await state.clear()
 
         await message.answer(
-            "❌ Сервер вернул некорректный ответ."
+            "❌ Сервер вернул некорректный ответ.",
+            reply_markup=cabinet_keyboard(),
         )
 
         return
@@ -785,7 +828,8 @@ async def activate_promo(
         await state.clear()
 
         await message.answer(
-            "❌ Промокод не найден."
+            "❌ Промокод не найден.",
+            reply_markup=cabinet_keyboard(),
         )
 
         return
@@ -801,7 +845,8 @@ async def activate_promo(
         await state.clear()
 
         await message.answer(
-            "❌ Вы уже использовали этот промокод."
+            "❌ Вы уже использовали этот промокод.",
+            reply_markup=cabinet_keyboard(),
         )
 
         return
@@ -817,7 +862,8 @@ async def activate_promo(
         await state.clear()
 
         await message.answer(
-            "❌ Пользователь не найден."
+            "❌ Пользователь не найден.",
+            reply_markup=cabinet_keyboard(),
         )
 
         return
@@ -833,7 +879,8 @@ async def activate_promo(
         await state.clear()
 
         await message.answer(
-            "❌ Не удалось активировать промокод."
+            "❌ Не удалось активировать промокод.",
+            reply_markup=cabinet_keyboard(),
         )
 
         return
@@ -852,22 +899,25 @@ async def activate_promo(
     )
 
     # --------------------------------------------------------
-    # Обновляем подписку в PostgreSQL
+    # Обновляем содержимое подписки
     # --------------------------------------------------------
 
     try:
 
-        if new_date:
-
-            update_subscription_file(
-                user_id,
-                new_date,
-            )
+        # ВАЖНО:
+        # update_subscription_file принимает
+        # только user_id.
+        #
+        # Новая дата уже сохранена в PostgreSQL
+        # через use_promocode().
+        update_subscription_file(
+            user_id
+        )
 
     except Exception as e:
 
         print(
-            f"❌ Ошибка обновления "
+            f"⚠️ Ошибка обновления "
             f"подписки {user_id}: {e}"
         )
 
