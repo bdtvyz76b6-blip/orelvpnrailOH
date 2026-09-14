@@ -48,17 +48,33 @@ def get_subscription_status(user_id: int):
     if not user:
         return False, "—"
 
-    until = user[4] or ""
+    # Текущий database.py возвращает dict
+    until = user.get("subscription_until")
 
     if not until:
         return False, "—"
 
     try:
 
-        expire_date = datetime.strptime(
-            str(until),
-            "%Y-%m-%d",
-        ).date()
+        # PostgreSQL может вернуть datetime
+        if isinstance(until, datetime):
+            expire_date = until.date()
+
+        else:
+            value = str(until).strip()
+
+            # ISO datetime
+            if "T" in value:
+                expire_date = datetime.fromisoformat(
+                    value.replace("Z", "+00:00")
+                ).date()
+
+            # YYYY-MM-DD
+            else:
+                expire_date = datetime.strptime(
+                    value[:10],
+                    "%Y-%m-%d",
+                ).date()
 
         today = datetime.now().date()
 
@@ -163,9 +179,7 @@ async def start(message: Message):
     # СОЗДАЁМ ПЕРСОНАЛЬНУЮ ССЫЛКУ
     # --------------------------------------------------------
 
-    ensure_subscription(
-        user_id
-    )
+    ensure_subscription(user_id)
 
     # --------------------------------------------------------
     # ПРОВЕРЯЕМ СТАТУС
@@ -219,7 +233,7 @@ async def start(message: Message):
 """
 
     # --------------------------------------------------------
-    # ВСЕГДА ГЛАВНОЕ МЕНЮ
+    # ГЛАВНОЕ МЕНЮ
     # --------------------------------------------------------
 
     await message.answer(
@@ -254,17 +268,13 @@ async def accept(callback: CallbackQuery):
     # ПРИНИМАЕМ УСЛОВИЯ
     # --------------------------------------------------------
 
-    accept_terms(
-        user_id
-    )
+    accept_terms(user_id)
 
     # --------------------------------------------------------
     # СОЗДАЁМ ПЕРСОНАЛЬНУЮ ССЫЛКУ
     # --------------------------------------------------------
 
-    ensure_subscription(
-        user_id
-    )
+    ensure_subscription(user_id)
 
     # --------------------------------------------------------
     # УДАЛЯЕМ СТАРОЕ СООБЩЕНИЕ
