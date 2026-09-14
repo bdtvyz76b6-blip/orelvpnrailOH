@@ -33,11 +33,6 @@ UTC = timezone.utc
 # CONFIG
 # ============================================================
 
-# ВАЖНО:
-# Ссылка теперь фиксированная.
-# Старый PUBLIC_SITE_URL из .env НЕ используется для генерации
-# пользовательских ссылок.
-
 PUBLIC_SITE_URL = "https://ixxyweb.onrender.com"
 
 SUBSCRIPTION_PREFIX = "2ix847xy"
@@ -152,9 +147,6 @@ def raw_url(filename: str) -> str:
 def get_subscription_link(
     user_id: int,
 ) -> str:
-
-    # НИКАКИХ старых ссылок из .env.
-    # Всегда только этот адрес.
 
     return (
         "https://ixxyweb.onrender.com/sub/"
@@ -416,10 +408,6 @@ def is_subscription_active(
     ):
         return False
 
-    # Главное — дата окончания.
-    # Поле subscription больше не ломает
-    # определение активности.
-
     until = _to_datetime(
         user.get(
             "subscription_until"
@@ -447,14 +435,22 @@ def build_profile_header(
     active=True,
 ) -> str:
 
+    # Сначала вычисляем значения.
+    # Так мы избегаем сложных вложенных f-string.
+
+    date_text = format_subscription_date(
+        subscription_until
+    )
+
+    expire_timestamp = date_to_timestamp(
+        subscription_until
+    )
+
     if active:
 
         announce = (
             "🟢 Подписка активна"
-            f" • до "
-            f"{format_subscription_date("
-            f"subscription_until"
-            f")}"
+            f" • до {date_text}"
         )
 
         if user_id is not None:
@@ -473,8 +469,7 @@ def build_profile_header(
 
     lines = [
 
-        f"#profile-title: "
-        f"{PROFILE_TITLE}",
+        f"#profile-title: {PROFILE_TITLE}",
 
         (
             "#profile-update-interval: "
@@ -486,10 +481,7 @@ def build_profile_header(
             f"upload={TRAFFIC_UPLOAD}; "
             f"download={TRAFFIC_DOWNLOAD}; "
             f"total={TRAFFIC_TOTAL}; "
-            f"expire="
-            f"{date_to_timestamp("
-            f"subscription_until"
-            f")}"
+            f"expire={expire_timestamp}"
         ),
 
         (
@@ -570,18 +562,8 @@ def save_user_subscription(
             int(user_id)
         ) or {}
 
-        # Всегда генерируем новую
-        # правильную постоянную ссылку.
-
-        if link is None:
-
-            link = get_subscription_link(
-                user_id
-            )
-
-        # Дополнительная защита:
-        # даже если где-то передали старую
-        # ссылку — заменяем её.
+        # Всегда используем только
+        # каноническую постоянную ссылку.
 
         link = get_subscription_link(
             user_id
