@@ -1,19 +1,21 @@
 import asyncio
-import threading
 import os
+import threading
 import hmac
+import logging
 
 from flask import Flask, request
 
 from aiogram import Bot, Dispatcher
 
-from config import BOT_TOKEN
+from config import BOT_TOKEN, ADMIN_IDS
 
 from database import (
     create_table,
     check_expired_subscriptions,
     get_payment_by_payment_id,
     process_paid_payment,
+    extend_subscription,
 )
 
 from github_update import (
@@ -26,7 +28,51 @@ from subscription_checker import check_subscriptions
 
 
 # =========================================================
-# WEBHOOK / API
+# LOGGING
+# =========================================================
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+)
+
+logger = logging.getLogger(__name__)
+
+
+# =========================================================
+# ADMIN IDS
+# =========================================================
+
+def normalize_admin_ids(value):
+    result = set()
+
+    if value is None:
+        return result
+
+    if isinstance(value, (list, tuple, set)):
+        items = value
+    else:
+        items = str(value).replace(",", " ").split()
+
+    for item in items:
+        try:
+            result.add(int(str(item).strip()))
+        except Exception:
+            pass
+
+    return result
+
+
+ADMIN_IDS = normalize_admin_ids(ADMIN_IDS)
+
+logger.info(
+    "👑 ADMIN IDS: %s",
+    sorted(ADMIN_IDS),
+)
+
+
+# =========================================================
+# FLASK
 # =========================================================
 
 app = Flask(__name__)
@@ -58,7 +104,8 @@ def format_datetime(value):
         return "—"
 
     try:
-        return value.strftime("%d.%m.%Y")
+        if hasattr(value, "strftime"):
+            return value.strftime("%d.%m.%Y")
     except Exception:
         pass
 
@@ -92,14 +139,11 @@ def format_datetime(value):
 )
 def cashera():
 
-    print("")
-    print("========================================")
-    print("💳 CASHERA WEBHOOK RECEIVED")
-    print("========================================")
+    logger.info("💳 CASHERA WEBHOOK RECEIVED")
 
-    # =====================================================
+    # -----------------------------------------------------
     # API KEY
-    # =====================================================
+    # -----------------------------------------------------
 
     received_api_key = request.headers.get(
         "X-Api-Key",
@@ -112,12 +156,14 @@ def cashera():
             received_api_key,
             CASHERA_API_KEY,
         ):
-            print("❌ Неверный X-Api-Key")
+            logger.warning(
+                "❌ Неверный X-Api-Key"
+            )
             return "Unauthorized", 401
 
-    # =====================================================
+    # -----------------------------------------------------
     # SECRET
-    # =====================================================
+    # -----------------------------------------------------
 
     received_secret = request.headers.get(
         "X-Secret",
@@ -130,27 +176,30 @@ def cashera():
             received_secret,
             CASHERA_API_SECRET,
         ):
-            print("❌ Неверный X-Secret")
+            logger.warning(
+                "❌ Неверный X-Secret"
+            )
             return "Unauthorized", 401
 
-    # =====================================================
+    # -----------------------------------------------------
     # JSON
-    # =====================================================
+    # -----------------------------------------------------
 
     data = request.get_json(
-        silent=True,
+        silent=True
     )
 
-    print("💳 CASHERA DATA:")
-    print(data)
+    logger.info(
+        "💳 CASHERA DATA: %s",
+        data,
+    )
 
     if not data:
-        print("⚠️ Пустой webhook")
         return "OK", 200
 
-    # =====================================================
+    # -----------------------------------------------------
     # TRANSACTION
-    # =====================================================
+    # -----------------------------------------------------
 
     transaction = None
 
@@ -180,36 +229,23 @@ def cashera():
 
     if isinstance(transaction, dict):
 
-        nested_transaction = transaction.get(
+        nested = transaction.get(
             "transaction"
         )
 
-        if isinstance(
-            nested_transaction,
-            dict,
-        ):
-            transaction = nested_transaction
+        if isinstance(nested, dict):
+            transaction = nested
 
     if not isinstance(transaction, dict):
-
-        print(
-            "⚠️ Неверный формат transaction"
-        )
-
         return "OK", 200
 
-    print("💳 TRANSACTION:")
-    print(transaction)
-
-    # =====================================================
-    # DATA
-    # =====================================================
+    logger.info(
+        "💳 TRANSACTION: %s",
+        transaction,
+    )
 
     status = str(
-        transaction.get(
-            "status",
-            "",
-        )
+        transaction.get("status", "")
     ).strip().lower()
 
     payment_uuid = (
@@ -217,193 +253,123 @@ def cashera():
         or transaction.get("id")
     )
 
-    external_id = transaction.get(
-        "external_id"
+    amount = transaction.get("amount")
+    currency = transaction.get("currency")
+
+    logger.info(
+        "💳 status=%s uuid=%s amount=%s currency=%s",
+        status,
+        payment_uuid,
+        amount,
+        currency,
     )
 
-    amount = transaction.get(
-        "amount"
-    )
-
-    currency = transaction.get(
-        "currency"
-    )
-
-    print(f"💳 Статус: {status}")
-    print(f"🆔 UUID: {payment_uuid}")
-    print(f"🔗 External ID: {external_id}")
-    print(f"💰 Amount: {amount}")
-    print(f"💱 Currency: {currency}")
-
-    # =====================================================
+    # -----------------------------------------------------
     # ONLY PAID
-    # =====================================================
+    # -----------------------------------------------------
 
     if status != "paid":
-
-        print(
-            f"⏭ Платёж ещё не оплачен: {status}"
+        logger.info(
+            "⏭ Платёж ещё не оплачен: %s",
+            status,
         )
-
         return "OK", 200
 
     if not payment_uuid:
-
-        print(
-            "❌ В webhook отсутствует UUID"
+        logger.warning(
+            "❌ UUID отсутствует"
         )
-
         return "OK", 200
 
-    payment_uuid = str(
-        payment_uuid
-    )
+    payment_uuid = str(payment_uuid)
 
-    # =====================================================
-    # PAYMENT FROM DB
-    # =====================================================
+    # -----------------------------------------------------
+    # FIND PAYMENT
+    # -----------------------------------------------------
 
     try:
-
         payment = get_payment_by_payment_id(
             payment_uuid
         )
-
-    except Exception as e:
-
-        print(
-            "❌ Ошибка поиска платежа:"
+    except Exception:
+        logger.exception(
+            "❌ Ошибка поиска платежа"
         )
-        print(
-            f"{type(e).__name__}: {e}"
-        )
-
         return "OK", 200
 
     if not payment:
-
-        print(
-            "❌ Платёж не найден в БД"
+        logger.warning(
+            "❌ Платёж не найден: %s",
+            payment_uuid,
         )
-
-        print(
-            f"UUID: {payment_uuid}"
-        )
-
         return "OK", 200
 
-    # =====================================================
-    # POSTGRES DICT
-    # =====================================================
+    user_id = payment.get("user_id")
+    days = payment.get("days")
+    old_status = payment.get("status")
+    provider = payment.get("provider")
+    db_amount = payment.get("amount")
 
-    user_id = payment.get(
-        "user_id"
-    )
-
-    days = payment.get(
-        "days"
-    )
-
-    old_status = payment.get(
-        "status"
-    )
-
-    provider = payment.get(
-        "provider"
-    )
-
-    db_amount = payment.get(
-        "amount"
-    )
-
-    print(f"👤 USER ID: {user_id}")
-    print(f"📅 DAYS: {days}")
-    print(f"📊 STATUS: {old_status}")
-    print(f"💳 PROVIDER: {provider}")
-    print(f"💰 DB AMOUNT: {db_amount}")
-
-    # =====================================================
+    # -----------------------------------------------------
     # PROVIDER
-    # =====================================================
+    # -----------------------------------------------------
 
     if provider:
 
         if str(provider).lower() != "cashera":
 
-            print(
-                f"❌ Платёж принадлежит другому "
-                f"провайдеру: {provider}"
+            logger.warning(
+                "❌ Другой provider: %s",
+                provider,
             )
 
             return "OK", 200
 
-    # =====================================================
-    # DUPLICATE PAYMENT
-    # =====================================================
+    # -----------------------------------------------------
+    # ALREADY PAID
+    # -----------------------------------------------------
 
     if str(old_status).lower() == "paid":
 
-        print(
-            f"⏭ Платёж {payment_uuid} уже обработан"
+        logger.info(
+            "⏭ Платёж уже обработан: %s",
+            payment_uuid,
         )
 
         return "OK", 200
 
-    # =====================================================
-    # USER ID
-    # =====================================================
+    # -----------------------------------------------------
+    # USER / DAYS
+    # -----------------------------------------------------
 
     try:
         user_id = int(user_id)
-
-    except Exception:
-
-        print(
-            f"❌ Некорректный user_id: {user_id}"
-        )
-
-        return "OK", 200
-
-    # =====================================================
-    # DAYS
-    # =====================================================
-
-    try:
         days = int(days)
-
     except Exception:
-
-        print(
-            f"❌ Некорректный days: {days}"
+        logger.warning(
+            "❌ Некорректные user_id/days"
         )
-
         return "OK", 200
 
     if days <= 0:
-
-        print(
-            f"❌ Некорректный срок: {days}"
-        )
-
         return "OK", 200
 
-    # =====================================================
+    # -----------------------------------------------------
     # CURRENCY
-    # =====================================================
+    # -----------------------------------------------------
 
     if currency:
 
         if str(currency).upper() != "RUB":
-
-            print(
-                f"❌ Неверная валюта: {currency}"
+            logger.warning(
+                "❌ Неверная валюта: %s",
+                currency,
             )
-
             return "OK", 200
 
-    # =====================================================
-    # EXPECTED AMOUNTS
-    # =====================================================
+    # -----------------------------------------------------
+    # AMOUNTS
+    # -----------------------------------------------------
 
     expected_amounts = {
         30: 12900,
@@ -422,135 +388,94 @@ def cashera():
             received_amount = int(
                 float(amount)
             )
-
         except Exception:
             received_amount = None
 
         if received_amount is None:
-
-            print(
-                "❌ Не удалось определить сумму"
+            logger.warning(
+                "❌ Невозможно определить сумму"
             )
-
             return "OK", 200
-
-        print(
-            f"💰 Ожидалось: {expected_amount}"
-        )
-
-        print(
-            f"💰 Получено: {received_amount}"
-        )
 
         if received_amount != expected_amount:
 
-            print(
-                "❌ НЕСОВПАДЕНИЕ СУММЫ!"
+            logger.warning(
+                "❌ Неверная сумма: получено=%s ожидалось=%s",
+                received_amount,
+                expected_amount,
             )
 
             return "OK", 200
 
-    # =====================================================
+    # -----------------------------------------------------
     # DB AMOUNT
-    # =====================================================
+    # -----------------------------------------------------
 
     if db_amount is not None:
 
         try:
-
-            db_amount_int = int(
-                db_amount
-            )
+            db_amount_int = int(db_amount)
 
             if (
                 expected_amount is not None
                 and db_amount_int != expected_amount
             ):
 
-                print(
-                    "❌ Сумма в БД не соответствует тарифу"
+                logger.warning(
+                    "❌ Неверная сумма в БД"
                 )
 
                 return "OK", 200
 
         except Exception:
+            pass
 
-            print(
-                "⚠️ Не удалось проверить amount из БД"
-            )
-
-    # =====================================================
+    # -----------------------------------------------------
     # PROCESS PAYMENT
-    # =====================================================
+    # -----------------------------------------------------
 
     try:
-
-        print(
-            "🎫 Начинаем выдачу подписки..."
-        )
 
         result = process_paid_payment(
             payment_uuid
         )
 
         if not result:
-
-            print(
+            logger.warning(
                 "❌ process_paid_payment вернул None"
             )
-
             return "OK", 200
 
-        if result.get(
-            "already_paid"
-        ):
-
-            print(
-                f"⏭ Платёж {payment_uuid} уже обработан"
-            )
-
+        if result.get("already_paid"):
             return "OK", 200
 
         new_date = result.get(
             "subscription_until"
         )
 
-        print(
-            f"🎫 Подписка продлена: "
-            f"{user_id} +{days} дней"
-        )
-
-        print(
-            f"📅 Новая дата: {new_date}"
-        )
-
         # ВАЖНО:
-        # update_subscription_file()
-        # принимает только user_id.
-
+        # update_subscription_file принимает
+        # только user_id
         update_subscription_file(
             user_id
         )
 
-        print(
-            f"☂️ Subscription обновлена: {user_id}"
+        logger.info(
+            "☂️ Подписка выдана: user=%s days=%s until=%s",
+            user_id,
+            days,
+            new_date,
         )
 
-    except Exception as e:
-
-        print(
-            "❌ ОШИБКА ВЫДАЧИ ПОДПИСКИ:"
+    except Exception:
+        logger.exception(
+            "❌ ОШИБКА ВЫДАЧИ ПОДПИСКИ"
         )
-
-        print(
-            f"{type(e).__name__}: {e}"
-        )
-
         return "OK", 200
 
-    # =====================================================
+    # -----------------------------------------------------
     # TELEGRAM NOTIFICATION
-    # =====================================================
+    # -----------------------------------------------------
 
     if BOT_LOOP:
 
@@ -566,27 +491,18 @@ def cashera():
                 new_date
             )
 
-            message = f"""
-✅ <b>Оплата успешно получена!</b>
-
-☂️ <b>ixxy VPN</b>
-
-🎫 Подписка продлена на:
-<b>{days} дней</b>
-
-📅 Действует до:
-<b>{date_text}</b>
-
-🔄 Подписка обновлена автоматически.
-
-🔗 Ваша подписка:
-
-{subscription_link}
-
-Откройте ссылку в Happ.
-
-Спасибо за покупку! ❤️
-"""
+            message = (
+                "✅ <b>Оплата успешно получена!</b>\n\n"
+                "☂️ <b>ixxy VPN</b>\n\n"
+                f"🎫 Подписка продлена на: "
+                f"<b>{days} дней</b>\n\n"
+                f"📅 Действует до: "
+                f"<b>{date_text}</b>\n\n"
+                "🔗 Ваша подписка:\n\n"
+                f"{subscription_link}\n\n"
+                "Откройте ссылку в Happ.\n\n"
+                "Спасибо за покупку! ❤️"
+            )
 
             future = (
                 asyncio.run_coroutine_threadsafe(
@@ -599,52 +515,25 @@ def cashera():
                 )
             )
 
-            try:
-                future.result(
-                    timeout=15
-                )
-
-            except Exception as e:
-
-                print(
-                    "⚠️ Ошибка отправки уведомления:",
-                    e,
-                )
-
-            print(
-                f"📨 Уведомление отправлено: {user_id}"
+            future.result(
+                timeout=15
             )
 
-        except Exception as e:
-
-            print(
-                "⚠️ Ошибка формирования уведомления:",
-                e,
+            logger.info(
+                "📨 Уведомление отправлено: %s",
+                user_id,
             )
 
-    else:
-
-        print(
-            "⚠️ BOT_LOOP ещё не запущен"
-        )
-
-    print(
-        "========================================"
-    )
-
-    print(
-        "✅ CASHERA PAYMENT COMPLETED"
-    )
-
-    print(
-        "========================================"
-    )
+        except Exception:
+            logger.exception(
+                "⚠️ Ошибка Telegram-уведомления"
+            )
 
     return "OK", 200
 
 
 # =========================================================
-# IXXY CODES API
+# IXXY ADD DAYS API
 # =========================================================
 
 @app.route(
@@ -653,89 +542,67 @@ def cashera():
 )
 def add_days_api():
 
-    # -----------------------------------------------------
-    # SECRET
-    # -----------------------------------------------------
-
-    expected_secret = os.getenv(
+    secret = os.getenv(
         "IXXY_API_SECRET",
         "",
     ).strip()
 
-    if expected_secret:
+    received_secret = request.headers.get(
+        "X-IXXY-Secret",
+        "",
+    ).strip()
 
-        received_secret = request.headers.get(
-            "X-IXXY-Secret",
-            "",
-        ).strip()
+    if secret:
 
         if not hmac.compare_digest(
             received_secret,
-            expected_secret,
+            secret,
         ):
-
             return {
                 "status": "error",
                 "message": "unauthorized",
             }, 401
-
-    # -----------------------------------------------------
-    # JSON
-    # -----------------------------------------------------
 
     data = request.get_json(
         silent=True
     )
 
     if not data:
-
         return {
             "status": "error",
             "message": "no json",
         }, 400
 
-    user_id = data.get(
-        "user_id"
-    )
+    try:
 
-    days = data.get(
-        "days"
-    )
+        user_id = int(
+            data.get("user_id")
+        )
 
-    if (
-        user_id is None
-        or days is None
-    ):
+        days = int(
+            data.get("days")
+        )
+
+    except Exception:
 
         return {
             "status": "error",
-            "message": "missing data",
+            "message": "invalid user_id or days",
+        }, 400
+
+    if days <= 0:
+
+        return {
+            "status": "error",
+            "message": "days must be greater than 0",
         }, 400
 
     try:
-
-        user_id = int(user_id)
-        days = int(days)
-
-        if days <= 0:
-
-            return {
-                "status": "error",
-                "message":
-                    "days must be greater than 0",
-            }, 400
-
-        from database import (
-            extend_subscription,
-        )
 
         new_date = extend_subscription(
             user_id,
             days,
         )
-
-        # ВАЖНО:
-        # Только user_id.
 
         update_subscription_file(
             user_id
@@ -747,27 +614,19 @@ def add_days_api():
             )
         )
 
-        date_text = format_datetime(
-            new_date
-        )
-
-        print(
-            f"☂️ ixxycodes +{days} дней "
-            f"пользователю {user_id}"
-        )
-
         return {
             "status": "ok",
-            "date": date_text,
+            "date": format_datetime(
+                new_date
+            ),
             "subscription":
                 subscription_link,
         }
 
     except Exception as e:
 
-        print(
-            "❌ ADD DAYS ERROR:",
-            e,
+        logger.exception(
+            "❌ ADD DAYS ERROR"
         )
 
         return {
@@ -780,10 +639,7 @@ def add_days_api():
 # HEALTH
 # =========================================================
 
-@app.route(
-    "/",
-    methods=["GET"],
-)
+@app.route("/", methods=["GET"])
 def home():
 
     return {
@@ -792,10 +648,7 @@ def home():
     }
 
 
-@app.route(
-    "/health",
-    methods=["GET"],
-)
+@app.route("/health", methods=["GET"])
 def health():
 
     return {
@@ -804,87 +657,67 @@ def health():
 
 
 # =========================================================
-# FLASK
-# =========================================================
-
-def run_webhook():
-
-    port = int(
-        os.getenv(
-            "PORT",
-            "8080",
-        )
-    )
-
-    print(
-        f"🌐 Flask запускается на порту {port}"
-    )
-
-    app.run(
-        host="0.0.0.0",
-        port=port,
-        threaded=True,
-    )
-
-
-# =========================================================
 # USER HANDLERS
 # =========================================================
 
 from handlers.start import (
-    router as start_router,
+    router as start_router
 )
 
 from handlers.cabinet import (
-    router as cabinet_router,
+    router as cabinet_router
 )
 
 from handlers.stars_payment import (
-    router as stars_router,
+    router as stars_router
 )
 
 from handlers.sbp_payment import (
-    router as sbp_router,
+    router as sbp_router
 )
 
 
 # =========================================================
-# ADMIN HANDLERS
+# ADMIN
 # =========================================================
 
 # ВАЖНО:
-# /admin находится именно в admin_start.py
+# именно admin_start.py обрабатывает /admin
 
 from handlers.admin_start import (
-    router as admin_router,
+    router as admin_start_router
 )
 
 from handlers.admin_payments import (
-    router as admin_payments_router,
+    router as admin_payments_router
 )
 
 from handlers.admin_users import (
-    router as admin_users_router,
+    router as admin_users_router
 )
 
 from handlers.admin_search import (
-    router as admin_search_router,
+    router as admin_search_router
 )
 
 from handlers.admin_promos import (
-    router as admin_promos_router,
+    router as admin_promos_router
+)
+
+from handlers.admin_stats import (
+    router as admin_stats_router
 )
 
 from handlers.admin_broadcast import (
-    router as admin_broadcast_router,
+    router as admin_broadcast_router
 )
 
 from handlers.admin_settings import (
-    router as admin_settings_router,
+    router as admin_settings_router
 )
 
 from handlers.admin_extend import (
-    router as admin_extend_router,
+    router as admin_extend_router
 )
 
 
@@ -893,72 +726,72 @@ from handlers.admin_extend import (
 # =========================================================
 
 bot = Bot(
-    token=BOT_TOKEN,
+    token=BOT_TOKEN
 )
 
 dp = Dispatcher()
 
 
 # =========================================================
-# USER ROUTERS
+# ROUTERS
 # =========================================================
 
 dp.include_router(
-    start_router,
+    start_router
 )
 
 dp.include_router(
-    cabinet_router,
+    cabinet_router
 )
 
 dp.include_router(
-    stars_router,
+    stars_router
 )
 
 dp.include_router(
-    sbp_router,
+    sbp_router
+)
+
+# ADMIN
+dp.include_router(
+    admin_start_router
+)
+
+dp.include_router(
+    admin_payments_router
+)
+
+dp.include_router(
+    admin_users_router
+)
+
+dp.include_router(
+    admin_search_router
+)
+
+dp.include_router(
+    admin_promos_router
+)
+
+dp.include_router(
+    admin_stats_router
+)
+
+dp.include_router(
+    admin_broadcast_router
+)
+
+dp.include_router(
+    admin_settings_router
+)
+
+dp.include_router(
+    admin_extend_router
 )
 
 
 # =========================================================
-# ADMIN ROUTERS
-# =========================================================
-
-dp.include_router(
-    admin_router,
-)
-
-dp.include_router(
-    admin_payments_router,
-)
-
-dp.include_router(
-    admin_users_router,
-)
-
-dp.include_router(
-    admin_search_router,
-)
-
-dp.include_router(
-    admin_promos_router,
-)
-
-dp.include_router(
-    admin_broadcast_router,
-)
-
-dp.include_router(
-    admin_settings_router,
-)
-
-dp.include_router(
-    admin_extend_router,
-)
-
-
-# =========================================================
-# START
+# MAIN
 # =========================================================
 
 async def main():
@@ -969,87 +802,62 @@ async def main():
         asyncio.get_running_loop()
     )
 
-    print(
+    logger.info(
         "☂️ Запуск ixxy VPN..."
     )
 
-    # =====================================================
     # DATABASE
-    # =====================================================
-
     create_table()
 
-    print(
-        "💾 PostgreSQL инициализирован"
+    logger.info(
+        "💾 PostgreSQL готов"
     )
 
-    # =====================================================
     # EXPIRED
-    # =====================================================
-
     try:
 
         check_expired_subscriptions()
 
-        print(
-            "✅ Просроченные подписки проверены"
+        logger.info(
+            "✅ Проверка подписок выполнена"
         )
 
-    except Exception as e:
-
-        print(
-            "❌ Ошибка проверки подписок:",
-            e,
+    except Exception:
+        logger.exception(
+            "❌ Ошибка проверки подписок"
         )
 
-    # =====================================================
-    # GITHUB SYNC
-    # =====================================================
-
+    # GITHUB
     try:
 
         sync_all_active_users()
 
-        print(
-            "✅ GitHub-подписки синхронизированы"
+        logger.info(
+            "✅ Подписки синхронизированы"
         )
 
-    except Exception as e:
-
-        print(
-            "❌ Ошибка синхронизации:",
-            e,
+    except Exception:
+        logger.exception(
+            "❌ Ошибка GitHub-синхронизации"
         )
 
-    # =====================================================
-    # SUBSCRIPTION CHECKER
-    # =====================================================
-
+    # CHECKER
     try:
 
         asyncio.create_task(
-            check_subscriptions(
-                bot
-            )
+            check_subscriptions(bot)
         )
 
-        print(
-            "🔄 Автоматическая проверка "
-            "подписок запущена"
+        logger.info(
+            "🔄 Subscription checker запущен"
         )
 
-    except Exception as e:
-
-        print(
-            "❌ Ошибка запуска проверки:",
-            e,
+    except Exception:
+        logger.exception(
+            "❌ Ошибка запуска checker"
         )
 
-    # =====================================================
-    # BOT
-    # =====================================================
-
-    print(
+    logger.info(
         "☂️ ixxy VPN бот запущен"
     )
 
