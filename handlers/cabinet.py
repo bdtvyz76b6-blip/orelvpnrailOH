@@ -13,7 +13,6 @@ from datetime import datetime, date, timezone
 
 from database import (
     get_user,
-    check_user_subscription,
     use_promocode,
 )
 
@@ -32,10 +31,13 @@ router = Router()
 
 
 # ============================================================
-# TELEGRAM
+# CONFIG
 # ============================================================
 
 TELEGRAM_URL = "https://t.me/orelvpntopbot"
+
+PUBLIC_SITE_URL = "https://ixxyweb.onrender.com"
+SUBSCRIPTION_PREFIX = "2ix847xy"
 
 
 # ============================================================
@@ -45,14 +47,12 @@ TELEGRAM_URL = "https://t.me/orelvpntopbot"
 def get_subscription_url(user_id: int) -> str:
     """
     Постоянная ссылка ixxy VPN.
-
-    Формат:
-
-    https://ixxyweb.onrender.com/sub/2ix847xy<ID>
     """
 
+    user_id = int(user_id)
+
     try:
-        link = get_subscription_link(int(user_id))
+        link = get_subscription_link(user_id)
 
         if link:
             return str(link).strip()
@@ -64,8 +64,8 @@ def get_subscription_url(user_id: int) -> str:
         )
 
     return (
-        "https://ixxyweb.onrender.com/sub/"
-        f"2ix847xy{int(user_id)}"
+        f"{PUBLIC_SITE_URL}/sub/"
+        f"{SUBSCRIPTION_PREFIX}{user_id}"
     )
 
 
@@ -118,6 +118,15 @@ def normalize_date(value):
         ).date()
 
     except Exception:
+        pass
+
+    try:
+        return datetime.strptime(
+            text[:10],
+            "%d.%m.%Y",
+        ).date()
+
+    except Exception:
         return None
 
 
@@ -147,30 +156,49 @@ class PromoState(StatesGroup):
 
 def is_subscription_active(user: dict) -> bool:
     """
-    Главный источник истины — subscription_until.
+    Единственный источник истины для ЛК:
+    subscription_until.
 
-    Если дата окончания сегодня или позже,
-    подписка считается активной.
+    Если дата окончания сегодня или позже —
+    подписка активна.
 
-    BOOLEAN subscription используется только
-    как дополнительное состояние.
+    Поле subscription здесь НЕ используется.
     """
 
     if not isinstance(user, dict):
         return False
 
-    until = normalize_date(
+    expire_date = normalize_date(
         user.get("subscription_until")
     )
 
-    if not until:
+    if not expire_date:
         return False
 
     today = datetime.now(
         timezone.utc
     ).date()
 
-    return until >= today
+    return expire_date >= today
+
+
+# ============================================================
+# ПОЛУЧЕНИЕ ПОЛЬЗОВАТЕЛЯ
+# ============================================================
+
+def get_current_user(user_id: int):
+    try:
+        return get_user(
+            int(user_id)
+        )
+
+    except Exception as e:
+        print(
+            f"❌ Ошибка получения пользователя "
+            f"{user_id}: {e}"
+        )
+
+        return None
 
 
 # ============================================================
@@ -183,7 +211,10 @@ def is_subscription_active(user: dict) -> bool:
 async def cabinet(
     message: Message,
 ):
-    await show_cabinet(message)
+
+    await show_cabinet(
+        message
+    )
 
 
 # ============================================================
@@ -199,43 +230,9 @@ async def show_cabinet(
 
     user_id = message.from_user.id
 
-    # --------------------------------------------------------
-    # Синхронизируем статус в БД
-    # --------------------------------------------------------
-
-    try:
-
-        subscription_active = check_user_subscription(
-            user_id
-        )
-
-    except Exception as e:
-
-        print(
-            f"❌ Ошибка проверки подписки "
-            f"{user_id}: {e}"
-        )
-
-        subscription_active = False
-
-    # --------------------------------------------------------
-    # Получаем пользователя
-    # --------------------------------------------------------
-
-    try:
-
-        user = get_user(
-            user_id
-        )
-
-    except Exception as e:
-
-        print(
-            f"❌ Ошибка получения пользователя "
-            f"{user_id}: {e}"
-        )
-
-        user = None
+    user = get_current_user(
+        user_id
+    )
 
     if not user:
 
@@ -246,15 +243,11 @@ async def show_cabinet(
         return
 
     # --------------------------------------------------------
-    # Дата окончания
+    # ДАТА ОКОНЧАНИЯ
     # --------------------------------------------------------
 
-    until = user.get(
-        "subscription_until"
-    )
-
     expire_date = normalize_date(
-        until
+        user.get("subscription_until")
     )
 
     today = datetime.now(
@@ -262,7 +255,7 @@ async def show_cabinet(
     ).date()
 
     # --------------------------------------------------------
-    # Проверяем именно дату
+    # АКТИВНОСТЬ
     # --------------------------------------------------------
 
     if expire_date:
@@ -276,22 +269,26 @@ async def show_cabinet(
         subscription_active = False
 
     # --------------------------------------------------------
-    # Количество дней
+    # ДНИ
     # --------------------------------------------------------
 
-    days = 0
+    if subscription_active:
 
-    if expire_date:
+        days = (
+            expire_date - today
+        ).days
 
         days = max(
             0,
-            (
-                expire_date - today
-            ).days,
+            days,
         )
 
+    else:
+
+        days = 0
+
     # --------------------------------------------------------
-    # Статус
+    # СТАТУС
     # --------------------------------------------------------
 
     if subscription_active:
@@ -301,42 +298,33 @@ async def show_cabinet(
     else:
 
         status_text = "🔴 Не активна"
-        days = 0
 
     # --------------------------------------------------------
-    # Дата
+    # ДАТА
     # --------------------------------------------------------
 
     until_text = format_date_ru(
-        until
+        expire_date
     )
 
     # ========================================================
-    # КАБИНЕТ
+    # ТЕКСТ
     # ========================================================
 
-    text = f"""
-☂️ <b>ixxy VPN</b>
-
-👤 <b>Личный кабинет</b>
-
-━━━━━━━━━━━━━━━━━━
-
-🎫 <b>Подписка</b>
-
-📊 Статус:
-<b>{status_text}</b>
-
-📅 Активна до:
-<b>{until_text}</b>
-
-⏳ Осталось:
-<b>{days} дн.</b>
-
-━━━━━━━━━━━━━━━━━━
-
-Выберите действие ниже 👇
-"""
+    text = (
+        "☂️ <b>ixxy VPN</b>\n\n"
+        "👤 <b>Личный кабинет</b>\n\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
+        "🎫 <b>Подписка</b>\n\n"
+        "📊 Статус:\n"
+        f"<b>{status_text}</b>\n\n"
+        "📅 Активна до:\n"
+        f"<b>{until_text}</b>\n\n"
+        "⏳ Осталось:\n"
+        f"<b>{days} дн.</b>\n\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
+        "Выберите действие ниже 👇"
+    )
 
     await message.answer(
         text,
@@ -359,51 +347,12 @@ async def get_link(
     user_id = callback.from_user.id
 
     # --------------------------------------------------------
-    # Проверяем по дате
-    # --------------------------------------------------------
-
-    try:
-
-        is_active = check_user_subscription(
-            user_id
-        )
-
-    except Exception as e:
-
-        print(
-            f"❌ Ошибка проверки подписки "
-            f"{user_id}: {e}"
-        )
-
-        is_active = False
-
-    if not is_active:
-
-        await callback.answer(
-            "❌ Подписка не активна",
-            show_alert=True,
-        )
-
-        return
-
-    # --------------------------------------------------------
     # Получаем пользователя
     # --------------------------------------------------------
 
-    try:
-
-        user = get_user(
-            user_id
-        )
-
-    except Exception as e:
-
-        print(
-            f"❌ Ошибка получения пользователя "
-            f"{user_id}: {e}"
-        )
-
-        user = None
+    user = get_current_user(
+        user_id
+    )
 
     if not user:
 
@@ -415,7 +364,7 @@ async def get_link(
         return
 
     # --------------------------------------------------------
-    # Проверяем дату
+    # Проверяем ТОЛЬКО subscription_until
     # --------------------------------------------------------
 
     if not is_subscription_active(user):
@@ -427,17 +376,17 @@ async def get_link(
 
         return
 
-    # ========================================================
-    # ПОСТОЯННАЯ ССЫЛКА
-    # ========================================================
+    # --------------------------------------------------------
+    # Постоянная ссылка
+    # --------------------------------------------------------
 
     subscription_url = get_subscription_url(
         user_id
     )
 
-    # ========================================================
-    # КНОПКИ
-    # ========================================================
+    # --------------------------------------------------------
+    # Кнопки
+    # --------------------------------------------------------
 
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -456,29 +405,22 @@ async def get_link(
         ]
     )
 
-    # ========================================================
-    # СООБЩЕНИЕ
-    # ========================================================
+    # --------------------------------------------------------
+    # Сообщение
+    # --------------------------------------------------------
 
-    text = f"""
-⚡ <b>Подключение ixxy VPN</b>
-
-🔗 <b>Ваша ссылка подписки:</b>
-
-<code>{subscription_url}</code>
-
-━━━━━━━━━━━━━━━━━━
-
-📲 Скопируйте ссылку и добавьте
-её в VPN-клиент.
-
-☂️ Ссылка постоянная и не меняется.
-
-🔄 При обновлении серверов
-ссылка останется прежней.
-
-👇 <b>Выберите действие:</b>
-"""
+    text = (
+        "⚡ <b>Подключение ixxy VPN</b>\n\n"
+        "🔗 <b>Ваша ссылка подписки:</b>\n\n"
+        f"<code>{subscription_url}</code>\n\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
+        "📲 Скопируйте ссылку и добавьте "
+        "её в VPN-клиент.\n\n"
+        "☂️ Ссылка постоянная и не меняется.\n\n"
+        "🔄 При обновлении серверов "
+        "ссылка останется прежней.\n\n"
+        "👇 <b>Выберите действие:</b>"
+    )
 
     await callback.message.answer(
         text,
@@ -503,26 +445,24 @@ async def copy_subscription_link(
 
     user_id = callback.from_user.id
 
-    # --------------------------------------------------------
-    # Проверка
-    # --------------------------------------------------------
+    user = get_current_user(
+        user_id
+    )
 
-    try:
+    if not user:
 
-        is_active = check_user_subscription(
-            user_id
+        await callback.answer(
+            "❌ Пользователь не найден",
+            show_alert=True,
         )
 
-    except Exception as e:
+        return
 
-        print(
-            f"❌ Ошибка проверки подписки "
-            f"{user_id}: {e}"
-        )
+    # --------------------------------------------------------
+    # Проверяем дату
+    # --------------------------------------------------------
 
-        is_active = False
-
-    if not is_active:
+    if not is_subscription_active(user):
 
         await callback.answer(
             "❌ Подписка не активна",
@@ -540,18 +480,14 @@ async def copy_subscription_link(
     )
 
     await callback.message.answer(
-        f"""
-🔗 <b>Ваша ссылка подписки</b>
-
-<code>{subscription_url}</code>
-
-━━━━━━━━━━━━━━━━━━
-
-📲 Скопируйте ссылку и добавьте
-её в VPN-клиент.
-
-☂️ Ссылка постоянная.
-""",
+        (
+            "🔗 <b>Ваша ссылка подписки</b>\n\n"
+            f"<code>{subscription_url}</code>\n\n"
+            "━━━━━━━━━━━━━━━━━━\n\n"
+            "📲 Скопируйте ссылку и добавьте "
+            "её в VPN-клиент.\n\n"
+            "☂️ Ссылка постоянная."
+        ),
         parse_mode="HTML",
         disable_web_page_preview=True,
     )
@@ -574,52 +510,9 @@ async def refresh_subscription(
 
     user_id = callback.from_user.id
 
-    # --------------------------------------------------------
-    # Проверка
-    # --------------------------------------------------------
-
-    try:
-
-        is_active = check_user_subscription(
-            user_id
-        )
-
-    except Exception as e:
-
-        print(
-            f"❌ Ошибка проверки подписки "
-            f"{user_id}: {e}"
-        )
-
-        is_active = False
-
-    if not is_active:
-
-        await callback.answer(
-            "❌ Подписка не активна",
-            show_alert=True,
-        )
-
-        return
-
-    # --------------------------------------------------------
-    # Получаем пользователя
-    # --------------------------------------------------------
-
-    try:
-
-        user = get_user(
-            user_id
-        )
-
-    except Exception as e:
-
-        print(
-            f"❌ Ошибка получения пользователя "
-            f"{user_id}: {e}"
-        )
-
-        user = None
+    user = get_current_user(
+        user_id
+    )
 
     if not user:
 
@@ -631,7 +524,7 @@ async def refresh_subscription(
         return
 
     # --------------------------------------------------------
-    # Проверка даты
+    # Проверяем дату
     # --------------------------------------------------------
 
     if not is_subscription_active(user):
@@ -643,34 +536,21 @@ async def refresh_subscription(
 
         return
 
-    until = user.get(
-        "subscription_until"
-    )
-
     expire_date = normalize_date(
-        until
+        user.get("subscription_until")
     )
-
-    if not expire_date:
-
-        await callback.answer(
-            "❌ Ошибка даты подписки",
-            show_alert=True,
-        )
-
-        return
 
     date_text = format_date_ru(
         expire_date
     )
 
-    # --------------------------------------------------------
-    # Обновление
-    # --------------------------------------------------------
-
     await callback.answer(
         "🔄 Обновляю серверы..."
     )
+
+    # --------------------------------------------------------
+    # Обновляем subscription content
+    # --------------------------------------------------------
 
     try:
 
@@ -683,18 +563,14 @@ async def refresh_subscription(
         )
 
         await callback.message.answer(
-            f"""
-✅ <b>Серверы обновлены</b>
-
-📅 Подписка до:
-<b>{date_text}</b>
-
-🔗 Постоянная ссылка:
-
-<code>{subscription_url}</code>
-
-☂️ Ссылка не изменилась.
-""",
+            (
+                "✅ <b>Серверы обновлены</b>\n\n"
+                "📅 Подписка до:\n"
+                f"<b>{date_text}</b>\n\n"
+                "🔗 Постоянная ссылка:\n\n"
+                f"<code>{subscription_url}</code>\n\n"
+                "☂️ Ссылка не изменилась."
+            ),
             parse_mode="HTML",
             disable_web_page_preview=True,
         )
@@ -707,11 +583,10 @@ async def refresh_subscription(
         )
 
         await callback.message.answer(
-            """
-❌ <b>Не удалось обновить серверы</b>
-
-Попробуйте ещё раз.
-""",
+            (
+                "❌ <b>Не удалось обновить серверы</b>\n\n"
+                "Попробуйте ещё раз."
+            ),
             parse_mode="HTML",
         )
 
@@ -804,7 +679,7 @@ async def activate_promo(
         return
 
     # --------------------------------------------------------
-    # Активируем промокод
+    # Активация
     # --------------------------------------------------------
 
     try:
@@ -830,18 +705,15 @@ async def activate_promo(
 
         return
 
-    # ========================================================
-    # ТВОЯ DATABASE.PY:
-    #
-    # use_promocode() возвращает:
-    #
+    # --------------------------------------------------------
+    # Ожидаемый формат:
     # (success, message, days)
-    # ========================================================
+    # --------------------------------------------------------
 
-    if not isinstance(
-        result,
-        tuple,
-    ) or len(result) != 3:
+    if (
+        not isinstance(result, tuple)
+        or len(result) != 3
+    ):
 
         await state.clear()
 
@@ -870,7 +742,7 @@ async def activate_promo(
         return
 
     # --------------------------------------------------------
-    # Обновляем subscription content
+    # Обновляем подписку
     # --------------------------------------------------------
 
     try:
@@ -890,20 +762,9 @@ async def activate_promo(
     # Получаем новую дату
     # --------------------------------------------------------
 
-    try:
-
-        updated_user = get_user(
-            user_id
-        )
-
-    except Exception as e:
-
-        print(
-            f"⚠️ Ошибка получения "
-            f"обновлённого пользователя: {e}"
-        )
-
-        updated_user = None
+    updated_user = get_current_user(
+        user_id
+    )
 
     new_date = None
 
@@ -917,10 +778,6 @@ async def activate_promo(
         new_date
     )
 
-    # --------------------------------------------------------
-    # Ссылка
-    # --------------------------------------------------------
-
     subscription_url = get_subscription_url(
         user_id
     )
@@ -932,23 +789,18 @@ async def activate_promo(
     # --------------------------------------------------------
 
     await message.answer(
-        f"""
-🎉 <b>Промокод активирован</b>
-
-🎟 Код:
-<code>{code}</code>
-
-➕ Начислено:
-<b>{days} дней</b>
-
-📅 Подписка до:
-<b>{date_text}</b>
-
-🔄 Подписка обновлена.
-
-🔗 Ваша постоянная ссылка:
-<code>{subscription_url}</code>
-""",
+        (
+            "🎉 <b>Промокод активирован</b>\n\n"
+            "🎟 Код:\n"
+            f"<code>{code}</code>\n\n"
+            "➕ Начислено:\n"
+            f"<b>{days} дней</b>\n\n"
+            "📅 Подписка до:\n"
+            f"<b>{date_text}</b>\n\n"
+            "🔄 Подписка обновлена.\n\n"
+            "🔗 Ваша постоянная ссылка:\n"
+            f"<code>{subscription_url}</code>"
+        ),
         reply_markup=cabinet_keyboard(),
         parse_mode="HTML",
         disable_web_page_preview=True,
@@ -967,11 +819,10 @@ async def renew(
 ):
 
     await callback.message.answer(
-        """
-☂️ <b>Продление ixxy VPN</b>
-
-Выберите способ оплаты:
-""",
+        (
+            "☂️ <b>Продление ixxy VPN</b>\n\n"
+            "Выберите способ оплаты:"
+        ),
         reply_markup=payment_method_keyboard(),
         parse_mode="HTML",
     )
