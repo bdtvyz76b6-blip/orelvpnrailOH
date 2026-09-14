@@ -24,6 +24,7 @@ from keyboards import (
 
 from github_update import (
     update_subscription_file,
+    get_subscription_link,
 )
 
 
@@ -38,23 +39,23 @@ TELEGRAM_URL = "https://t.me/orelvpntopbot"
 
 
 # ============================================================
-# GITHUB RAW
+# ССЫЛКА ПОДПИСКИ
 # ============================================================
-
-GITHUB_RAW_URL = (
-    "https://raw.githubusercontent.com/"
-    "bdtvyz76b6-blip/vpn-sub/main/users"
-)
-
 
 def get_subscription_url(user_id: int) -> str:
     """
-    Постоянная ссылка на персональную подписку.
+    Постоянная ссылка ixxy VPN.
+
+    Пример:
+
+    https://ixxyweb.onrender.com/sub/2ix847xy6312016802
+
+    Ссылка НЕ зависит от GitHub users/<id>.txt
+    и не меняется при обновлении серверов.
     """
 
-    return (
-        f"{GITHUB_RAW_URL}/"
-        f"{user_id}.txt"
+    return get_subscription_link(
+        int(user_id)
     )
 
 
@@ -221,7 +222,7 @@ async def show_cabinet(
     today = datetime.now().date()
 
     # --------------------------------------------------------
-    # Если дата уже прошла — считаем неактивной
+    # Если дата уже прошла
     # --------------------------------------------------------
 
     if (
@@ -368,7 +369,7 @@ async def get_link(
         return
 
     # ========================================================
-    # ПРЯМАЯ GITHUB RAW ССЫЛКА
+    # ПОСТОЯННАЯ ССЫЛКА IXXY
     # ========================================================
 
     subscription_url = get_subscription_url(
@@ -472,7 +473,7 @@ async def copy_subscription_link(
         return
 
     # --------------------------------------------------------
-    # Ссылка
+    # Постоянная ссылка
     # --------------------------------------------------------
 
     subscription_url = get_subscription_url(
@@ -547,7 +548,7 @@ async def refresh_subscription(
         return
 
     # --------------------------------------------------------
-    # Пользователь
+    # Получаем пользователя
     # --------------------------------------------------------
 
     try:
@@ -575,7 +576,7 @@ async def refresh_subscription(
         return
 
     # --------------------------------------------------------
-    # PostgreSQL dict
+    # Дата подписки
     # --------------------------------------------------------
 
     until = user.get(
@@ -609,7 +610,16 @@ async def refresh_subscription(
     )
 
     # --------------------------------------------------------
-    # Обновление GitHub
+    # Обновляем содержимое подписки
+    #
+    # ВАЖНО:
+    # GitHub users/<id>.txt здесь больше НЕТ.
+    #
+    # github_update.py:
+    # 1. берёт актуальный список серверов;
+    # 2. собирает профиль;
+    # 3. сохраняет его в PostgreSQL;
+    # 4. постоянная ссылка остаётся прежней.
     # --------------------------------------------------------
 
     await callback.answer(
@@ -634,9 +644,11 @@ async def refresh_subscription(
 📅 Подписка до:
 <b>{date_text}</b>
 
-🔗 Ссылка осталась прежней:
+🔗 Постоянная ссылка:
 
 <code>{subscription_url}</code>
+
+☂️ Ссылка не изменилась.
 """,
             parse_mode="HTML",
             disable_web_page_preview=True,
@@ -795,7 +807,7 @@ async def activate_promo(
         return
 
     # --------------------------------------------------------
-    # Пользователь
+    # Пользователь не найден
     # --------------------------------------------------------
 
     if result.get(
@@ -840,7 +852,7 @@ async def activate_promo(
     )
 
     # --------------------------------------------------------
-    # Обновляем GitHub
+    # Обновляем подписку в PostgreSQL
     # --------------------------------------------------------
 
     try:
@@ -856,7 +868,7 @@ async def activate_promo(
 
         print(
             f"❌ Ошибка обновления "
-            f"серверов {user_id}: {e}"
+            f"подписки {user_id}: {e}"
         )
 
     # --------------------------------------------------------
@@ -865,6 +877,14 @@ async def activate_promo(
 
     date_text = format_date_ru(
         new_date
+    )
+
+    # --------------------------------------------------------
+    # Постоянная ссылка
+    # --------------------------------------------------------
+
+    subscription_url = get_subscription_url(
+        user_id
     )
 
     await state.clear()
@@ -886,10 +906,14 @@ async def activate_promo(
 📅 Подписка до:
 <b>{date_text}</b>
 
-🔄 Серверы обновлены.
+🔄 Подписка обновлена.
+
+🔗 Ваша постоянная ссылка:
+<code>{subscription_url}</code>
 """,
         reply_markup=cabinet_keyboard(),
         parse_mode="HTML",
+        disable_web_page_preview=True,
     )
 
 
