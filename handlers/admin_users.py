@@ -138,12 +138,6 @@ def get_subscription_status(
     subscription,
     subscription_until,
 ):
-    """
-    Новая БД:
-        subscription = BOOLEAN
-        subscription_until = TIMESTAMPTZ
-    """
-
     if not subscription:
         return "🔴 Неактивен", 0
 
@@ -186,11 +180,15 @@ def get_tariff_name(user: dict):
 
 
 # ============================================================
-# ССЫЛКА НА ПОДПИСКУ
+# ПОСТОЯННАЯ ССЫЛКА НА ПОДПИСКУ
 # ============================================================
 
 def get_user_subscription_url(user_id: int) -> str:
 
+    user_id = int(user_id)
+
+    # 1. Сначала берём постоянную ссылку,
+    #    которую генерирует github_update.py
     try:
         link = get_github_subscription_link(user_id)
 
@@ -199,10 +197,12 @@ def get_user_subscription_url(user_id: int) -> str:
 
     except Exception as e:
         print(
-            f"⚠️ GITHUB SUB LINK ERROR "
+            f"⚠️ SUB LINK GENERATOR ERROR "
             f"user={user_id}: {e}"
         )
 
+    # 2. Если github_update.py недоступен,
+    #    берём сохранённую ссылку из PostgreSQL
     try:
         link = get_subscription_link(user_id)
 
@@ -215,10 +215,11 @@ def get_user_subscription_url(user_id: int) -> str:
             f"user={user_id}: {e}"
         )
 
+    # 3. Последний fallback — наша постоянная схема.
+    #    Никаких users/<id>.txt больше нет.
     return (
-        "https://raw.githubusercontent.com/"
-        "bdtvyz76b6-blip/vpn-sub/main/users/"
-        f"{user_id}.txt"
+        "https://ixxyweb.onrender.com/sub/"
+        f"2ix847xy{user_id}"
     )
 
 
@@ -838,8 +839,10 @@ async def admin_search_query(
 
         if days > 0:
             state_text = f"🟢 {days}д."
+
         elif status == "⛔ Истёк":
             state_text = "⛔ истёк"
+
         else:
             state_text = "🔴 нет"
 
@@ -1311,10 +1314,12 @@ async def custom_extend_start(
 
     try:
         user = get_user(user_id)
+
     except Exception as e:
         print(
             f"❌ CUSTOM EXTEND USER ERROR: {e}"
         )
+
         await call.message.answer(
             "❌ Ошибка базы данных."
         )
@@ -1395,12 +1400,15 @@ async def custom_extend_cancel(
                 1,
             )
         )
+
     except ValueError:
         await state.clear()
+
         await call.answer(
             "❌ Неверный ID",
             show_alert=True,
         )
+
         return
 
     await call.answer("❌ Отменено")
@@ -1425,6 +1433,7 @@ async def custom_extend_cancel(
             ),
             parse_mode="HTML",
         )
+
     except TelegramBadRequest:
         pass
 
@@ -1464,6 +1473,7 @@ async def custom_extend_days(
 
     try:
         days = int(raw_days)
+
     except ValueError:
         await message.answer(
             "❌ Слишком большое число."
@@ -1501,10 +1511,12 @@ async def custom_extend_days(
             "❌ Не удалось определить пользователя.\n"
             "Начни продление заново."
         )
+
         return
 
     try:
         user = get_user(user_id)
+
     except Exception as e:
         print(
             f"❌ CUSTOM EXTEND GET USER ERROR "
@@ -1516,6 +1528,7 @@ async def custom_extend_days(
         await message.answer(
             "❌ Ошибка базы данных."
         )
+
         return
 
     if not user:
@@ -1524,6 +1537,7 @@ async def custom_extend_days(
         await message.answer(
             "❌ Пользователь не найден."
         )
+
         return
 
     username = user_display_name(user)
@@ -1542,53 +1556,55 @@ async def custom_extend_days(
                 "База данных не вернула новую дату"
             )
 
+        # ====================================================
+        # ОБНОВЛЯЕМ СОДЕРЖИМОЕ В POSTGRESQL
+        # ====================================================
+
         try:
+
             update_subscription_file(
                 user_id,
                 new_date,
             )
 
-        except Exception as github_error:
+        except Exception as update_error:
 
             print(
-                f"⚠️ CUSTOM GITHUB ERROR "
-                f"user={user_id}: "
-                f"{github_error}"
-            )
-
-            keyboard = InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [
-                        InlineKeyboardButton(
-                            text="👤 К пользователю",
-                            callback_data=(
-                                f"admin_user_{user_id}"
-                            ),
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            text="🔄 Синхронизировать",
-                            callback_data=(
-                                "admin_sync_servers"
-                            ),
-                        )
-                    ],
-                ]
+                f"⚠️ SUBSCRIPTION CONTENT ERROR "
+                f"user={user_id}: {update_error}"
             )
 
             await message.answer(
-                "⚠️ <b>Подписка продлена в базе</b>\n\n"
+                "⚠️ <b>Подписка продлена</b>\n\n"
                 f"👤 {h(username)}\n"
                 f"🆔 <code>{user_id}</code>\n\n"
                 f"➕ Добавлено: "
                 f"<b>{days} д.</b>\n"
                 f"📅 Новая дата: "
                 f"<b>{format_date(new_date)}</b>\n\n"
-                "⚠️ Не удалось сразу обновить "
-                "файл подписки.\n"
-                "Нажми «Синхронизировать».",
-                reply_markup=keyboard,
+                "⚠️ Не удалось обновить "
+                "содержимое подписки в БД.\n"
+                "Попробуй синхронизацию серверов.",
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text="👤 К пользователю",
+                                callback_data=(
+                                    f"admin_user_{user_id}"
+                                ),
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                text="🔄 Синхронизировать",
+                                callback_data=(
+                                    "admin_sync_servers"
+                                ),
+                            )
+                        ],
+                    ]
+                ),
                 parse_mode="HTML",
             )
 
@@ -1623,7 +1639,7 @@ async def custom_extend_days(
             f"<b>{days} дней</b>\n"
             f"📅 Действует до: "
             f"<b>{format_date(new_date)}</b>\n\n"
-            "🔄 Файл подписки обновлён.",
+            "🔄 Содержимое подписки обновлено.",
             reply_markup=keyboard,
             parse_mode="HTML",
         )
@@ -1705,6 +1721,7 @@ async def extend_subscription_admin(
 
     try:
         user = get_user(user_id)
+
     except Exception as e:
         print(
             f"❌ GET USER ERROR "
@@ -1714,12 +1731,14 @@ async def extend_subscription_admin(
         await call.message.answer(
             "❌ Ошибка базы данных."
         )
+
         return
 
     if not user:
         await call.message.answer(
             "❌ Пользователь не найден."
         )
+
         return
 
     username = user_display_name(user)
@@ -1743,12 +1762,11 @@ async def extend_subscription_admin(
                 new_date,
             )
 
-        except Exception as github_error:
+        except Exception as update_error:
 
             print(
-                f"⚠️ GITHUB UPDATE ERROR "
-                f"user={user_id}: "
-                f"{github_error}"
+                f"⚠️ SUBSCRIPTION UPDATE ERROR "
+                f"user={user_id}: {update_error}"
             )
 
             keyboard = InlineKeyboardMarkup(
@@ -1779,8 +1797,8 @@ async def extend_subscription_admin(
                 f"➕ Добавлено: <b>{days} д.</b>\n"
                 f"📅 Новая дата: "
                 f"<b>{format_date(new_date)}</b>\n\n"
-                "⚠️ Не удалось сразу обновить "
-                "файл подписки.",
+                "⚠️ Не удалось обновить "
+                "содержимое подписки.",
                 reply_markup=keyboard,
                 parse_mode="HTML",
             )
@@ -1816,7 +1834,7 @@ async def extend_subscription_admin(
             f"<b>{days} дней</b>\n"
             f"📅 Действует до: "
             f"<b>{format_date(new_date)}</b>\n\n"
-            "🔄 Файл подписки обновлён.",
+            "🔄 Содержимое подписки обновлено.",
             reply_markup=keyboard,
             parse_mode="HTML",
         )
@@ -1850,6 +1868,7 @@ async def extend_subscription_admin(
         )
 
         try:
+
             await call.message.edit_text(
                 "❌ <b>Ошибка продления</b>\n\n"
                 f"👤 {h(username)}\n"
@@ -1901,6 +1920,7 @@ async def admin_user_payments(
     await call.answer()
 
     try:
+
         user = get_user(user_id)
         all_payments = get_all_payments() or []
 
@@ -1913,6 +1933,7 @@ async def admin_user_payments(
         ]
 
     except Exception as e:
+
         print(
             f"❌ PAYMENTS ERROR "
             f"{user_id}: {e}"
@@ -1921,12 +1942,15 @@ async def admin_user_payments(
         await call.message.answer(
             "❌ Ошибка базы данных."
         )
+
         return
 
     if not user:
+
         await call.message.answer(
             "❌ Пользователь не найден."
         )
+
         return
 
     username = user_display_name(user)
@@ -1953,11 +1977,19 @@ async def admin_user_payments(
 
         for payment in payments[:15]:
 
-            payment_id = payment.get("id", "?")
-            days = payment.get("days") or 0
-            external_id = (
-                payment.get("payment_id")
+            payment_id = payment.get(
+                "id",
+                "?",
             )
+
+            days = payment.get(
+                "days"
+            ) or 0
+
+            external_id = payment.get(
+                "payment_id"
+            )
+
             status_value = str(
                 payment.get("status")
                 or "unknown"
@@ -1972,7 +2004,9 @@ async def admin_user_payments(
                 or ""
             ).lower()
 
-            amount = payment.get("amount")
+            amount = payment.get(
+                "amount"
+            )
 
             if status_value in (
                 "paid",
@@ -1999,22 +2033,27 @@ async def admin_user_payments(
                 )
 
             if provider == "cashera":
+
                 try:
                     amount_text = (
                         f"{int(amount) / 100:.2f} ₽"
                     )
+
                 except Exception:
                     amount_text = "—"
 
             elif provider == "stars":
+
                 try:
                     amount_text = (
                         f"{int(amount)} ⭐"
                     )
+
                 except Exception:
                     amount_text = "—"
 
             else:
+
                 amount_text = (
                     str(amount)
                     if amount is not None
@@ -2030,6 +2069,7 @@ async def admin_user_payments(
             )
 
             if external_id:
+
                 text += (
                     f"🔖 ID: "
                     f"<code>{h(external_id)}</code>\n"
@@ -2038,6 +2078,7 @@ async def admin_user_payments(
             text += "\n"
 
         if len(payments) > 15:
+
             text += (
                 f"Показаны последние 15 "
                 f"из {len(payments)}."
@@ -2069,6 +2110,7 @@ async def admin_user_payments(
     )
 
     try:
+
         await call.message.edit_text(
             text,
             reply_markup=keyboard,
@@ -2076,6 +2118,7 @@ async def admin_user_payments(
         )
 
     except TelegramBadRequest as e:
+
         if "message is not modified" not in str(e):
             raise
 
@@ -2092,13 +2135,16 @@ async def disable_user_subscription(
 ):
 
     if not is_admin(call.from_user.id):
+
         await call.answer(
             "❌ Нет доступа",
             show_alert=True,
         )
+
         return
 
     try:
+
         user_id = int(
             call.data.replace(
                 "disable_",
@@ -2108,18 +2154,22 @@ async def disable_user_subscription(
         )
 
     except ValueError:
+
         await call.answer(
             "❌ Неверный ID",
             show_alert=True,
         )
+
         return
 
     await call.answer()
 
     try:
+
         user = get_user(user_id)
 
     except Exception as e:
+
         print(
             f"❌ GET USER ERROR "
             f"{user_id}: {e}"
@@ -2128,12 +2178,15 @@ async def disable_user_subscription(
         await call.message.answer(
             "❌ Ошибка базы данных."
         )
+
         return
 
     if not user:
+
         await call.message.answer(
             "❌ Пользователь не найден."
         )
+
         return
 
     username = user_display_name(user)
@@ -2160,20 +2213,22 @@ async def disable_user_subscription(
     )
 
     try:
+
         await call.message.edit_text(
             "⚠️ <b>Отключение подписки</b>\n\n"
             f"👤 Пользователь: "
             f"<b>{h(username)}</b>\n"
             f"🆔 ID: <code>{user_id}</code>\n\n"
             "Подписка будет отключена.\n"
-            "Файл пользователя будет переведён "
-            "в состояние неактивной подписки.\n\n"
+            "Постоянная ссылка останется прежней,\n"
+            "но содержимое станет неактивным.\n\n"
             "<b>Продолжить?</b>",
             reply_markup=keyboard,
             parse_mode="HTML",
         )
 
     except TelegramBadRequest as e:
+
         if "message is not modified" not in str(e):
             raise
 
@@ -2190,13 +2245,16 @@ async def confirm_disable_subscription(
 ):
 
     if not is_admin(call.from_user.id):
+
         await call.answer(
             "❌ Нет доступа",
             show_alert=True,
         )
+
         return
 
     try:
+
         user_id = int(
             call.data.replace(
                 "confirm_disable_",
@@ -2206,10 +2264,12 @@ async def confirm_disable_subscription(
         )
 
     except ValueError:
+
         await call.answer(
             "❌ Неверный ID",
             show_alert=True,
         )
+
         return
 
     await call.answer(
@@ -2217,11 +2277,13 @@ async def confirm_disable_subscription(
     )
 
     try:
+
         disable_subscription(
             user_id
         )
 
     except Exception as e:
+
         print(
             f"❌ DISABLE ERROR "
             f"{user_id}: {e}"
@@ -2230,11 +2292,32 @@ async def confirm_disable_subscription(
         await call.message.answer(
             "❌ Ошибка при отключении."
         )
+
         return
 
+    # ========================================================
+    # ПОСЛЕ ОТКЛЮЧЕНИЯ ОБНОВЛЯЕМ POSTGRESQL-КОНТЕНТ
+    # ========================================================
+
     try:
+
+        update_subscription_file(
+            user_id
+        )
+
+    except Exception as e:
+
+        print(
+            f"⚠️ DISABLE SUB CONTENT ERROR "
+            f"user={user_id}: {e}"
+        )
+
+    try:
+
         user = get_user(user_id)
+
     except Exception:
+
         user = None
 
     username = "нет"
@@ -2326,6 +2409,7 @@ async def confirm_disable_subscription(
     )
 
     try:
+
         await call.message.edit_text(
             text,
             reply_markup=InlineKeyboardMarkup(
@@ -2336,6 +2420,7 @@ async def confirm_disable_subscription(
         )
 
     except TelegramBadRequest as e:
+
         if "message is not modified" not in str(e):
             raise
 
@@ -2352,19 +2437,23 @@ async def admin_stats(
 ):
 
     if not is_admin(call.from_user.id):
+
         await call.answer(
             "❌ Нет доступа",
             show_alert=True,
         )
+
         return
 
     await call.answer()
 
     try:
+
         users = get_all_users() or []
         payments = get_all_payments() or []
 
     except Exception as e:
+
         print(
             f"❌ ADMIN STATS ERROR: {e}"
         )
@@ -2372,6 +2461,7 @@ async def admin_stats(
         await call.message.answer(
             "❌ Ошибка базы данных."
         )
+
         return
 
     users = [
@@ -2511,6 +2601,7 @@ async def admin_stats(
     )
 
     try:
+
         await call.message.edit_text(
             text,
             reply_markup=keyboard,
@@ -2518,6 +2609,7 @@ async def admin_stats(
         )
 
     except TelegramBadRequest as e:
+
         if "message is not modified" not in str(e):
             raise
 
@@ -2534,10 +2626,12 @@ async def sync_servers(
 ):
 
     if not is_admin(call.from_user.id):
+
         await call.answer(
             "❌ Нет доступа",
             show_alert=True,
         )
+
         return
 
     await call.answer(
@@ -2546,8 +2640,8 @@ async def sync_servers(
 
     status_message = await call.message.answer(
         "🔄 <b>Обновляю серверы...</b>\n\n"
-        "⏳ Проверяю активные и "
-        "истёкшие подписки...",
+        "⏳ Получаю актуальный список серверов\n"
+        "и обновляю содержимое подписок...",
         parse_mode="HTML",
     )
 
@@ -2582,12 +2676,14 @@ async def sync_servers(
             "✅ <b>Синхронизация завершена!</b>\n\n"
             f"🟢 Активных обновлено: "
             f"<b>{updated}</b>\n"
-            f"⛔ Истёкших обновлено: "
+            f"⛔ Неактивных обновлено: "
             f"<b>{expired}</b>\n"
             f"⏭ Пропущено: "
             f"<b>{skipped}</b>\n"
             f"❌ Ошибок: "
-            f"<b>{errors}</b>",
+            f"<b>{errors}</b>\n\n"
+            "🔗 Постоянные ссылки пользователей "
+            "не изменились.",
             parse_mode="HTML",
         )
 
@@ -2598,6 +2694,7 @@ async def sync_servers(
         )
 
         try:
+
             await status_message.edit_text(
                 "❌ <b>Не удалось "
                 "обновить серверы.</b>\n\n"
