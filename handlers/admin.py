@@ -9,7 +9,6 @@ from database import (
     get_all_users,
     get_all_payments,
     get_stats,
-    subscription_active,
 )
 
 from datetime import datetime, timezone
@@ -23,9 +22,7 @@ router = Router()
 # ============================================================
 
 @router.message(Command("admin"))
-async def admin_start(
-    message: Message,
-):
+async def admin_start(message: Message):
 
     # --------------------------------------------------------
     # ПРОВЕРКА АДМИНА
@@ -35,13 +32,11 @@ async def admin_start(
         return
 
     if message.from_user.id not in ADMIN_IDS:
-
         await message.answer(
             "❌ <b>Доступ запрещён</b>\n\n"
             "У тебя нет доступа к панели администратора.",
             parse_mode="HTML",
         )
-
         return
 
     # --------------------------------------------------------
@@ -49,15 +44,9 @@ async def admin_start(
     # --------------------------------------------------------
 
     try:
-
         users = get_all_users() or []
-
     except Exception as e:
-
-        print(
-            f"❌ Ошибка получения пользователей: {e}"
-        )
-
+        print(f"❌ Ошибка получения пользователей: {e}")
         users = []
 
     # --------------------------------------------------------
@@ -65,15 +54,9 @@ async def admin_start(
     # --------------------------------------------------------
 
     try:
-
         payments = get_all_payments() or []
-
     except Exception as e:
-
-        print(
-            f"❌ Ошибка получения платежей: {e}"
-        )
-
+        print(f"❌ Ошибка получения платежей: {e}")
         payments = []
 
     # --------------------------------------------------------
@@ -86,23 +69,16 @@ async def admin_start(
     expired_users = 0
     no_subscription = 0
 
-    now = datetime.now(
-        timezone.utc
-    )
+    now = datetime.now(timezone.utc)
 
     for user in users:
 
-        if not isinstance(
-            user,
-            dict,
-        ):
+        if not isinstance(user, dict):
             continue
 
+        # PostgreSQL BOOLEAN
         subscription = bool(
-            user.get(
-                "subscription",
-                False,
-            )
+            user.get("subscription", False)
         )
 
         subscription_until = user.get(
@@ -110,49 +86,69 @@ async def admin_start(
         )
 
         # ----------------------------------------------------
-        # Активная подписка
+        # Нет даты окончания
         # ----------------------------------------------------
 
-        is_active = False
+        if not subscription_until:
+            no_subscription += 1
+            continue
 
-        if subscription and subscription_until:
+        # ----------------------------------------------------
+        # Приводим дату к datetime
+        # ----------------------------------------------------
 
-            try:
+        try:
 
-                if (
-                    subscription_until.tzinfo
-                    is not None
-                ):
+            if isinstance(
+                subscription_until,
+                datetime,
+            ):
 
-                    is_active = (
-                        subscription_until
-                        > now
-                    )
+                until = subscription_until
 
-                else:
+            else:
 
-                    is_active = (
-                        subscription_until
-                        > now.replace(
-                            tzinfo=None
-                        )
-                    )
+                until = datetime.fromisoformat(
+                    str(subscription_until)
+                    .replace("Z", "+00:00")
+                )
 
-            except Exception:
+            # Если дата без timezone — считаем её UTC
+            if until.tzinfo is None:
 
-                is_active = False
+                until = until.replace(
+                    tzinfo=timezone.utc
+                )
 
-        if is_active:
+            else:
+
+                until = until.astimezone(
+                    timezone.utc
+                )
+
+        except Exception as e:
+
+            print(
+                "⚠️ Ошибка обработки "
+                f"subscription_until: {e}"
+            )
+
+            # Если дата есть, но прочитать её нельзя,
+            # считаем подписку истёкшей.
+            expired_users += 1
+            continue
+
+        # ----------------------------------------------------
+        # АКТИВНАЯ ПОДПИСКА
+        # ----------------------------------------------------
+
+        if subscription and until > now:
 
             active_users += 1
 
-        elif subscription_until:
-
-            expired_users += 1
-
         else:
 
-            no_subscription += 1
+            expired_users += 1
 
     # --------------------------------------------------------
     # СТАТИСТИКА ПЛАТЕЖЕЙ
@@ -164,18 +160,12 @@ async def admin_start(
 
     for payment in payments:
 
-        if not isinstance(
-            payment,
-            dict,
-        ):
+        if not isinstance(payment, dict):
             continue
 
         status = str(
-            payment.get(
-                "status",
-                ""
-            )
-        ).lower()
+            payment.get("status", "")
+        ).strip().lower()
 
         if status == "pending":
 
@@ -200,12 +190,15 @@ async def admin_start(
             failed_payments += 1
 
     # --------------------------------------------------------
-    # ДОПОЛНИТЕЛЬНАЯ СТАТИСТИКА ИЗ DATABASE
+    # ДОПОЛНИТЕЛЬНАЯ СТАТИСТИКА
     # --------------------------------------------------------
 
     try:
 
         stats = get_stats() or {}
+
+        if not isinstance(stats, dict):
+            stats = {}
 
     except Exception as e:
 
@@ -226,17 +219,15 @@ async def admin_start(
 
     try:
 
-        revenue = int(
+        revenue = float(
             revenue or 0
         )
 
     except Exception:
 
-        revenue = 0
+        revenue = 0.0
 
-    # В БД CasheRa хранится в копейках.
-    # Поэтому переводим в рубли.
-
+    # CasheRA хранит сумму в копейках.
     revenue_rub = revenue / 100
 
     # --------------------------------------------------------
