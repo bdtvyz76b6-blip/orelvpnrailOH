@@ -15,7 +15,7 @@ from aiogram.exceptions import (
     TelegramRetryAfter,
 )
 
-from config import ADMIN_IDS, BOT_TOKEN
+from config import ADMIN_IDS
 from database import get_all_users
 
 
@@ -49,13 +49,22 @@ def get_user_ids_for_broadcast():
     result = []
 
     for user in users:
-        if isinstance(user, dict):
-            user_id = user.get("user_id")
 
-            if user_id is not None:
-                result.append(int(user_id))
+        if not isinstance(user, dict):
+            continue
 
-    return result
+        user_id = user.get("user_id")
+
+        if user_id is None:
+            continue
+
+        try:
+            result.append(int(user_id))
+        except (TypeError, ValueError):
+            continue
+
+    # Убираем дубли
+    return list(dict.fromkeys(result))
 
 
 # ============================================================
@@ -88,6 +97,7 @@ async def start_broadcast(
     call: CallbackQuery,
     state: FSMContext,
 ):
+
     if not call.from_user or not is_admin(call.from_user.id):
         await call.answer(
             "❌ Нет доступа.",
@@ -126,8 +136,19 @@ async def prepare_broadcast(
     message: Message,
     state: FSMContext,
 ):
+
     if not message.from_user or not is_admin(message.from_user.id):
         await state.clear()
+        return
+
+    # /cancel
+    if message.text == "/cancel":
+        await state.clear()
+
+        await message.answer(
+            "❌ Рассылка отменена."
+        )
+
         return
 
     supported = any(
@@ -140,10 +161,12 @@ async def prepare_broadcast(
     )
 
     if not supported:
+
         await message.answer(
             "⚠️ Этот тип сообщения пока не поддерживается.\n\n"
             "Отправь текст, фото, видео или документ."
         )
+
         return
 
     # --------------------------------------------------------
@@ -151,9 +174,11 @@ async def prepare_broadcast(
     # --------------------------------------------------------
 
     try:
+
         users = get_user_ids_for_broadcast()
 
     except Exception as e:
+
         print(
             "❌ Broadcast get users error:",
             repr(e),
@@ -164,6 +189,7 @@ async def prepare_broadcast(
             f"<code>{type(e).__name__}</code>",
             parse_mode="HTML",
         )
+
         return
 
     # --------------------------------------------------------
@@ -176,7 +202,9 @@ async def prepare_broadcast(
         users_count=len(users),
     )
 
-    await state.set_state(Broadcast.waiting_confirm)
+    await state.set_state(
+        Broadcast.waiting_confirm
+    )
 
     # --------------------------------------------------------
     # ПРЕДПРОСМОТР
@@ -201,11 +229,14 @@ async def confirm_broadcast(
     call: CallbackQuery,
     state: FSMContext,
 ):
+
     if not call.from_user or not is_admin(call.from_user.id):
+
         await call.answer(
             "❌ Нет доступа.",
             show_alert=True,
         )
+
         return
 
     data = await state.get_data()
@@ -213,13 +244,15 @@ async def confirm_broadcast(
     message_id = data.get("message_id")
     chat_id = data.get("chat_id")
 
-    if not message_id or not chat_id:
+    if message_id is None or chat_id is None:
+
         await state.clear()
 
         await call.answer(
             "❌ Сообщение для рассылки не найдено.",
             show_alert=True,
         )
+
         return
 
     # --------------------------------------------------------
@@ -227,9 +260,11 @@ async def confirm_broadcast(
     # --------------------------------------------------------
 
     try:
+
         users = get_user_ids_for_broadcast()
 
     except Exception as e:
+
         await state.clear()
 
         await call.answer(
@@ -238,6 +273,7 @@ async def confirm_broadcast(
         )
 
         if call.message:
+
             await call.message.answer(
                 "❌ Не удалось получить список пользователей.\n\n"
                 f"<code>{type(e).__name__}</code>",
@@ -249,6 +285,7 @@ async def confirm_broadcast(
     total = len(users)
 
     if total == 0:
+
         await state.clear()
 
         await call.answer(
@@ -257,15 +294,19 @@ async def confirm_broadcast(
         )
 
         if call.message:
+
             await call.message.answer(
                 "⚠️ Пользователей для рассылки нет."
             )
 
         return
 
-    await call.answer("📢 Рассылка запущена")
+    await call.answer(
+        "📢 Рассылка запущена"
+    )
 
     if not call.message:
+
         await state.clear()
         return
 
@@ -280,7 +321,9 @@ async def confirm_broadcast(
         parse_mode="HTML",
     )
 
-    bot = Bot(token=BOT_TOKEN)
+    # Используем уже запущенный Bot.
+    # Новый экземпляр создавать не нужно.
+    bot: Bot = call.bot
 
     sent = 0
     failed = 0
@@ -288,9 +331,19 @@ async def confirm_broadcast(
 
     try:
 
-        for index, user_id in enumerate(users, start=1):
+        for index, user_id in enumerate(
+            users,
+            start=1,
+        ):
+
+            success = False
+
+            # ------------------------------------------------
+            # ОТПРАВКА
+            # ------------------------------------------------
 
             try:
+
                 await bot.copy_message(
                     chat_id=user_id,
                     from_chat_id=chat_id,
@@ -298,19 +351,29 @@ async def confirm_broadcast(
                 )
 
                 sent += 1
+                success = True
+
+            # ------------------------------------------------
+            # RATE LIMIT
+            # ------------------------------------------------
 
             except TelegramRetryAfter as e:
 
-                retry_after = int(e.retry_after) + 1
+                retry_after = int(
+                    e.retry_after
+                ) + 1
 
                 print(
-                    f"⚠️ Broadcast rate limit: "
+                    "⚠️ Broadcast rate limit: "
                     f"sleeping {retry_after}s"
                 )
 
-                await asyncio.sleep(retry_after)
+                await asyncio.sleep(
+                    retry_after
+                )
 
                 try:
+
                     await bot.copy_message(
                         chat_id=user_id,
                         from_chat_id=chat_id,
@@ -318,12 +381,24 @@ async def confirm_broadcast(
                     )
 
                     sent += 1
+                    success = True
 
                 except TelegramForbiddenError:
+
                     failed += 1
                     blocked += 1
 
+                except TelegramBadRequest as retry_error:
+
+                    failed += 1
+
+                    print(
+                        "❌ Broadcast retry bad request:",
+                        repr(retry_error),
+                    )
+
                 except Exception as retry_error:
+
                     failed += 1
 
                     print(
@@ -331,11 +406,21 @@ async def confirm_broadcast(
                         repr(retry_error),
                     )
 
+            # ------------------------------------------------
+            # БОТ ЗАБЛОКИРОВАН
+            # ------------------------------------------------
+
             except TelegramForbiddenError:
+
                 failed += 1
                 blocked += 1
 
+            # ------------------------------------------------
+            # BAD REQUEST
+            # ------------------------------------------------
+
             except TelegramBadRequest as e:
+
                 failed += 1
 
                 print(
@@ -343,7 +428,12 @@ async def confirm_broadcast(
                     repr(e),
                 )
 
+            # ------------------------------------------------
+            # ПРОЧАЯ ОШИБКА
+            # ------------------------------------------------
+
             except Exception as e:
+
                 failed += 1
 
                 print(
@@ -355,14 +445,21 @@ async def confirm_broadcast(
             # ПРОГРЕСС
             # ------------------------------------------------
 
-            if index % 20 == 0 or index == total:
+            if (
+                index % 20 == 0
+                or index == total
+            ):
 
                 try:
+
+                    progress = (
+                        index * 100 // total
+                    )
+
                     await status_message.edit_text(
                         "📢 <b>Рассылка выполняется</b>\n\n"
                         f"📨 Обработано: <b>{index}/{total}</b>\n"
-                        f"📊 Прогресс: "
-                        f"<b>{index * 100 // total}%</b>\n\n"
+                        f"📊 Прогресс: <b>{progress}%</b>\n\n"
                         f"✅ Отправлено: <b>{sent}</b>\n"
                         f"❌ Ошибок: <b>{failed}</b>\n"
                         f"🚫 Заблокировали: <b>{blocked}</b>",
@@ -372,11 +469,21 @@ async def confirm_broadcast(
                 except Exception:
                     pass
 
-            # Небольшая пауза
-            await asyncio.sleep(0.05)
+            # ------------------------------------------------
+            # НЕБОЛЬШАЯ ПАУЗА
+            # ------------------------------------------------
+
+            if not success:
+                await asyncio.sleep(0.05)
+            else:
+                await asyncio.sleep(0.08)
 
     finally:
-        await bot.session.close()
+
+        # Здесь НИЧЕГО закрывать не нужно.
+        # call.bot используется основным polling-процессом.
+
+        pass
 
     # --------------------------------------------------------
     # ЗАВЕРШАЕМ FSM
@@ -402,6 +509,7 @@ async def confirm_broadcast(
     except Exception:
 
         try:
+
             await call.message.answer(
                 "📢 <b>Рассылка завершена</b>\n\n"
                 f"👥 Всего пользователей: <b>{total}</b>\n\n"
@@ -424,11 +532,14 @@ async def cancel_broadcast(
     call: CallbackQuery,
     state: FSMContext,
 ):
+
     if not call.from_user or not is_admin(call.from_user.id):
+
         await call.answer(
             "❌ Нет доступа.",
             show_alert=True,
         )
+
         return
 
     await state.clear()
@@ -440,6 +551,7 @@ async def cancel_broadcast(
     if call.message:
 
         try:
+
             await call.message.edit_text(
                 "❌ <b>Рассылка отменена.</b>",
                 parse_mode="HTML",
@@ -461,7 +573,9 @@ async def cancel_broadcast_message(
     message: Message,
     state: FSMContext,
 ):
+
     if not message.from_user or not is_admin(message.from_user.id):
+
         await state.clear()
         return
 
@@ -480,7 +594,9 @@ async def cancel_broadcast_confirm(
     message: Message,
     state: FSMContext,
 ):
+
     if not message.from_user or not is_admin(message.from_user.id):
+
         await state.clear()
         return
 
