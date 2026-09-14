@@ -39,8 +39,8 @@ def is_admin(user_id: int) -> bool:
 # СТАТУС ПЛАТЕЖА
 # ============================================================
 
-def format_payment_status(status):
-    status = str(status or "pending").lower()
+def format_payment_status(status) -> str:
+    status = str(status or "pending").lower().strip()
 
     statuses = {
         "pending": "⏳ Ожидает",
@@ -64,34 +64,70 @@ def format_payment_status(status):
 # ФОРМАТ ДАТЫ
 # ============================================================
 
-def format_datetime(value):
+def format_datetime(value) -> str:
     if not value:
         return "нет"
 
-    if isinstance(value, datetime):
-        dt = value
+    try:
+        if isinstance(value, datetime):
 
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = value
 
-        return dt.astimezone(timezone.utc).strftime(
-            "%d.%m.%Y %H:%M"
-        )
+            if dt.tzinfo is None:
+                dt = dt.replace(
+                    tzinfo=timezone.utc
+                )
 
-    return str(value)
+            return dt.astimezone(
+                timezone.utc
+            ).strftime(
+                "%d.%m.%Y %H:%M"
+            )
+
+        text = str(value).strip()
+
+        try:
+            dt = datetime.fromisoformat(
+                text.replace(
+                    "Z",
+                    "+00:00",
+                )
+            )
+
+            if dt.tzinfo is None:
+                dt = dt.replace(
+                    tzinfo=timezone.utc
+                )
+
+            return dt.astimezone(
+                timezone.utc
+            ).strftime(
+                "%d.%m.%Y %H:%M"
+            )
+
+        except ValueError:
+            return text
+
+    except Exception:
+        return str(value)
 
 
 # ============================================================
 # СПОСОБ ОПЛАТЫ
 # ============================================================
 
-def format_provider(provider):
-    provider = str(provider or "").lower()
+def format_provider(provider) -> str:
+    provider = str(
+        provider or ""
+    ).lower().strip()
 
     if provider == "stars":
         return "⭐ Telegram Stars"
 
-    if provider in ("cashera", "sbp"):
+    if provider in (
+        "cashera",
+        "sbp",
+    ):
         return "💳 СБП / CasheRa"
 
     if provider:
@@ -104,7 +140,7 @@ def format_provider(provider):
 # СУММА
 # ============================================================
 
-def format_amount(payment):
+def format_amount(payment: dict) -> str:
     amount = payment.get("amount")
 
     if amount is None:
@@ -112,18 +148,19 @@ def format_amount(payment):
 
     try:
         amount = int(amount)
+
     except (TypeError, ValueError):
         return str(amount)
 
     provider = str(
         payment.get("provider") or ""
-    ).lower()
+    ).lower().strip()
 
-    # CasheRa хранит сумму в копейках
+    # CasheRa — копейки
     if provider == "cashera":
         return f"{amount / 100:.2f} ₽"
 
-    # Stars хранится непосредственно в XTR
+    # Telegram Stars — XTR
     if provider == "stars":
         return f"{amount} ⭐"
 
@@ -131,24 +168,37 @@ def format_amount(payment):
 
 
 # ============================================================
-# КЛАВИАТУРА
+# КЛАВИАТУРА ПЛАТЕЖЕЙ
 # ============================================================
 
-def payments_keyboard(payments, page):
+def payments_keyboard(
+    payments,
+    page: int,
+):
     buttons = []
 
     start = page * PAYMENTS_PER_PAGE
     end = start + PAYMENTS_PER_PAGE
 
-    page_payments = payments[start:end]
+    page_payments = payments[
+        start:end
+    ]
 
     for payment in page_payments:
+
+        if not isinstance(payment, dict):
+            continue
+
         payment_id = payment.get("id")
 
-        days = payment.get("days") or 0
-        status = payment.get("status")
+        if payment_id is None:
+            continue
 
-        status_text = format_payment_status(status)
+        days = payment.get("days") or 0
+
+        status_text = format_payment_status(
+            payment.get("status")
+        )
 
         buttons.append(
             [
@@ -172,6 +222,7 @@ def payments_keyboard(payments, page):
     navigation = []
 
     if page > 0:
+
         navigation.append(
             InlineKeyboardButton(
                 text="⬅️",
@@ -193,12 +244,15 @@ def payments_keyboard(payments, page):
 
     navigation.append(
         InlineKeyboardButton(
-            text=f"{page + 1}/{total_pages}",
+            text=(
+                f"{page + 1}/{total_pages}"
+            ),
             callback_data="noop",
         )
     )
 
     if end < len(payments):
+
         navigation.append(
             InlineKeyboardButton(
                 text="➡️",
@@ -244,12 +298,22 @@ async def show_payments(
     call: CallbackQuery,
     page: int = 0,
 ):
+
+    if not call.message:
+        return
+
+    # --------------------------------------------------------
+    # БАЗА
+    # --------------------------------------------------------
+
     try:
+
         payments = get_all_payments() or []
 
     except Exception as e:
+
         print(
-            "Admin payments error:",
+            "❌ Admin payments error:",
             repr(e),
         )
 
@@ -260,19 +324,41 @@ async def show_payments(
 
         return
 
-    # Новые платежи сверху
-    payments = list(payments)
+    # --------------------------------------------------------
+    # ТОЛЬКО DICT
+    # --------------------------------------------------------
+
+    payments = [
+        payment
+        for payment in payments
+        if isinstance(payment, dict)
+    ]
+
+    # --------------------------------------------------------
+    # НОВЫЕ ПЛАТЕЖИ СВЕРХУ
+    # --------------------------------------------------------
 
     try:
+
         payments.sort(
             key=lambda x: (
-                x.get("created_at") is not None,
+                x.get("created_at")
+                is not None,
                 x.get("created_at"),
             ),
             reverse=True,
         )
-    except Exception:
-        pass
+
+    except Exception as e:
+
+        print(
+            "⚠️ Payment sorting error:",
+            repr(e),
+        )
+
+    # --------------------------------------------------------
+    # СТРАНИЦА
+    # --------------------------------------------------------
 
     if page < 0:
         page = 0
@@ -295,6 +381,7 @@ async def show_payments(
     # ========================================================
 
     if not payments:
+
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
                 [
@@ -330,11 +417,14 @@ async def show_payments(
     failed = 0
 
     for payment in payments:
+
         status = str(
-            payment.get("status") or "pending"
-        ).lower()
+            payment.get("status")
+            or "pending"
+        ).lower().strip()
 
         if status == "pending":
+
             pending += 1
 
         elif status in (
@@ -343,6 +433,7 @@ async def show_payments(
             "completed",
             "approved",
         ):
+
             successful += 1
 
         elif status in (
@@ -351,19 +442,34 @@ async def show_payments(
             "canceled",
             "rejected",
         ):
+
             failed += 1
+
+    # ========================================================
+    # ТЕКСТ
+    # ========================================================
 
     text = (
         "💳 <b>История платежей</b>\n\n"
-        f"📦 Всего: <b>{len(payments)}</b>\n"
-        f"⏳ Ожидают: <b>{pending}</b>\n"
-        f"✅ Успешных: <b>{successful}</b>\n"
-        f"❌ Ошибок: <b>{failed}</b>\n\n"
+
+        f"📦 Всего: "
+        f"<b>{len(payments)}</b>\n"
+
+        f"⏳ Ожидают: "
+        f"<b>{pending}</b>\n"
+
+        f"✅ Успешных: "
+        f"<b>{successful}</b>\n"
+
+        f"❌ Ошибок: "
+        f"<b>{failed}</b>\n\n"
+
         f"📄 Страница: "
         f"<b>{page + 1}/{total_pages}</b>"
     )
 
     try:
+
         await call.message.edit_text(
             text,
             parse_mode="HTML",
@@ -374,7 +480,11 @@ async def show_payments(
         )
 
     except TelegramBadRequest as e:
-        if "message is not modified" not in str(e):
+
+        if (
+            "message is not modified"
+            not in str(e).lower()
+        ):
             raise
 
 
@@ -388,13 +498,16 @@ async def show_payments(
 async def admin_payments(
     call: CallbackQuery,
 ):
+
     if not call.from_user or not is_admin(
         call.from_user.id
     ):
+
         await call.answer(
             "❌ Нет доступа.",
             show_alert=True,
         )
+
         return
 
     await call.answer()
@@ -410,21 +523,27 @@ async def admin_payments(
 # ============================================================
 
 @router.callback_query(
-    F.data.startswith("admin_payments_page_")
+    F.data.startswith(
+        "admin_payments_page_"
+    )
 )
 async def admin_payments_page(
     call: CallbackQuery,
 ):
+
     if not call.from_user or not is_admin(
         call.from_user.id
     ):
+
         await call.answer(
             "❌ Нет доступа.",
             show_alert=True,
         )
+
         return
 
     try:
+
         page = int(
             call.data.replace(
                 "admin_payments_page_",
@@ -433,11 +552,16 @@ async def admin_payments_page(
             )
         )
 
-    except (ValueError, AttributeError):
+    except (
+        ValueError,
+        AttributeError,
+    ):
+
         await call.answer(
             "❌ Некорректная страница.",
             show_alert=True,
         )
+
         return
 
     await call.answer()
@@ -453,21 +577,40 @@ async def admin_payments_page(
 # ============================================================
 
 @router.callback_query(
-    F.data.startswith("payment_info_")
+    F.data.startswith(
+        "payment_info_"
+    )
 )
 async def payment_info(
     call: CallbackQuery,
 ):
+
     if not call.from_user or not is_admin(
         call.from_user.id
     ):
+
         await call.answer(
             "❌ Нет доступа.",
             show_alert=True,
         )
+
         return
 
+    if not call.data:
+
+        await call.answer(
+            "❌ Некорректный платёж.",
+            show_alert=True,
+        )
+
+        return
+
+    # --------------------------------------------------------
+    # ID ПЛАТЕЖА
+    # --------------------------------------------------------
+
     try:
+
         payment_id = int(
             call.data.replace(
                 "payment_info_",
@@ -476,23 +619,32 @@ async def payment_info(
             )
         )
 
-    except (ValueError, AttributeError):
+    except (
+        ValueError,
+        AttributeError,
+    ):
+
         await call.answer(
             "❌ Некорректный платёж.",
             show_alert=True,
         )
+
         return
 
-    # ========================================================
+    # --------------------------------------------------------
     # ПОЛУЧАЕМ ПЛАТЁЖ
-    # ========================================================
+    # --------------------------------------------------------
 
     try:
-        payment = get_payment(payment_id)
+
+        payment = get_payment(
+            payment_id
+        )
 
     except Exception as e:
+
         print(
-            "Payment lookup error:",
+            "❌ Payment lookup error:",
             repr(e),
         )
 
@@ -504,33 +656,48 @@ async def payment_info(
         return
 
     if not payment:
+
         await call.answer(
             "❌ Платёж не найден.",
             show_alert=True,
         )
+
         return
 
-    # ========================================================
-    # ДАННЫЕ ПЛАТЕЖА
-    # ========================================================
+    if not isinstance(payment, dict):
 
-    user_id = payment.get("user_id")
-    days = payment.get("days") or 0
+        await call.answer(
+            "❌ Некорректные данные платежа.",
+            show_alert=True,
+        )
+
+        return
+
+    # --------------------------------------------------------
+    # ДАННЫЕ
+    # --------------------------------------------------------
+
+    user_id = payment.get(
+        "user_id"
+    )
+
+    days = payment.get(
+        "days"
+    ) or 0
 
     external_id = (
         payment.get("payment_id")
+        or payment.get("external_id")
         or "нет"
     )
 
     status = payment.get(
-        "status",
-        "pending",
-    )
+        "status"
+    ) or "pending"
 
     provider = payment.get(
-        "provider",
-        "",
-    )
+        "provider"
+    ) or ""
 
     created_at = payment.get(
         "created_at"
@@ -552,21 +719,24 @@ async def payment_info(
         payment
     )
 
-    # ========================================================
+    # --------------------------------------------------------
     # ПОЛЬЗОВАТЕЛЬ
-    # ========================================================
+    # --------------------------------------------------------
 
     user = None
 
     try:
-        if user_id:
+
+        if user_id is not None:
+
             user = get_user(
                 int(user_id)
             )
 
     except Exception as e:
+
         print(
-            "Payment user lookup error:",
+            "⚠️ Payment user lookup error:",
             repr(e),
         )
 
@@ -574,6 +744,7 @@ async def payment_info(
     first_name = "нет"
 
     if isinstance(user, dict):
+
         username = (
             user.get("username")
             or "нет"
@@ -584,29 +755,37 @@ async def payment_info(
             or "нет"
         )
 
-    # ========================================================
+    # --------------------------------------------------------
     # USERNAME
-    # ========================================================
+    # --------------------------------------------------------
 
     if username != "нет":
-        username_text = f"@{username}"
+
+        username_text = (
+            f"@{username}"
+            if not str(username).startswith("@")
+            else str(username)
+        )
+
     else:
+
         username_text = "нет"
 
-    # ========================================================
-    # ИНФОРМАЦИЯ
-    # ========================================================
+    # --------------------------------------------------------
+    # ТЕКСТ
+    # --------------------------------------------------------
 
     text = (
         "💳 <b>Информация о платеже</b>\n\n"
 
-        f"🧾 Платёж: <b>#{payment_id}</b>\n"
+        f"🧾 Платёж: "
+        f"<b>#{payment_id}</b>\n"
 
         f"👤 Пользователь: "
         f"<b>{first_name}</b>\n"
 
         f"🆔 Telegram ID: "
-        f"<code>{user_id}</code>\n"
+        f"<code>{user_id or 'нет'}</code>\n"
 
         f"🔗 Username: "
         f"<b>{username_text}</b>\n\n"
@@ -639,7 +818,8 @@ async def payment_info(
 
     keyboard_buttons = []
 
-    if user_id:
+    if user_id is not None:
+
         keyboard_buttons.append(
             [
                 InlineKeyboardButton(
@@ -673,16 +853,27 @@ async def payment_info(
         inline_keyboard=keyboard_buttons
     )
 
-    try:
-        await call.message.edit_text(
-            text,
-            parse_mode="HTML",
-            reply_markup=keyboard,
-        )
+    # ========================================================
+    # ПОКАЗ
+    # ========================================================
 
-    except TelegramBadRequest as e:
-        if "message is not modified" not in str(e):
-            raise
+    if call.message:
+
+        try:
+
+            await call.message.edit_text(
+                text,
+                parse_mode="HTML",
+                reply_markup=keyboard,
+            )
+
+        except TelegramBadRequest as e:
+
+            if (
+                "message is not modified"
+                not in str(e).lower()
+            ):
+                raise
 
     await call.answer()
 
@@ -697,13 +888,16 @@ async def payment_info(
 async def payment_noop(
     call: CallbackQuery,
 ):
+
     if not call.from_user or not is_admin(
         call.from_user.id
     ):
+
         await call.answer(
             "❌ Нет доступа.",
             show_alert=True,
         )
+
         return
 
     await call.answer()
