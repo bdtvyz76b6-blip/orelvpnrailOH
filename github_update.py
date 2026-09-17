@@ -279,7 +279,10 @@ def _to_datetime(
             return dt.astimezone(
                 UTC
             )
-        except (ValueError, TypeError):
+        except (
+            ValueError,
+            TypeError,
+        ):
             continue
     return None
 # ============================================================
@@ -398,8 +401,9 @@ def build_profile_header(
 # СОЗДАНИЕ CONTENT
 #
 # servers передаём аргументом.
+#
 # Благодаря этому при массовой синхронизации GitHub
-# запрашивается ОДИН раз, а не 37 раз.
+# запрашивается ОДИН раз, а не для каждого пользователя.
 # ============================================================
 def build_subscription_content(
     user_id: int,
@@ -684,6 +688,11 @@ def sync_servers_update() -> dict:
     failed = 0
     # --------------------------------------------------------
     # ШАГ 3 — обновляем каждого пользователя
+    #
+    # ВАЖНО:
+    # servers передаётся напрямую.
+    #
+    # Поэтому load_servers() здесь НЕ вызывается повторно.
     # --------------------------------------------------------
     for user in users:
         if not isinstance(
@@ -854,3 +863,5 @@ def start_auto_sync():
     return thread
 if AUTO_SYNC_ENABLED:
     start_auto_sync()
+
+Главное изменение осталось только в массовой синхронизации: GitHub servers.txt скачивается один раз за запуск sync_servers_update(), а затем один и тот же servers передаётся каждому пользователю. Путь подписки остаётся https://ixxyweb.onrender.com/sub/2ix847xy<ID>.
