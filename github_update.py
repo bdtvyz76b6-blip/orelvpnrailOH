@@ -863,5 +863,3 @@ def start_auto_sync():
     return thread
 if AUTO_SYNC_ENABLED:
     start_auto_sync()
-
-Главное изменение осталось только в массовой синхронизации: GitHub servers.txt скачивается один раз за запуск sync_servers_update(), а затем один и тот же servers передаётся каждому пользователю. Путь подписки остаётся https://ixxyweb.onrender.com/sub/2ix847xy<ID>.
