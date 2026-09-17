@@ -24,7 +24,6 @@ from database import (
 from github_update import (
     sync_servers_update,
     update_subscription_file,
-    get_subscription_link as get_github_subscription_link,
 )
 router = Router()
 USERS_PER_PAGE = 15
@@ -76,7 +75,10 @@ def format_datetime(value):
     if dt:
         return dt.strftime("%d.%m.%Y %H:%M")
     return str(value)
-def get_subscription_status(subscription, subscription_until):
+def get_subscription_status(
+    subscription,
+    subscription_until,
+):
     # PostgreSQL subscription = BOOLEAN
     if subscription is not True:
         return "🔴 Неактивен", 0
@@ -104,31 +106,28 @@ def get_tariff_name(user: dict):
     ):
         return "🎁 Пробный период"
     return "☂️ ixxy VPN"
+# ============================================================
+# ПОСТОЯННАЯ ССЫЛКА ПОДПИСКИ
+#
+# ВАЖНО:
+# Всегда используем текущий сайт ixxy.
+#
+# Старый:
+# https://orelvpnrailoh-1.onrender.com
+#
+# больше нигде здесь не используется.
+# ============================================================
 def get_user_subscription_url(user_id: int) -> str:
     user_id = int(user_id)
-    try:
-        link = get_github_subscription_link(user_id)
-        if link:
-            return str(link).strip()
-    except Exception as e:
-        print(
-            f"⚠️ SUB LINK GENERATOR ERROR "
-            f"user={user_id}: {e}"
-        )
-    try:
-        link = get_subscription_link(user_id)
-        if link:
-            return str(link).strip()
-    except Exception as e:
-        print(
-            f"⚠️ DB SUB LINK ERROR "
-            f"user={user_id}: {e}"
-        )
     return (
         "https://ixxyweb.onrender.com/sub/"
         f"2ix847xy{user_id}"
     )
-def add_url_button(buttons, text, url):
+def add_url_button(
+    buttons,
+    text,
+    url,
+):
     if url and url.startswith(
         ("http://", "https://")
     ):
@@ -155,7 +154,9 @@ def user_display_name(user: dict) -> str:
 # НАЗАД
 # ============================================================
 @router.callback_query(F.data == "admin_back")
-async def admin_back(call: CallbackQuery):
+async def admin_back(
+    call: CallbackQuery,
+):
     if not is_admin(call.from_user.id):
         await call.answer(
             "❌ Нет доступа",
@@ -176,7 +177,10 @@ async def admin_back(call: CallbackQuery):
 # ============================================================
 # КЛАВИАТУРА ПОЛЬЗОВАТЕЛЕЙ
 # ============================================================
-def build_users_keyboard(users, page=0):
+def build_users_keyboard(
+    users,
+    page=0,
+):
     total = len(users)
     total_pages = max(
         1,
@@ -185,7 +189,10 @@ def build_users_keyboard(users, page=0):
     )
     page = max(
         0,
-        min(page, total_pages - 1),
+        min(
+            page,
+            total_pages - 1,
+        ),
     )
     start = page * USERS_PER_PAGE
     end = start + USERS_PER_PAGE
@@ -218,8 +225,13 @@ def build_users_keyboard(users, page=0):
         buttons.append(
             [
                 InlineKeyboardButton(
-                    text=f"👤 {username} • {status_text}",
-                    callback_data=f"admin_user_{user_id}",
+                    text=(
+                        f"👤 {username} • "
+                        f"{status_text}"
+                    ),
+                    callback_data=(
+                        f"admin_user_{user_id}"
+                    ),
                 )
             ]
         )
@@ -228,7 +240,9 @@ def build_users_keyboard(users, page=0):
         navigation.append(
             InlineKeyboardButton(
                 text="◀️",
-                callback_data=f"admin_users_page_{page - 1}",
+                callback_data=(
+                    f"admin_users_page_{page - 1}"
+                ),
             )
         )
     navigation.append(
@@ -241,7 +255,9 @@ def build_users_keyboard(users, page=0):
         navigation.append(
             InlineKeyboardButton(
                 text="▶️",
-                callback_data=f"admin_users_page_{page + 1}",
+                callback_data=(
+                    f"admin_users_page_{page + 1}"
+                ),
             )
         )
     buttons.append(navigation)
@@ -276,11 +292,16 @@ def build_users_keyboard(users, page=0):
         page,
         total_pages,
     )
-async def render_users(call: CallbackQuery, page=0):
+async def render_users(
+    call: CallbackQuery,
+    page=0,
+):
     try:
         users = get_all_users() or []
     except Exception as e:
-        print(f"❌ ADMIN USERS ERROR: {e}")
+        print(
+            f"❌ ADMIN USERS ERROR: {e}"
+        )
         try:
             await call.message.edit_text(
                 "❌ <b>Ошибка базы данных.</b>",
@@ -326,7 +347,9 @@ async def render_users(call: CallbackQuery, page=0):
         users,
         page,
     )
-    start_number = page * USERS_PER_PAGE + 1
+    start_number = (
+        page * USERS_PER_PAGE + 1
+    )
     end_number = min(
         (page + 1) * USERS_PER_PAGE,
         len(users),
@@ -335,8 +358,10 @@ async def render_users(call: CallbackQuery, page=0):
         "👥 <b>Пользователи</b>\n"
         "━━━━━━━━━━━━━━━━━━\n\n"
         f"👤 Всего: <b>{len(users)}</b>\n"
-        f"📄 Показаны: <b>{start_number}–{end_number}</b>\n"
-        f"📑 Страница: <b>{page + 1}/{total_pages}</b>\n\n"
+        f"📄 Показаны: "
+        f"<b>{start_number}–{end_number}</b>\n"
+        f"📑 Страница: "
+        f"<b>{page + 1}/{total_pages}</b>\n\n"
         "Выбери пользователя:"
     )
     try:
@@ -348,8 +373,12 @@ async def render_users(call: CallbackQuery, page=0):
     except TelegramBadRequest as e:
         if "message is not modified" not in str(e):
             raise
-@router.callback_query(F.data == "admin_users")
-async def show_users(call: CallbackQuery):
+@router.callback_query(
+    F.data == "admin_users"
+)
+async def show_users(
+    call: CallbackQuery,
+):
     if not is_admin(call.from_user.id):
         await call.answer(
             "❌ Нет доступа",
@@ -357,11 +386,18 @@ async def show_users(call: CallbackQuery):
         )
         return
     await call.answer()
-    await render_users(call, 0)
+    await render_users(
+        call,
+        0,
+    )
 @router.callback_query(
-    F.data.startswith("admin_users_page_")
+    F.data.startswith(
+        "admin_users_page_"
+    )
 )
-async def users_page(call: CallbackQuery):
+async def users_page(
+    call: CallbackQuery,
+):
     if not is_admin(call.from_user.id):
         await call.answer(
             "❌ Нет доступа",
@@ -383,11 +419,16 @@ async def users_page(call: CallbackQuery):
         )
         return
     await call.answer()
-    await render_users(call, page)
+    await render_users(
+        call,
+        page,
+    )
 @router.callback_query(
     F.data == "admin_users_noop"
 )
-async def users_noop(call: CallbackQuery):
+async def users_noop(
+    call: CallbackQuery,
+):
     if not is_admin(call.from_user.id):
         await call.answer(
             "❌ Нет доступа",
@@ -398,7 +439,9 @@ async def users_noop(call: CallbackQuery):
 # ============================================================
 # ПОИСК
 # ============================================================
-@router.callback_query(F.data == "admin_search")
+@router.callback_query(
+    F.data == "admin_search"
+)
 async def admin_search(
     call: CallbackQuery,
     state: FSMContext,
@@ -418,7 +461,9 @@ async def admin_search(
             [
                 InlineKeyboardButton(
                     text="❌ Отмена",
-                    callback_data="admin_search_cancel",
+                    callback_data=(
+                        "admin_search_cancel"
+                    ),
                 )
             ]
         ]
@@ -461,7 +506,9 @@ async def admin_search_cancel(
             ]
         ),
     )
-@router.message(AdminSearch.waiting_query)
+@router.message(
+    AdminSearch.waiting_query
+)
 async def admin_search_query(
     message: Message,
     state: FSMContext,
@@ -483,7 +530,9 @@ async def admin_search_query(
     try:
         users = get_all_users() or []
     except Exception as e:
-        print(f"❌ ADMIN SEARCH ERROR: {e}")
+        print(
+            f"❌ ADMIN SEARCH ERROR: {e}"
+        )
         await state.clear()
         await message.answer(
             "❌ Ошибка базы данных."
@@ -535,7 +584,8 @@ async def admin_search_query(
         )
         await message.answer(
             "🔎 <b>Результат поиска</b>\n\n"
-            f"По запросу <code>{h(query)}</code> "
+            f"По запросу "
+            f"<code>{h(query)}</code> "
             "ничего не найдено.",
             reply_markup=keyboard,
             parse_mode="HTML",
@@ -562,8 +612,13 @@ async def admin_search_query(
         buttons.append(
             [
                 InlineKeyboardButton(
-                    text=f"👤 {username} • {state_text}",
-                    callback_data=f"admin_user_{user_id}",
+                    text=(
+                        f"👤 {username} • "
+                        f"{state_text}"
+                    ),
+                    callback_data=(
+                        f"admin_user_{user_id}"
+                    ),
                 )
             ]
         )
@@ -593,7 +648,9 @@ async def admin_search_query(
     )
     extra = ""
     if len(found) > 30:
-        extra = "\n\nПоказаны первые 30 результатов."
+        extra = (
+            "\n\nПоказаны первые 30 результатов."
+        )
     await message.answer(
         "🔎 <b>Результаты поиска</b>\n"
         "━━━━━━━━━━━━━━━━━━\n\n"
@@ -610,7 +667,9 @@ async def admin_search_query(
 @router.callback_query(
     F.data.startswith("admin_user_")
 )
-async def user_profile(call: CallbackQuery):
+async def user_profile(
+    call: CallbackQuery,
+):
     if not is_admin(call.from_user.id):
         await call.answer(
             "❌ Нет доступа",
@@ -636,7 +695,8 @@ async def user_profile(call: CallbackQuery):
         user = get_user(user_id)
     except Exception as e:
         print(
-            f"❌ ADMIN PROFILE ERROR {user_id}: {e}"
+            f"❌ ADMIN PROFILE ERROR "
+            f"{user_id}: {e}"
         )
         await call.message.answer(
             "❌ Ошибка базы данных."
@@ -647,15 +707,25 @@ async def user_profile(call: CallbackQuery):
             "❌ Пользователь не найден."
         )
         return
-    username = user.get("username") or "нет"
-    first_name = user.get("first_name") or "нет"
-    subscription = user.get("subscription")
+    username = user.get(
+        "username"
+    ) or "нет"
+    first_name = user.get(
+        "first_name"
+    ) or "нет"
+    subscription = user.get(
+        "subscription"
+    )
     subscription_until = user.get(
         "subscription_until"
     )
-    created_at = user.get("created_at")
-    subscription_url = get_user_subscription_url(
-        user_id
+    created_at = user.get(
+        "created_at"
+    )
+    subscription_url = (
+        get_user_subscription_url(
+            user_id
+        )
     )
     status, days = get_subscription_status(
         subscription,
@@ -665,20 +735,30 @@ async def user_profile(call: CallbackQuery):
     payment_count = 0
     paid_count = 0
     try:
-        all_payments = get_all_payments() or []
+        all_payments = (
+            get_all_payments() or []
+        )
         user_payments = [
             payment
             for payment in all_payments
-            if isinstance(payment, dict)
-            and int(payment.get("user_id") or 0)
-            == int(user_id)
+            if (
+                isinstance(payment, dict)
+                and int(
+                    payment.get("user_id")
+                    or 0
+                )
+                == int(user_id)
+            )
         ]
-        payment_count = len(user_payments)
+        payment_count = len(
+            user_payments
+        )
         paid_count = sum(
             1
             for payment in user_payments
             if str(
-                payment.get("status") or ""
+                payment.get("status")
+                or ""
             ).lower()
             in (
                 "paid",
@@ -690,7 +770,8 @@ async def user_profile(call: CallbackQuery):
         )
     except Exception as e:
         print(
-            f"⚠️ USER PAYMENTS ERROR {user_id}: {e}"
+            f"⚠️ USER PAYMENTS ERROR "
+            f"{user_id}: {e}"
         )
     username_text = (
         f"@{h(username)}"
@@ -700,18 +781,26 @@ async def user_profile(call: CallbackQuery):
     text = (
         "👤 <b>Пользователь</b>\n"
         "━━━━━━━━━━━━━━━━━━\n\n"
-        f"🆔 <b>ID:</b> <code>{user_id}</code>\n"
-        f"👤 <b>Username:</b> {username_text}\n"
-        f"🧑‍💻 <b>Имя:</b> {h(first_name)}\n\n"
+        f"🆔 <b>ID:</b> "
+        f"<code>{user_id}</code>\n"
+        f"👤 <b>Username:</b> "
+        f"{username_text}\n"
+        f"🧑‍💻 <b>Имя:</b> "
+        f"{h(first_name)}\n\n"
         "━━━━━━━━━━━━━━━━━━\n\n"
-        f"🎫 <b>Тариф:</b> {h(tariff)}\n"
-        f"📊 <b>Статус:</b> {status}\n"
+        f"🎫 <b>Тариф:</b> "
+        f"{h(tariff)}\n"
+        f"📊 <b>Статус:</b> "
+        f"{status}\n"
         f"📅 <b>До:</b> "
         f"{format_date(subscription_until)}\n"
-        f"⏳ <b>Осталось:</b> {days} д.\n\n"
+        f"⏳ <b>Осталось:</b> "
+        f"{days} д.\n\n"
         "━━━━━━━━━━━━━━━━━━\n\n"
-        f"💳 <b>Платежей:</b> {payment_count}\n"
-        f"✅ <b>Оплаченных:</b> {paid_count}\n"
+        f"💳 <b>Платежей:</b> "
+        f"{payment_count}\n"
+        f"✅ <b>Оплаченных:</b> "
+        f"{paid_count}\n"
         f"📆 <b>Создан:</b> "
         f"{h(format_datetime(created_at))}"
     )
@@ -725,7 +814,9 @@ async def user_profile(call: CallbackQuery):
         [
             InlineKeyboardButton(
                 text="⏳ Продлить",
-                callback_data=f"extend_{user_id}",
+                callback_data=(
+                    f"extend_{user_id}"
+                ),
             )
         ]
     )
@@ -733,16 +824,23 @@ async def user_profile(call: CallbackQuery):
         [
             InlineKeyboardButton(
                 text="💳 Платежи",
-                callback_data=f"admin_payments_{user_id}",
+                callback_data=(
+                    f"admin_payments_{user_id}"
+                ),
             )
         ]
     )
-    if subscription is True and days > 0:
+    if (
+        subscription is True
+        and days > 0
+    ):
         buttons.append(
             [
                 InlineKeyboardButton(
                     text="❌ Отключить",
-                    callback_data=f"disable_{user_id}",
+                    callback_data=(
+                        f"disable_{user_id}"
+                    ),
                 )
             ]
         )
@@ -800,7 +898,8 @@ async def extend_subscription_menu(
         user = get_user(user_id)
     except Exception as e:
         print(
-            f"❌ GET USER ERROR {user_id}: {e}"
+            f"❌ GET USER ERROR "
+            f"{user_id}: {e}"
         )
         await call.message.answer(
             "❌ Ошибка базы данных."
@@ -812,9 +911,13 @@ async def extend_subscription_menu(
         )
         return
     username = user_display_name(user)
-    _, current_days = get_subscription_status(
-        user.get("subscription"),
-        user.get("subscription_until"),
+    _, current_days = (
+        get_subscription_status(
+            user.get("subscription"),
+            user.get(
+                "subscription_until"
+            ),
+        )
     )
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -871,8 +974,10 @@ async def extend_subscription_menu(
     await call.message.edit_text(
         "⏳ <b>Продление подписки</b>\n"
         "━━━━━━━━━━━━━━━━━━\n\n"
-        f"👤 Пользователь: <b>{h(username)}</b>\n"
-        f"🆔 ID: <code>{user_id}</code>\n\n"
+        f"👤 Пользователь: "
+        f"<b>{h(username)}</b>\n"
+        f"🆔 ID: "
+        f"<code>{user_id}</code>\n\n"
         f"📅 Сейчас осталось: "
         f"<b>{current_days} д.</b>\n\n"
         "Выбери срок продления:",
@@ -914,7 +1019,8 @@ async def custom_extend_start(
         user = get_user(user_id)
     except Exception as e:
         print(
-            f"❌ CUSTOM EXTEND USER ERROR: {e}"
+            f"❌ CUSTOM EXTEND USER ERROR: "
+            f"{e}"
         )
         await call.message.answer(
             "❌ Ошибка базы данных."
@@ -937,7 +1043,8 @@ async def custom_extend_start(
                 InlineKeyboardButton(
                     text="❌ Отмена",
                     callback_data=(
-                        f"custom_extend_cancel_{user_id}"
+                        f"custom_extend_cancel_"
+                        f"{user_id}"
                     ),
                 )
             ]
@@ -963,7 +1070,9 @@ async def custom_extend_start(
         parse_mode="HTML",
     )
 @router.callback_query(
-    F.data.regexp(r"^custom_extend_cancel_\d+$")
+    F.data.regexp(
+        r"^custom_extend_cancel_\d+$"
+    )
 )
 async def custom_extend_cancel(
     call: CallbackQuery,
@@ -990,7 +1099,9 @@ async def custom_extend_cancel(
             show_alert=True,
         )
         return
-    await call.answer("❌ Отменено")
+    await call.answer(
+        "❌ Отменено"
+    )
     await state.clear()
     try:
         await call.message.edit_text(
@@ -1021,7 +1132,9 @@ async def custom_extend_days(
 ):
     if not message.from_user:
         return
-    if not is_admin(message.from_user.id):
+    if not is_admin(
+        message.from_user.id
+    ):
         return
     raw_days = (
         (message.text or "")
@@ -1099,7 +1212,10 @@ async def custom_extend_days(
             raise RuntimeError(
                 "База данных не вернула новую дату"
             )
-        update_subscription_file(user_id)
+        await asyncio.to_thread(
+            update_subscription_file,
+            user_id,
+        )
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
                 [
@@ -1113,7 +1229,9 @@ async def custom_extend_days(
                 [
                     InlineKeyboardButton(
                         text="👥 Пользователи",
-                        callback_data="admin_users",
+                        callback_data=(
+                            "admin_users"
+                        ),
                     )
                 ],
             ]
@@ -1123,8 +1241,10 @@ async def custom_extend_days(
             "━━━━━━━━━━━━━━━━━━\n\n"
             f"👤 Пользователь: "
             f"<b>{h(username)}</b>\n"
-            f"🆔 ID: <code>{user_id}</code>\n\n"
-            f"➕ Добавлено: <b>{days} дней</b>\n"
+            f"🆔 ID: "
+            f"<code>{user_id}</code>\n\n"
+            f"➕ Добавлено: "
+            f"<b>{days} дней</b>\n"
             f"📅 Действует до: "
             f"<b>{format_date(new_date)}</b>\n\n"
             "🔄 Содержимое подписки обновлено.",
@@ -1155,7 +1275,9 @@ async def custom_extend_days(
 # ГОТОВЫЕ СРОКИ
 # ============================================================
 @router.callback_query(
-    F.data.startswith("extend_days_")
+    F.data.startswith(
+        "extend_days_"
+    )
 )
 async def extend_subscription_admin(
     call: CallbackQuery,
@@ -1172,24 +1294,35 @@ async def extend_subscription_admin(
             raise ValueError
         user_id = int(parts[2])
         days = int(parts[3])
-    except (ValueError, IndexError):
+    except (
+        ValueError,
+        IndexError,
+    ):
         await call.answer(
             "❌ Неверные параметры",
             show_alert=True,
         )
         return
-    if days not in (30, 90, 180, 365):
+    if days not in (
+        30,
+        90,
+        180,
+        365,
+    ):
         await call.answer(
             "❌ Недопустимый срок",
             show_alert=True,
         )
         return
-    await call.answer("⏳ Продлеваю...")
+    await call.answer(
+        "⏳ Продлеваю..."
+    )
     try:
         user = get_user(user_id)
     except Exception as e:
         print(
-            f"❌ GET USER ERROR {user_id}: {e}"
+            f"❌ GET USER ERROR "
+            f"{user_id}: {e}"
         )
         await call.message.answer(
             "❌ Ошибка базы данных."
@@ -1210,7 +1343,10 @@ async def extend_subscription_admin(
             raise RuntimeError(
                 "База данных не вернула новую дату"
             )
-        update_subscription_file(user_id)
+        await asyncio.to_thread(
+            update_subscription_file,
+            user_id,
+        )
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
                 [
@@ -1224,7 +1360,9 @@ async def extend_subscription_admin(
                 [
                     InlineKeyboardButton(
                         text="👥 Пользователи",
-                        callback_data="admin_users",
+                        callback_data=(
+                            "admin_users"
+                        ),
                     )
                 ],
             ]
@@ -1234,8 +1372,10 @@ async def extend_subscription_admin(
             "━━━━━━━━━━━━━━━━━━\n\n"
             f"👤 Пользователь: "
             f"<b>{h(username)}</b>\n"
-            f"🆔 ID: <code>{user_id}</code>\n\n"
-            f"➕ Добавлено: <b>{days} дней</b>\n"
+            f"🆔 ID: "
+            f"<code>{user_id}</code>\n\n"
+            f"➕ Добавлено: "
+            f"<b>{days} дней</b>\n"
             f"📅 Действует до: "
             f"<b>{format_date(new_date)}</b>\n\n"
             "🔄 Содержимое подписки обновлено.",
@@ -1282,7 +1422,9 @@ async def extend_subscription_admin(
 # ПЛАТЕЖИ ПОЛЬЗОВАТЕЛЯ
 # ============================================================
 @router.callback_query(
-    F.data.startswith("admin_payments_")
+    F.data.startswith(
+        "admin_payments_"
+    )
 )
 async def admin_user_payments(
     call: CallbackQuery,
@@ -1310,17 +1452,25 @@ async def admin_user_payments(
     await call.answer()
     try:
         user = get_user(user_id)
-        all_payments = get_all_payments() or []
+        all_payments = (
+            get_all_payments() or []
+        )
         payments = [
             payment
             for payment in all_payments
-            if isinstance(payment, dict)
-            and int(payment.get("user_id") or 0)
-            == int(user_id)
+            if (
+                isinstance(payment, dict)
+                and int(
+                    payment.get("user_id")
+                    or 0
+                )
+                == int(user_id)
+            )
         ]
     except Exception as e:
         print(
-            f"❌ PAYMENTS ERROR {user_id}: {e}"
+            f"❌ PAYMENTS ERROR "
+            f"{user_id}: {e}"
         )
         await call.message.answer(
             "❌ Ошибка базы данных."
@@ -1334,7 +1484,8 @@ async def admin_user_payments(
     username = user_display_name(user)
     payments.sort(
         key=lambda payment: str(
-            payment.get("created_at") or ""
+            payment.get("created_at")
+            or ""
         ),
         reverse=True,
     )
@@ -1348,20 +1499,31 @@ async def admin_user_payments(
         text += "Платежей пока нет."
     else:
         for payment in payments[:15]:
-            payment_id = payment.get("id", "?")
-            days = payment.get("days") or 0
+            payment_id = payment.get(
+                "id",
+                "?",
+            )
+            days = payment.get(
+                "days"
+            ) or 0
             external_id = (
                 payment.get("payment_id")
                 or payment.get("external_id")
             )
             status_value = str(
-                payment.get("status") or "unknown"
+                payment.get("status")
+                or "unknown"
             ).lower()
-            created_at = payment.get("created_at")
+            created_at = payment.get(
+                "created_at"
+            )
             provider = str(
-                payment.get("provider") or ""
+                payment.get("provider")
+                or ""
             ).lower()
-            amount = payment.get("amount")
+            amount = payment.get(
+                "amount"
+            )
             if status_value in (
                 "paid",
                 "success",
@@ -1386,7 +1548,9 @@ async def admin_user_payments(
             ):
                 status_text = "❌ Неуспешен"
             else:
-                status_text = f"⚪ {status_value}"
+                status_text = (
+                    f"⚪ {status_value}"
+                )
             if provider == "cashera":
                 try:
                     amount_text = (
@@ -1415,8 +1579,10 @@ async def admin_user_payments(
                 f"💳 <b>#{h(payment_id)}</b>\n"
                 f"💰 Сумма: "
                 f"<b>{h(amount_text)}</b>\n"
-                f"📅 {h(format_datetime(created_at))}\n"
-                f"⏳ Дней: <b>{h(days)}</b>\n"
+                f"📅 "
+                f"{h(format_datetime(created_at))}\n"
+                f"⏳ Дней: "
+                f"<b>{h(days)}</b>\n"
                 f"📊 {status_text}\n"
             )
             if external_id:
@@ -1443,13 +1609,17 @@ async def admin_user_payments(
             [
                 InlineKeyboardButton(
                     text="👥 Пользователи",
-                    callback_data="admin_users",
+                    callback_data=(
+                        "admin_users"
+                    ),
                 )
             ],
             [
                 InlineKeyboardButton(
                     text="🏠 Админ-панель",
-                    callback_data="admin_back",
+                    callback_data=(
+                        "admin_back"
+                    ),
                 )
             ],
         ]
@@ -1467,7 +1637,9 @@ async def admin_user_payments(
 # ОТКЛЮЧЕНИЕ
 # ============================================================
 @router.callback_query(
-    F.data.regexp(r"^disable_\d+$")
+    F.data.regexp(
+        r"^disable_\d+$"
+    )
 )
 async def disable_user_subscription(
     call: CallbackQuery,
@@ -1497,7 +1669,8 @@ async def disable_user_subscription(
         user = get_user(user_id)
     except Exception as e:
         print(
-            f"❌ GET USER ERROR {user_id}: {e}"
+            f"❌ GET USER ERROR "
+            f"{user_id}: {e}"
         )
         await call.message.answer(
             "❌ Ошибка базы данных."
@@ -1534,7 +1707,8 @@ async def disable_user_subscription(
             "⚠️ <b>Отключение подписки</b>\n\n"
             f"👤 Пользователь: "
             f"<b>{h(username)}</b>\n"
-            f"🆔 ID: <code>{user_id}</code>\n\n"
+            f"🆔 ID: "
+            f"<code>{user_id}</code>\n\n"
             "Подписка будет отключена.\n"
             "Постоянная ссылка останется прежней,\n"
             "но содержимое станет неактивным.\n\n"
@@ -1546,7 +1720,9 @@ async def disable_user_subscription(
         if "message is not modified" not in str(e):
             raise
 @router.callback_query(
-    F.data.startswith("confirm_disable_")
+    F.data.startswith(
+        "confirm_disable_"
+    )
 )
 async def confirm_disable_subscription(
     call: CallbackQuery,
@@ -1571,19 +1747,27 @@ async def confirm_disable_subscription(
             show_alert=True,
         )
         return
-    await call.answer("⏳ Отключаю...")
+    await call.answer(
+        "⏳ Отключаю..."
+    )
     try:
-        disable_subscription(user_id)
+        disable_subscription(
+            user_id
+        )
     except Exception as e:
         print(
-            f"❌ DISABLE ERROR {user_id}: {e}"
+            f"❌ DISABLE ERROR "
+            f"{user_id}: {e}"
         )
         await call.message.answer(
             "❌ Ошибка при отключении."
         )
         return
     try:
-        update_subscription_file(user_id)
+        await asyncio.to_thread(
+            update_subscription_file,
+            user_id,
+        )
     except Exception as e:
         print(
             f"⚠️ DISABLE SUB CONTENT ERROR "
@@ -1596,21 +1780,33 @@ async def confirm_disable_subscription(
     username = "нет"
     first_name = "нет"
     if user:
-        username = user.get("username") or "нет"
-        first_name = user.get("first_name") or "нет"
-    subscription_url = get_user_subscription_url(
-        user_id
+        username = (
+            user.get("username")
+            or "нет"
+        )
+        first_name = (
+            user.get("first_name")
+            or "нет"
+        )
+    subscription_url = (
+        get_user_subscription_url(
+            user_id
+        )
     )
     text = (
         "👤 <b>Пользователь</b>\n"
         "━━━━━━━━━━━━━━━━━━\n\n"
-        f"🆔 <b>ID:</b> <code>{user_id}</code>\n"
+        f"🆔 <b>ID:</b> "
+        f"<code>{user_id}</code>\n"
         f"👤 <b>Username:</b> "
         f"{('@' + h(username)) if username != 'нет' else 'нет'}\n"
-        f"🧑‍💻 <b>Имя:</b> {h(first_name)}\n\n"
+        f"🧑‍💻 <b>Имя:</b> "
+        f"{h(first_name)}\n\n"
         "━━━━━━━━━━━━━━━━━━\n\n"
-        "🎫 <b>Тариф:</b> ❌ Нет подписки\n"
-        "📊 <b>Статус:</b> 🔴 Неактивен\n"
+        "🎫 <b>Тариф:</b> "
+        "❌ Нет подписки\n"
+        "📊 <b>Статус:</b> "
+        "🔴 Неактивен\n"
         "📅 <b>До:</b> нет\n"
         "⏳ <b>Осталось:</b> 0 д.\n\n"
         "━━━━━━━━━━━━━━━━━━"
@@ -1625,7 +1821,9 @@ async def confirm_disable_subscription(
         [
             InlineKeyboardButton(
                 text="⏳ Продлить",
-                callback_data=f"extend_{user_id}",
+                callback_data=(
+                    f"extend_{user_id}"
+                ),
             )
         ]
     )
@@ -1633,7 +1831,9 @@ async def confirm_disable_subscription(
         [
             InlineKeyboardButton(
                 text="⬅️ Пользователи",
-                callback_data="admin_users",
+                callback_data=(
+                    "admin_users"
+                ),
             )
         ]
     )
@@ -1641,7 +1841,9 @@ async def confirm_disable_subscription(
         [
             InlineKeyboardButton(
                 text="🏠 Админ-панель",
-                callback_data="admin_back",
+                callback_data=(
+                    "admin_back"
+                ),
             )
         ]
     )
@@ -1660,8 +1862,12 @@ async def confirm_disable_subscription(
 # ============================================================
 # СТАТИСТИКА
 # ============================================================
-@router.callback_query(F.data == "admin_stats")
-async def admin_stats(call: CallbackQuery):
+@router.callback_query(
+    F.data == "admin_stats"
+)
+async def admin_stats(
+    call: CallbackQuery,
+):
     if not is_admin(call.from_user.id):
         await call.answer(
             "❌ Нет доступа",
@@ -1698,18 +1904,28 @@ async def admin_stats(call: CallbackQuery):
     for user in users:
         status, _ = get_subscription_status(
             user.get("subscription"),
-            user.get("subscription_until"),
+            user.get(
+                "subscription_until"
+            ),
         )
         if (
-            bool(user.get("trial_used"))
-            and user.get("subscription") is not True
+            bool(
+                user.get("trial_used")
+            )
+            and user.get(
+                "subscription"
+            )
+            is not True
         ):
             trial_users += 1
         if status == "🟢 Активен":
             active_users += 1
         elif status == "⛔ Истёк":
             expired_users += 1
-        elif user.get("subscription") is not True:
+        elif (
+            user.get("subscription")
+            is not True
+        ):
             no_subscription += 1
     successful_statuses = {
         "paid",
@@ -1728,7 +1944,8 @@ async def admin_stats(call: CallbackQuery):
         1
         for payment in payments
         if str(
-            payment.get("status") or ""
+            payment.get("status")
+            or ""
         ).lower()
         in successful_statuses
     )
@@ -1736,43 +1953,54 @@ async def admin_stats(call: CallbackQuery):
         1
         for payment in payments
         if str(
-            payment.get("status") or ""
+            payment.get("status")
+            or ""
         ).lower()
         in pending_statuses
     )
     total_days_paid = 0
     for payment in payments:
         status = str(
-            payment.get("status") or ""
+            payment.get("status")
+            or ""
         ).lower()
         if status in successful_statuses:
             try:
                 total_days_paid += int(
-                    payment.get("days") or 0
+                    payment.get("days")
+                    or 0
                 )
             except (
                 TypeError,
                 ValueError,
             ):
                 pass
-    current_time = datetime.now(
-        timezone.utc
-    ).strftime(
-        "%d.%m.%Y %H:%M UTC"
+    current_time = (
+        datetime.now(
+            timezone.utc
+        ).strftime(
+            "%d.%m.%Y %H:%M UTC"
+        )
     )
     text = (
         "📊 <b>Статистика ixxy</b>\n"
         "━━━━━━━━━━━━━━━━━━\n\n"
         "👥 <b>Пользователи</b>\n"
-        f"├ Всего: <b>{total_users}</b>\n"
-        f"├ 🟢 Активных: <b>{active_users}</b>\n"
-        f"├ 🎁 Пробных: <b>{trial_users}</b>\n"
-        f"├ ⛔ Истёкших: <b>{expired_users}</b>\n"
+        f"├ Всего: "
+        f"<b>{total_users}</b>\n"
+        f"├ 🟢 Активных: "
+        f"<b>{active_users}</b>\n"
+        f"├ 🎁 Пробных: "
+        f"<b>{trial_users}</b>\n"
+        f"├ ⛔ Истёкших: "
+        f"<b>{expired_users}</b>\n"
         f"└ 🔴 Без подписки: "
         f"<b>{no_subscription}</b>\n\n"
         "💳 <b>Платежи</b>\n"
-        f"├ Всего: <b>{len(payments)}</b>\n"
-        f"├ ✅ Оплачено: <b>{paid_payments}</b>\n"
+        f"├ Всего: "
+        f"<b>{len(payments)}</b>\n"
+        f"├ ✅ Оплачено: "
+        f"<b>{paid_payments}</b>\n"
         f"└ ⏳ Ожидают: "
         f"<b>{pending_payments}</b>\n\n"
         "📅 <b>Оформлено дней:</b> "
@@ -1788,19 +2016,25 @@ async def admin_stats(call: CallbackQuery):
             [
                 InlineKeyboardButton(
                     text="🔄 Обновить",
-                    callback_data="admin_stats",
+                    callback_data=(
+                        "admin_stats"
+                    ),
                 )
             ],
             [
                 InlineKeyboardButton(
                     text="👥 Пользователи",
-                    callback_data="admin_users",
+                    callback_data=(
+                        "admin_users"
+                    ),
                 )
             ],
             [
                 InlineKeyboardButton(
                     text="⬅️ Назад",
-                    callback_data="admin_back",
+                    callback_data=(
+                        "admin_back"
+                    ),
                 )
             ],
         ]
@@ -1820,44 +2054,42 @@ async def admin_stats(call: CallbackQuery):
 @router.callback_query(
     F.data == "admin_sync_servers"
 )
-async def sync_servers(call: CallbackQuery):
+async def sync_servers(
+    call: CallbackQuery,
+):
     if not is_admin(call.from_user.id):
         await call.answer(
             "❌ Нет доступа",
             show_alert=True,
         )
         return
-    # ========================================================
-    # ВАЖНО:
     # Отвечаем на callback сразу.
-    # Нельзя ждать синхронизацию перед call.answer().
-    # ========================================================
     try:
         await call.answer(
             "🔄 Обновление началось..."
         )
     except TelegramBadRequest:
         pass
-    status_message = await call.message.answer(
-        "🔄 <b>Обновляю серверы...</b>\n\n"
-        "⏳ Получаю актуальный список серверов\n"
-        "и обновляю содержимое подписок...",
-        parse_mode="HTML",
+    status_message = (
+        await call.message.answer(
+            "🔄 <b>Обновляю серверы...</b>\n\n"
+            "⏳ Получаю актуальный список серверов\n"
+            "и обновляю содержимое подписок...",
+            parse_mode="HTML",
+        )
     )
     try:
-        # ====================================================
-        # ВАЖНО:
-        # sync_servers_update() — синхронная тяжёлая функция.
-        #
-        # asyncio.to_thread() запускает её отдельно,
-        # поэтому aiogram не блокируется на ~53 секунды.
-        # ====================================================
+        # Запускаем синхронную функцию
+        # в отдельном потоке.
         result = await asyncio.to_thread(
             sync_servers_update
         )
         if not isinstance(result, dict):
             result = {}
-        total = result.get("total", 0)
+        total = result.get(
+            "total",
+            0,
+        )
         updated = result.get(
             "updated",
             0,
@@ -1870,8 +2102,6 @@ async def sync_servers(call: CallbackQuery):
             "skipped",
             0,
         )
-        # Поддерживаем оба варианта:
-        # errors и failed
         errors = result.get(
             "errors",
             result.get(
