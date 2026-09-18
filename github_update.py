@@ -2,10 +2,10 @@
 # ☂️ IXXY VPN — server updater
 #
 # ПОСТОЯННЫЙ ФОРМАТ ССЫЛКИ:
-# https://ixxyweb.onrender.com/sub/2ix847xy<USER_ID>
+# https://orelvpnrailoh-1-xyis.onrender.com/sub/2ix847xy<USER_ID>
 #
 # Пример:
-# https://ixxyweb.onrender.com/sub/2ix847xy6312016802
+# https://orelvpnrailoh-1-xyis.onrender.com/sub/2ix847xy6312016802
 #
 # ЛОГИКА:
 # 1. Загружаем актуальный servers.txt из GitHub.
@@ -43,7 +43,7 @@ UTC = timezone.utc
 # IXXY — ПОСТОЯННАЯ ССЫЛКА
 # ============================================================
 
-PUBLIC_SITE_URL = "https://ixxyweb.onrender.com"
+PUBLIC_SITE_URL = "https://orelvpnrailoh-1-xyis.onrender.com"
 
 SUBSCRIPTION_PREFIX = "2ix847xy"
 
@@ -844,7 +844,7 @@ def expire_subscription(
 # 5. Неактивным записываем пустую подписку.
 # 6. Ссылка остаётся:
 #
-# https://ixxyweb.onrender.com/sub/2ix847xy<USER_ID>
+# https://orelvpnrailoh-1-xyis.onrender.com/sub/2ix847xy<USER_ID>
 # ============================================================
 
 def sync_all_active_users() -> dict:
