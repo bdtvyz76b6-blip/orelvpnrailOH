@@ -4,7 +4,9 @@ import threading
 import hmac
 import logging
 
-from flask import Flask, request
+from flask import request
+from web import app
+
 from aiogram import Bot, Dispatcher
 
 from config import BOT_TOKEN, ADMIN_IDS
@@ -74,8 +76,6 @@ logger.info(
 # FLASK
 # =========================================================
 
-app = Flask(__name__)
-
 BOT_LOOP = None
 
 
@@ -83,7 +83,7 @@ def run_webhook():
     port = int(
         os.getenv(
             "PORT",
-            "8080",
+            "10000",
         )
     )
 
@@ -96,6 +96,8 @@ def run_webhook():
         host="0.0.0.0",
         port=port,
         threaded=True,
+        debug=False,
+        use_reloader=False,
     )
 
 
@@ -725,33 +727,6 @@ def add_days_api():
             "status": "error",
             "message": str(e),
         }, 500
-
-
-# =========================================================
-# HEALTH
-# =========================================================
-
-@app.route(
-    "/",
-    methods=["GET"],
-)
-def home():
-
-    return {
-        "service": "ixxy VPN",
-        "status": "ok",
-    }
-
-
-@app.route(
-    "/health",
-    methods=["GET"],
-)
-def health():
-
-    return {
-        "status": "ok",
-    }
 
 
 # =========================================================
