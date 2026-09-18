@@ -1,14 +1,17 @@
 # ============================================================
 # ☂️ IXXY VPN — server updater
 #
-# Постоянные ссылки:
+# ПОСТОЯННЫЙ ФОРМАТ ССЫЛКИ:
 # https://ixxyweb.onrender.com/sub/2ix847xy<USER_ID>
 #
-# Логика синхронизации как в MAGNET:
-# 1. Один раз загружаем актуальный servers.txt.
-# 2. Проходим по всем пользователям из БД.
+# Пример:
+# https://ixxyweb.onrender.com/sub/2ix847xy6312016802
+#
+# ЛОГИКА:
+# 1. Загружаем актуальный servers.txt из GitHub.
+# 2. Получаем всех пользователей из БД.
 # 3. Активным пользователям записываем актуальные серверы.
-# 4. Истёкшим пользователям записываем пустую подписку.
+# 4. Неактивным пользователям записываем пустую подписку.
 # 5. Ссылка пользователя НИКОГДА не меняется.
 # ============================================================
 
@@ -37,18 +40,17 @@ UTC = timezone.utc
 
 
 # ============================================================
-# CONFIG
+# IXXY — ПОСТОЯННАЯ ССЫЛКА
 # ============================================================
 
-PUBLIC_SITE_URL = os.getenv(
-    "PUBLIC_SITE_URL",
-    "https://ixxyweb.onrender.com",
-).strip()
+PUBLIC_SITE_URL = "https://ixxyweb.onrender.com"
 
-SUBSCRIPTION_PREFIX = os.getenv(
-    "SUBSCRIPTION_PREFIX",
-    "2ix847xy",
-).strip()
+SUBSCRIPTION_PREFIX = "2ix847xy"
+
+
+# ============================================================
+# PROFILE CONFIG
+# ============================================================
 
 PROFILE_TITLE = os.getenv(
     "PROFILE_TITLE",
@@ -156,14 +158,18 @@ def raw_url(filename: str) -> str:
 
 # ============================================================
 # ПОСТОЯННАЯ ССЫЛКА ПОДПИСКИ
+#
+# НИКОГДА НЕ БЕРЁМ URL И PREFIX ИЗ .ENV
 # ============================================================
 
 def get_subscription_link(
     user_id: int,
 ) -> str:
+
     return (
         f"{PUBLIC_SITE_URL}/sub/"
-        f"{SUBSCRIPTION_PREFIX}{int(user_id)}"
+        f"{SUBSCRIPTION_PREFIX}"
+        f"{int(user_id)}"
     )
 
 
@@ -187,18 +193,19 @@ def load_github_file(
 
 
 # ============================================================
-# ЗАГРУЗКА СПИСКА СЕРВЕРОВ
+# ЗАГРУЗКА SERVERS.TXT
 # ============================================================
 
 def load_servers() -> str:
 
     # --------------------------------------------------------
-    # 1. Прямая ссылка
+    # 1. GITHUB_SERVERS_URL
     # --------------------------------------------------------
 
     if GITHUB_SERVERS_URL:
 
         try:
+
             response = requests.get(
                 GITHUB_SERVERS_URL,
                 headers=github_headers(),
@@ -210,8 +217,10 @@ def load_servers() -> str:
             text = response.text.strip()
 
             if text:
+
                 logger.info(
-                    "Серверы загружены через GITHUB_SERVERS_URL"
+                    "✅ Серверы загружены через "
+                    "GITHUB_SERVERS_URL"
                 )
 
                 return text
@@ -219,7 +228,7 @@ def load_servers() -> str:
         except Exception as e:
 
             logger.error(
-                "Ошибка GITHUB_SERVERS_URL: %s",
+                "❌ Ошибка GITHUB_SERVERS_URL: %s",
                 e,
             )
 
@@ -236,7 +245,7 @@ def load_servers() -> str:
         if text:
 
             logger.info(
-                "Серверы загружены из GitHub: %s",
+                "✅ Серверы загружены из GitHub: %s",
                 SERVERS_FILE,
             )
 
@@ -245,7 +254,7 @@ def load_servers() -> str:
     except Exception as e:
 
         logger.error(
-            "Ошибка загрузки servers.txt из GitHub: %s",
+            "❌ Ошибка загрузки servers.txt из GitHub: %s",
             e,
         )
 
@@ -270,7 +279,8 @@ def load_servers() -> str:
                 if text:
 
                     logger.info(
-                        "Серверы загружены из локального файла"
+                        "✅ Серверы загружены "
+                        "из локального файла"
                     )
 
                     return text
@@ -278,7 +288,7 @@ def load_servers() -> str:
     except Exception as e:
 
         logger.error(
-            "Ошибка локального servers.txt: %s",
+            "❌ Ошибка локального servers.txt: %s",
             e,
         )
 
@@ -375,6 +385,7 @@ def _to_datetime(
             )
 
         except ValueError:
+
             continue
 
     return None
@@ -484,7 +495,7 @@ def build_profile_header(
         announce = (
             "🔴 Подписка не активна"
             " • Продлите подписку"
-            " в боте ixxy VPN"
+            " на сайте ixxy VPN"
         )
 
     lines = [
@@ -586,21 +597,36 @@ def save_user_subscription(
 
     try:
 
-        user = get_user(
-            int(user_id)
-        ) or {}
-
-        # Всегда используем каноническую
-        # постоянную ссылку.
-
-        permanent_link = get_subscription_link(
+        uid = int(
             user_id
         )
+
+        user = get_user(
+            uid
+        ) or {}
+
+        # ----------------------------------------------------
+        # ВСЕГДА ИСПОЛЬЗУЕМ НОВУЮ КАНОНИЧЕСКУЮ ССЫЛКУ
+        # ----------------------------------------------------
+
+        permanent_link = get_subscription_link(
+            uid
+        )
+
+        logger.info(
+            "🔗 Ссылка пользователя %s: %s",
+            uid,
+            permanent_link,
+        )
+
+        # ----------------------------------------------------
+        # Если content не передан — создаём его
+        # ----------------------------------------------------
 
         if content is None:
 
             content = build_subscription_content(
-                int(user_id),
+                uid,
                 is_subscription_active(
                     user
                 ),
@@ -609,13 +635,21 @@ def save_user_subscription(
                 ),
             )
 
+        # ----------------------------------------------------
+        # Сохраняем CONTENT
+        # ----------------------------------------------------
+
         save_subscription_content(
-            int(user_id),
+            uid,
             content,
         )
 
+        # ----------------------------------------------------
+        # Сохраняем ТОЛЬКО НОВУЮ ПОСТОЯННУЮ ССЫЛКУ
+        # ----------------------------------------------------
+
         save_subscription_link(
-            int(user_id),
+            uid,
             permanent_link,
         )
 
@@ -624,7 +658,7 @@ def save_user_subscription(
     except Exception as e:
 
         logger.error(
-            "Ошибка сохранения подписки %s: %s",
+            "❌ Ошибка сохранения подписки %s: %s",
             user_id,
             e,
         )
@@ -676,8 +710,6 @@ def activate_subscription_file(
     user_id: int,
     subscription_until=None,
 ) -> bool:
-
-    # Для активации загружаем актуальные серверы.
 
     servers = load_servers()
 
@@ -733,8 +765,6 @@ def update_subscription_file(
         user
     )
 
-    # Если активна — загружаем актуальные серверы.
-
     servers = None
 
     if active:
@@ -744,7 +774,7 @@ def update_subscription_file(
         if not servers:
 
             logger.error(
-                "Список серверов пуст. "
+                "❌ Список серверов пуст. "
                 "Подписка %s не обновлена.",
                 user_id,
             )
@@ -777,12 +807,16 @@ def expire_subscription(
     user_id: int,
 ) -> bool:
 
+    uid = int(
+        user_id
+    )
+
     user = get_user(
-        int(user_id)
+        uid
     ) or {}
 
     content = build_subscription_content(
-        int(user_id),
+        uid,
         False,
         user.get(
             "subscription_until"
@@ -790,10 +824,10 @@ def expire_subscription(
     )
 
     return save_user_subscription(
-        int(user_id),
+        uid,
         content,
         get_subscription_link(
-            user_id
+            uid
         ),
     )
 
@@ -801,14 +835,16 @@ def expire_subscription(
 # ============================================================
 # 🔄 СИНХРОНИЗАЦИЯ ВСЕХ ПОЛЬЗОВАТЕЛЕЙ
 #
-# ЛОГИКА КАК В MAGNET:
+# КАК В MAGNET:
 #
 # 1. Один раз получаем servers.txt.
 # 2. Получаем всех пользователей.
-# 3. Для каждого пользователя проверяем подписку.
+# 3. Проверяем каждого пользователя.
 # 4. Активным записываем servers.txt.
-# 5. Истёкшим записываем пустую подписку.
-# 6. Постоянные ссылки не меняются.
+# 5. Неактивным записываем пустую подписку.
+# 6. Ссылка остаётся:
+#
+# https://ixxyweb.onrender.com/sub/2ix847xy<USER_ID>
 # ============================================================
 
 def sync_all_active_users() -> dict:
@@ -818,7 +854,7 @@ def sync_all_active_users() -> dict:
     )
 
     # --------------------------------------------------------
-    # ШАГ 1 — загружаем servers.txt ОДИН РАЗ
+    # ШАГ 1 — получаем servers.txt ОДИН РАЗ
     # --------------------------------------------------------
 
     servers = load_servers()
@@ -831,7 +867,7 @@ def sync_all_active_users() -> dict:
         )
 
     logger.info(
-        "✅ Получен список серверов."
+        "✅ Получен актуальный список серверов."
     )
 
     # --------------------------------------------------------
@@ -850,7 +886,7 @@ def sync_all_active_users() -> dict:
     skipped = 0
 
     # --------------------------------------------------------
-    # ШАГ 3 — обновляем каждого
+    # ШАГ 3 — обновляем пользователей
     # --------------------------------------------------------
 
     for user in users:
@@ -872,13 +908,25 @@ def sync_all_active_users() -> dict:
             skipped += 1
             continue
 
-        uid = int(
-            user_id
-        )
+        try:
+
+            uid = int(
+                user_id
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ):
+
+            skipped += 1
+            continue
 
         try:
 
-            # Получаем свежие данные пользователя.
+            # ------------------------------------------------
+            # Получаем свежие данные из БД
+            # ------------------------------------------------
 
             db_user = get_user(
                 uid
@@ -889,7 +937,7 @@ def sync_all_active_users() -> dict:
                 skipped += 1
 
                 logger.warning(
-                    "Пользователь %s отсутствует в БД.",
+                    "⚠️ Пользователь %s отсутствует в БД.",
                     uid,
                 )
 
@@ -903,12 +951,14 @@ def sync_all_active_users() -> dict:
                 db_user
             )
 
-            subscription_until = db_user.get(
-                "subscription_until"
+            subscription_until = (
+                db_user.get(
+                    "subscription_until"
+                )
             )
 
             # ------------------------------------------------
-            # АКТИВНАЯ
+            # АКТИВНАЯ ПОДПИСКА
             # ------------------------------------------------
 
             if active:
@@ -921,12 +971,13 @@ def sync_all_active_users() -> dict:
                 )
 
                 logger.info(
-                    "🟢 Обновление серверов: %s",
+                    "🟢 Пользователь %s — "
+                    "серверы обновлены",
                     uid,
                 )
 
             # ------------------------------------------------
-            # ИСТЁКШАЯ
+            # НЕАКТИВНАЯ ПОДПИСКА
             # ------------------------------------------------
 
             else:
@@ -939,12 +990,13 @@ def sync_all_active_users() -> dict:
                 )
 
                 logger.info(
-                    "🔴 Подписка неактивна: %s",
+                    "🔴 Пользователь %s — "
+                    "подписка неактивна",
                     uid,
                 )
 
             # ------------------------------------------------
-            # СОХРАНЯЕМ
+            # СОХРАНЯЕМ CONTENT + ПОСТОЯННУЮ ССЫЛКУ
             # ------------------------------------------------
 
             success = save_user_subscription(
@@ -1043,6 +1095,10 @@ except ValueError:
 
     AUTO_SYNC_INTERVAL = 600
 
+
+# ============================================================
+# AUTO SYNC WORKER
+# ============================================================
 
 def start_auto_sync():
 
