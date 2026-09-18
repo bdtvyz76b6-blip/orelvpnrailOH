@@ -2499,21 +2499,41 @@ def set_accepted_terms(
 
             cur.execute(
                 """
-                UPDATE users
-                SET accepted_terms = %s
-                WHERE user_id = %s
+                INSERT INTO users (
+                    user_id,
+                    accepted_terms
+                )
+                VALUES (%s, %s)
+
+                ON CONFLICT (user_id)
+                DO UPDATE SET
+                    accepted_terms = EXCLUDED.accepted_terms
                 """,
                 (
-                    bool(accepted),
                     int(user_id),
+                    bool(accepted),
                 ),
             )
 
             conn.commit()
 
+            logger.info(
+                "✅ Условия %s: user=%s",
+                "приняты" if accepted else "отменены",
+                user_id,
+            )
+
+            return True
+
     except Exception:
 
         conn.rollback()
+
+        logger.exception(
+            "❌ Ошибка изменения accepted_terms: user=%s",
+            user_id,
+        )
+
         raise
 
     finally:
@@ -2529,12 +2549,24 @@ def accepted_terms(
     if not user:
         return False
 
-    return bool(
-        user.get(
-            "accepted_terms",
-            False,
-        )
+    value = user.get(
+        "accepted_terms",
+        False,
     )
+
+    # PostgreSQL обычно вернёт bool.
+    # Дополнительно обрабатываем текстовые значения.
+    if isinstance(value, str):
+
+        return value.strip().lower() in (
+            "true",
+            "t",
+            "1",
+            "yes",
+            "on",
+        )
+
+    return bool(value)
 
 
 def has_accepted_terms(
@@ -2550,12 +2582,10 @@ def accept_terms(
     user_id: int,
 ) -> bool:
 
-    set_accepted_terms(
+    return set_accepted_terms(
         user_id,
         True,
     )
-
-    return True
 
 
 # ============================================================
