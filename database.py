@@ -18,9 +18,7 @@ UTC = timezone.utc
 # =========================================================
 # IXXY
 # =========================================================
-PUBLIC_SITE_URL = (
-    "https://orelvpnrailoh-1-xyis.onrender.com"
-)
+PUBLIC_SITE_URL = "https://orelvpnrailoh-1-xyis.onrender.com"
 SUBSCRIPTION_PREFIX = "2ix847xy"
 def get_canonical_subscription_link(user_id: int) -> str:
     return (
@@ -45,20 +43,15 @@ def normalize_datetime(value: Any) -> Optional[datetime]:
         if not value:
             return None
         try:
-            value = value.replace(
-                "Z",
-                "+00:00",
-            )
+            value = value.replace("Z", "+00:00")
             dt = datetime.fromisoformat(value)
             if dt.tzinfo is None:
-                dt = dt.replace(
-                    tzinfo=UTC
-                )
+                dt = dt.replace(tzinfo=UTC)
             return dt.astimezone(UTC)
         except Exception:
             logger.exception(
                 "Не удалось разобрать datetime: %r",
-                value,
+                value
             )
             return None
     return None
@@ -66,15 +59,9 @@ def format_date(value: Any) -> str:
     dt = normalize_datetime(value)
     if not dt:
         return "—"
-    return dt.strftime(
-        "%d.%m.%Y"
-    )
-def subscription_active(
-    subscription_until: Any,
-) -> bool:
-    dt = normalize_datetime(
-        subscription_until
-    )
+    return dt.strftime("%d.%m.%Y")
+def subscription_active(subscription_until: Any) -> bool:
+    dt = normalize_datetime(subscription_until)
     if not dt:
         return False
     return dt > now_utc()
@@ -90,6 +77,109 @@ def connect():
         DATABASE_URL,
         sslmode="require",
         connect_timeout=15,
+    )
+# =========================================================
+# UNIVERSAL INTEGER -> BOOLEAN MIGRATION
+# =========================================================
+def migrate_boolean_column(
+    cur,
+    column_name: str,
+    default_value: bool,
+):
+    """
+    Универсальная миграция старых boolean-полей.
+    Поддерживает:
+      integer
+      bigint
+      smallint
+      boolean
+    INTEGER:
+      0    -> FALSE
+      NULL -> FALSE
+      != 0 -> TRUE
+    """
+    cur.execute(
+        """
+        SELECT data_type
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'users'
+          AND column_name = %s
+        """,
+        (column_name,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return
+    current_type = row[0]
+    # Уже BOOLEAN
+    if current_type == "boolean":
+        cur.execute(
+            f"""
+            ALTER TABLE users
+            ALTER COLUMN {column_name}
+            SET DEFAULT %s
+            """,
+            (default_value,),
+        )
+        return
+    # Старые INTEGER-типы
+    if current_type in (
+        "integer",
+        "bigint",
+        "smallint",
+    ):
+        logger.info(
+            "🔄 Миграция users.%s: %s -> boolean",
+            column_name,
+            current_type,
+        )
+        # Сначала обязательно убираем старый
+        # INTEGER default.
+        cur.execute(
+            f"""
+            ALTER TABLE users
+            ALTER COLUMN {column_name}
+            DROP DEFAULT
+            """
+        )
+        # Конвертируем существующие значения.
+        cur.execute(
+            f"""
+            ALTER TABLE users
+            ALTER COLUMN {column_name}
+            TYPE BOOLEAN
+            USING (
+                CASE
+                    WHEN {column_name} IS NULL
+                        THEN FALSE
+                    WHEN {column_name} = 0
+                        THEN FALSE
+                    ELSE TRUE
+                END
+            )
+            """
+        )
+        # Теперь уже можно ставить BOOLEAN default.
+        cur.execute(
+            f"""
+            ALTER TABLE users
+            ALTER COLUMN {column_name}
+            SET DEFAULT %s
+            """,
+            (default_value,),
+        )
+        logger.info(
+            "✅ users.%s успешно переведён в BOOLEAN",
+            column_name,
+        )
+        return
+    # Если встретился неожиданный тип —
+    # не пытаемся молча уничтожать данные.
+    logger.warning(
+        "⚠️ users.%s имеет неожиданный тип: %s",
+        column_name,
+        current_type,
     )
 # =========================================================
 # INIT DATABASE
@@ -169,7 +259,7 @@ def init_db():
                 """
             )
             # =================================================
-            # USERS — MISSING COLUMNS
+            # ADD MISSING USERS COLUMNS
             # =================================================
             columns = {
                 "username": "TEXT",
@@ -190,7 +280,8 @@ def init_db():
                     """
                     SELECT 1
                     FROM information_schema.columns
-                    WHERE table_name = 'users'
+                    WHERE table_schema = current_schema()
+                      AND table_name = 'users'
                       AND column_name = %s
                     """,
                     (column,),
@@ -203,99 +294,36 @@ def init_db():
                         """
                     )
             # =================================================
-            # FIX trial_used TYPE
-            # INTEGER / BIGINT / SMALLINT -> BOOLEAN
+            # UNIVERSAL MIGRATION OF ALL 4 BOOLEAN COLUMNS
             # =================================================
-            cur.execute(
-                """
-                SELECT data_type
-                FROM information_schema.columns
-                WHERE table_name = 'users'
-                  AND column_name = 'trial_used'
-                """
+            migrate_boolean_column(
+                cur,
+                "subscription",
+                False,
             )
-            trial_type = cur.fetchone()
-            if trial_type:
-                current_type = trial_type[0]
-                if current_type in (
-                    "integer",
-                    "bigint",
-                    "smallint",
-                ):
-                    logger.info(
-                        "🔄 Миграция users.trial_used: "
-                        "%s -> boolean",
-                        current_type,
-                    )
-                    # Убираем старый integer default
-                    cur.execute(
-                        """
-                        ALTER TABLE users
-                        ALTER COLUMN trial_used DROP DEFAULT
-                        """
-                    )
-                    # 0 -> FALSE
-                    # 1+ -> TRUE
-                    # NULL -> FALSE
-                    cur.execute(
-                        """
-                        ALTER TABLE users
-                        ALTER COLUMN trial_used TYPE BOOLEAN
-                        USING (
-                            CASE
-                                WHEN trial_used IS NULL
-                                    THEN FALSE
-                                WHEN trial_used = 0
-                                    THEN FALSE
-                                ELSE TRUE
-                            END
-                        )
-                        """
-                    )
-                    cur.execute(
-                        """
-                        ALTER TABLE users
-                        ALTER COLUMN trial_used
-                        SET DEFAULT FALSE
-                        """
-                    )
-                elif current_type == "boolean":
-                    cur.execute(
-                        """
-                        ALTER TABLE users
-                        ALTER COLUMN trial_used
-                        SET DEFAULT FALSE
-                        """
-                    )
-            # =================================================
-            # FIX OTHER DEFAULTS
-            # =================================================
-            cur.execute(
-                """
-                ALTER TABLE users
-                ALTER COLUMN subscription
-                SET DEFAULT FALSE
-                """
+            migrate_boolean_column(
+                cur,
+                "trial_used",
+                False,
             )
+            migrate_boolean_column(
+                cur,
+                "notify",
+                True,
+            )
+            migrate_boolean_column(
+                cur,
+                "accepted_terms",
+                False,
+            )
+            # =================================================
+            # PENDING DAYS DEFAULT
+            # =================================================
             cur.execute(
                 """
                 ALTER TABLE users
                 ALTER COLUMN pending_days
                 SET DEFAULT 0
-                """
-            )
-            cur.execute(
-                """
-                ALTER TABLE users
-                ALTER COLUMN notify
-                SET DEFAULT TRUE
-                """
-            )
-            cur.execute(
-                """
-                ALTER TABLE users
-                ALTER COLUMN accepted_terms
-                SET DEFAULT FALSE
                 """
             )
             # =================================================
@@ -318,13 +346,6 @@ def init_db():
             cur.execute(
                 """
                 UPDATE users
-                SET pending_days = 0
-                WHERE pending_days IS NULL
-                """
-            )
-            cur.execute(
-                """
-                UPDATE users
                 SET notify = TRUE
                 WHERE notify IS NULL
                 """
@@ -336,8 +357,15 @@ def init_db():
                 WHERE accepted_terms IS NULL
                 """
             )
+            cur.execute(
+                """
+                UPDATE users
+                SET pending_days = 0
+                WHERE pending_days IS NULL
+                """
+            )
             # =================================================
-            # PAYMENT INDEX
+            # PAYMENT INDEXES
             # =================================================
             cur.execute(
                 """
@@ -363,7 +391,7 @@ def init_db():
     except Exception:
         conn.rollback()
         logger.exception(
-            "Ошибка инициализации базы данных"
+            "❌ Ошибка инициализации базы данных"
         )
         raise
     finally:
@@ -412,7 +440,7 @@ def create_user(
         conn.rollback()
         logger.exception(
             "Ошибка создания пользователя %s",
-            user_id,
+            user_id
         )
         raise
     finally:
@@ -423,9 +451,9 @@ def add_user(
     first_name: Optional[str] = None,
 ):
     return create_user(
-        user_id=user_id,
-        username=username,
-        first_name=first_name,
+        user_id,
+        username,
+        first_name,
     )
 def get_user(
     user_id: int,
@@ -528,13 +556,13 @@ def delete_user(
         conn.rollback()
         logger.exception(
             "Ошибка удаления пользователя %s",
-            user_id,
+            user_id
         )
         raise
     finally:
         conn.close()
 # =========================================================
-# SUBSCRIPTION LINKS
+# SUBSCRIPTION LINK
 # =========================================================
 def save_subscription_link(
     user_id: int,
@@ -564,8 +592,8 @@ def save_subscription_link(
     except Exception:
         conn.rollback()
         logger.exception(
-            "Ошибка сохранения ссылки подписки user=%s",
-            user_id,
+            "Ошибка сохранения ссылки user=%s",
+            user_id
         )
         raise
     finally:
@@ -601,8 +629,7 @@ def save_subscription_content(
     except Exception:
         conn.rollback()
         logger.exception(
-            "Ошибка сохранения subscription_content user=%s",
-            user_id,
+            "Ошибка сохранения subscription_content"
         )
         raise
     finally:
@@ -719,7 +746,7 @@ def extend_subscription(
         conn.rollback()
         logger.exception(
             "Ошибка продления подписки user=%s",
-            user_id,
+            user_id
         )
         raise
     finally:
@@ -760,7 +787,7 @@ def revoke_subscription(
         conn.rollback()
         logger.exception(
             "Ошибка отключения подписки user=%s",
-            user_id,
+            user_id
         )
         raise
     finally:
@@ -814,9 +841,8 @@ def get_expired_users() -> list:
                 """
                 SELECT *
                 FROM users
-                WHERE
-                    subscription_until IS NOT NULL
-                    AND subscription_until <= %s
+                WHERE subscription_until IS NOT NULL
+                  AND subscription_until <= %s
                 ORDER BY subscription_until ASC
                 """,
                 (now_utc(),),
@@ -872,7 +898,7 @@ def mark_trial_used(
         conn.rollback()
         logger.exception(
             "Ошибка отметки trial user=%s",
-            user_id,
+            user_id
         )
         raise
     finally:
@@ -926,7 +952,7 @@ def use_trial(
         conn.rollback()
         logger.exception(
             "Ошибка активации trial user=%s",
-            user_id,
+            user_id
         )
         raise
     finally:
@@ -1009,7 +1035,7 @@ def create_promocode(
         conn.rollback()
         logger.exception(
             "Ошибка создания промокода %s",
-            code,
+            code
         )
         raise
     finally:
@@ -1077,16 +1103,14 @@ def deactivate_promocode(
                 """,
                 (code,),
             )
-            changed = (
-                cur.rowcount > 0
-            )
+            changed = cur.rowcount > 0
             conn.commit()
             return changed
     except Exception:
         conn.rollback()
         logger.exception(
             "Ошибка отключения промокода %s",
-            code,
+            code
         )
         raise
     finally:
@@ -1222,7 +1246,7 @@ def use_promocode(
         logger.exception(
             "Ошибка использования промокода %s user=%s",
             code,
-            user_id,
+            user_id
         )
         raise
     finally:
@@ -1403,7 +1427,7 @@ def update_payment_status(
         conn.rollback()
         logger.exception(
             "Ошибка обновления платежа %s",
-            payment_id,
+            payment_id
         )
         raise
     finally:
@@ -1431,8 +1455,6 @@ def process_paid_payment(
             if not payment:
                 conn.rollback()
                 return None
-            # Уже обработан.
-            # Повторно дни не начисляем.
             if payment["status"] == "paid":
                 conn.rollback()
                 return dict(payment)
@@ -1459,9 +1481,7 @@ def process_paid_payment(
             if user:
                 current_until = (
                     normalize_datetime(
-                        user[
-                            "subscription_until"
-                        ]
+                        user[0]
                     )
                 )
             else:
@@ -1529,9 +1549,7 @@ def process_paid_payment(
                 ),
             )
             conn.commit()
-            result = dict(
-                payment
-            )
+            result = dict(payment)
             result["status"] = "paid"
             result[
                 "subscription_until"
@@ -1544,7 +1562,7 @@ def process_paid_payment(
         conn.rollback()
         logger.exception(
             "Ошибка обработки оплаченного платежа %s",
-            payment_id,
+            payment_id
         )
         raise
     finally:
@@ -1600,7 +1618,7 @@ def set_notification(
         conn.rollback()
         logger.exception(
             "Ошибка настройки уведомлений user=%s",
-            user_id,
+            user_id
         )
         raise
     finally:
@@ -1661,8 +1679,8 @@ def set_accepted_terms(
     except Exception:
         conn.rollback()
         logger.exception(
-            "Ошибка сохранения accepted_terms user=%s",
-            user_id,
+            "Ошибка accepted_terms user=%s",
+            user_id
         )
         raise
     finally:
@@ -1725,7 +1743,7 @@ def set_pending_days(
         conn.rollback()
         logger.exception(
             "Ошибка pending_days user=%s",
-            user_id,
+            user_id
         )
         raise
     finally:
@@ -1760,7 +1778,7 @@ def add_pending_days(
         conn.rollback()
         logger.exception(
             "Ошибка добавления pending_days user=%s",
-            user_id,
+            user_id
         )
         raise
     finally:
@@ -1869,7 +1887,7 @@ def migrate_subscription_links():
             conn.commit()
             logger.info(
                 "Исправлено ссылок IXXY: %s",
-                changed,
+                changed
             )
             return changed
     except Exception:
