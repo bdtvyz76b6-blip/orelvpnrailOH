@@ -568,6 +568,10 @@ def revoke_subscription(
         raise
     finally:
         conn.close()
+def disable_subscription(
+    user_id: int,
+):
+    return revoke_subscription(user_id)
 def check_expired_subscriptions() -> int:
     conn = connect()
     try:
